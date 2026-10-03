@@ -99,6 +99,22 @@ export type ObjectQuery = {
   withData?: boolean;
   /** Paging for infinite scroll. */
   offset?: number;
+  /** Visible map area [west, south, east, north] (degrees): only objects inside it are listed. */
+  bbox?: [number, number, number, number];
+  /** Map centre to rank by (nearest first); lat/lon stay the user's point for the shown distances. */
+  center?: { lat: number; lon: number };
 };
 
-export type ObjectPage = { objects: PlaceObjectSummary[]; total: number; nextOffset: number | null };
+/** The visible map area, reported by the map after it stops moving. `user` is false for camera moves the app makes. */
+export type MapViewport = {
+  bbox: [number, number, number, number];
+  center: { lat: number; lon: number };
+  zoom: number;
+  user: boolean;
+};
+
+export type ObjectPage = {
+  objects: PlaceObjectSummary[]; total: number; nextOffset: number | null;
+  /** With a bbox: how many objects match the same search outside it (for "search all of Kraków"). */
+  outside?: number;
+};

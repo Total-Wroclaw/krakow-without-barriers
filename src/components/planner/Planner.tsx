@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { CityFact, CityPlace } from '@/lib/city-types';
-import type { PlaceObject, PlaceObjectSummary } from '@/lib/explore-types';
+import type { MapViewport, PlaceObject, PlaceObjectSummary } from '@/lib/explore-types';
 import { errorText } from '@/lib/client';
 import { warsawNow } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
@@ -87,6 +87,13 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const [openReport, setOpenReport] = useState<{ report: Report; editing: boolean } | null>(null);
   const [objects, setObjects] = useState<PlaceObjectSummary[]>([]);
   const [objectId, setObjectId] = useState<string | null>(null);
+  // Explore follows the map: the visible area, and a key that changes only when the list asks the map to fit its places.
+  const [viewport, setViewport] = useState<MapViewport | null>(null);
+  const [objectsFit, setObjectsFit] = useState(0);
+  const onExploreResults = useCallback((next: PlaceObjectSummary[], fit: boolean) => {
+    setObjects(next);
+    if (fit) setObjectsFit(n => n + 1);
+  }, []);
   const [partner, setPartner] = useState<{ open: boolean; existing: PlaceObject | null }>({ open: false, existing: null });
   const [hydrated, setHydrated] = useState(false);
   const [chooser, setChooser] = useState(false);
@@ -312,7 +319,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
             </div>
           ) : null}
           <TabsContent value="explore" tabIndex={-1}>
-            {exploring ? <Explore center={from ?? mapCenter.current} selectedId={objectId} onResults={setObjects} onSelect={setObjectId} onOwner={() => setPartner({ open: true, existing: null })} /> : null}
+            {exploring ? <Explore center={from ?? mapCenter.current} viewport={viewport} selectedId={objectId} onResults={onExploreResults} onSelect={setObjectId} onOwner={() => setPartner({ open: true, existing: null })} /> : null}
           </TabsContent>
           <TabsContent value="route" tabIndex={-1}>
           {!detail ? (
@@ -478,6 +485,8 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           onReport={r => setOpenReport({ report: r, editing: false })}
           onObject={setObjectId}
           onMove={c => (mapCenter.current = c)}
+          onViewportChange={setViewport}
+          objectsFitKey={exploring ? objectsFit : undefined}
         />
         {!embed ? (
           <div className="absolute left-3 top-3 z-10 lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))] lg:left-4 lg:top-auto">

@@ -6,7 +6,7 @@ import { LoaderCircle, LocateFixed, Map as MapIcon, Minus, Plus, Satellite } fro
 import { toast } from 'sonner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { CityFact, CityPlace } from '@/lib/city-types';
-import type { PlaceObjectSummary } from '@/lib/explore-types';
+import type { MapViewport, PlaceObjectSummary } from '@/lib/explore-types';
 import { useI18n } from '@/lib/i18n/client';
 import type { JourneyOption } from '@/lib/journey-types';
 import type { Report } from '@/lib/schemas';
@@ -19,6 +19,8 @@ const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 // Official Polish orthophoto (GUGiK), free reuse with attribution, served through our disk-cached tile proxy.
 const orthoTiles = () => `${window.location.origin}/api/tiles/ortho/{z}/{x}/{y}`;
 const KRAKOW: [number, number] = [19.945, 50.061];
+/** Passed as event data on camera moves the app makes itself, so they are not mistaken for the user exploring. */
+const APP_MOVE = { krokApp: true };
 const colors = { walk: '#14213d', tram: '#c4122f', bus: '#2443b0', drive: '#0e6c80' };
 
 const icons = {
@@ -68,9 +70,13 @@ type Props = {
   onReport: (report: Report) => void;
   onObject?: (id: string) => void;
   onMove?: (center: { lat: number; lon: number }) => void;
+  /** After every camera move: the visible area (`user` false for the app's own fits). */
+  onViewportChange?: (viewport: MapViewport) => void;
+  /** Places are fitted into view only when this changes (an explicit new search), not on every new result set. */
+  objectsFitKey?: string | number;
 };
 
-export default function MapView({ options, selectedId, from, to, reports, objects = [], selectedObjectId, onSelect, onFact, onReport, onObject, onMove }: Props) {
+export default function MapView({ options, selectedId, from, to, reports, objects = [], selectedObjectId, onSelect, onFact, onReport, onObject, onMove, onViewportChange, objectsFitKey }: Props) {
   const { t, tp } = useI18n();
   const reportTitle = useReportTitle();
   const container = useRef<HTMLDivElement>(null);
@@ -78,8 +84,8 @@ export default function MapView({ options, selectedId, from, to, reports, object
   const ready = useRef(false);
   const markers = useRef<Marker[]>([]);
   const [base, setBase] = useState<'standard' | 'satellite'>('standard');
-  const latest = useRef({ onSelect, onFact, onReport, onObject, onMove });
-  latest.current = { onSelect, onFact, onReport, onObject, onMove };
+  const latest = useRef({ onSelect, onFact, onReport, onObject, onMove, onViewportChange });
+  latest.current = { onSelect, onFact, onReport, onObject, onMove, onViewportChange };
   const render = useRef<() => void>(() => {});
   const lastView = useRef('');
   const userMarker = useRef<Marker | null>(null);
@@ -199,9 +205,16 @@ export default function MapView({ options, selectedId, from, to, reports, object
       ready.current = true;
       render.current();
     });
-    instance.on('moveend', () => {
+    const viewport = (user: boolean): MapViewport => {
+      const c = instance.getCenter();
+      const b = instance.getBounds();
+      return { bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], center: { lat: c.lat, lon: c.lng }, zoom: instance.getZoom(), user };
+    };
+    instance.once('load', () => latest.current.onViewportChange?.(viewport(false)));
+    instance.on('moveend', e => {
       const c = instance.getCenter();
       latest.current.onMove?.({ lat: c.lat, lon: c.lng });
+      latest.current.onViewportChange?.(viewport(!(e as { krokApp?: boolean }).krokApp));
     });
     map.current = instance;
     return () => {
@@ -274,13 +287,13 @@ export default function MapView({ options, selectedId, from, to, reports, object
 
       // Only move the camera when what is shown changes — not on a base-map or language switch,
       // so a user's own zoom is kept.
-      const viewKey = JSON.stringify([selectedId, from?.lat, from?.lon, to?.lat, to?.lon, selectedObjectId, objects[0]?.id ?? null, selected ? 1 : 0]);
+      const viewKey = JSON.stringify([selectedId, from?.lat, from?.lon, to?.lat, to?.lon, selectedObjectId, objectsFitKey ?? objects[0]?.id ?? null, selected ? 1 : 0]);
       if (viewKey === lastView.current) return;
       lastView.current = viewKey;
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const chosenObject = objects.find(o => o.id === selectedObjectId);
       if (chosenObject) {
-        instance.easeTo({ center: [chosenObject.lon, chosenObject.lat], zoom: Math.max(instance.getZoom(), 16), duration: reduce ? 0 : 600 });
+        instance.easeTo({ center: [chosenObject.lon, chosenObject.lat], zoom: Math.max(instance.getZoom(), 16), duration: reduce ? 0 : 600 }, APP_MOVE);
         return;
       }
       const points: [number, number][] = selected
@@ -293,13 +306,13 @@ export default function MapView({ options, selectedId, from, to, reports, object
       if (points.length > 1) {
         const bounds = new maplibregl.LngLatBounds();
         points.forEach(([lat, lon]) => bounds.extend([lon, lat]));
-        instance.fitBounds(bounds, { padding: { top: 70, bottom: 50, left: 50, right: 70 }, maxZoom: 17, duration: reduce ? 0 : 600 });
+        instance.fitBounds(bounds, { padding: { top: 70, bottom: 50, left: 50, right: 70 }, maxZoom: 17, duration: reduce ? 0 : 600 }, APP_MOVE);
       } else if (points.length === 1) {
-        instance.easeTo({ center: [points[0][1], points[0][0]], zoom: 15, duration: reduce ? 0 : 600 });
+        instance.easeTo({ center: [points[0][1], points[0][0]], zoom: 15, duration: reduce ? 0 : 600 }, APP_MOVE);
       }
     };
     render.current();
-  }, [options, selectedId, from, to, reports, objects, selectedObjectId, t, tp, reportTitle, base]);
+  }, [options, selectedId, from, to, reports, objects, objectsFitKey, selectedObjectId, t, tp, reportTitle, base]);
 
   const control = 'grid size-11 place-items-center text-foreground transition-colors hover:bg-accent disabled:opacity-50';
   return (

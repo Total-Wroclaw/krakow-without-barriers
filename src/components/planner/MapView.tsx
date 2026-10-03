@@ -65,7 +65,7 @@ export type PickRole = 'from' | 'to';
 type Props = {
   options: JourneyOption[];
   selectedId: string | null;
-  /** Route details are open: only the chosen route is drawn and map clicks never switch it. */
+  /** Route details are open: the other routes are only drawn faded underneath, and map clicks never switch routes. */
   detail?: boolean;
   /** A point opened from a list (e.g. a barrier in the steps); the map pans to it only if it is off-screen. */
   focus?: { lat: number; lon: number } | null;
@@ -205,7 +205,9 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       instance.addSource('ortho', { type: 'raster', tiles: [orthoTiles()], tileSize: 256, minzoom: 8, maxzoom: 19, attribution: '© <a href="https://www.geoportal.gov.pl">GUGiK</a>' });
       instance.addLayer({ id: 'ortho', type: 'raster', source: 'ortho', layout: { visibility: 'none' } }, firstSymbol);
       instance.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      instance.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['==', ['get', 'selected'], false], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7d879c', 'line-width': 5, 'line-opacity': 0.6 } });
+      // In details the alternatives stay visible for context, but faded, thin and on their own layer: never hit-tested, no pointer cursor.
+      instance.addLayer({ id: 'routes-faded', type: 'line', source: 'routes', filter: ['==', ['get', 'faded'], true], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7d879c', 'line-width': 3, 'line-opacity': 0.35 } });
+      instance.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['all', ['==', ['get', 'selected'], false], ['==', ['get', 'faded'], false]], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7d879c', 'line-width': 5, 'line-opacity': 0.6 } });
       instance.addLayer({ id: 'routes-casing', type: 'line', source: 'routes', filter: ['==', ['get', 'selected'], true], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 10 } });
       instance.addLayer({ id: 'routes-vehicle', type: 'line', source: 'routes', filter: ['all', ['==', ['get', 'selected'], true], ['!=', ['get', 'kind'], 'walk']], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['match', ['get', 'kind'], 'tram', colors.tram, 'drive', colors.drive, colors.bus], 'line-width': 6 } });
       instance.addLayer({ id: 'routes-walk', type: 'line', source: 'routes', filter: ['all', ['==', ['get', 'selected'], true], ['==', ['get', 'kind'], 'walk']], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': colors.walk, 'line-width': 5, 'line-dasharray': [0.1, 1.8] } });
@@ -242,7 +244,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
         if (hit(['routes-casing', 'routes-vehicle', 'routes-walk']).length) return;
         const other = hit(['routes-other'])[0]?.properties?.option;
         if (typeof other === 'string') {
-          // Alternatives are only drawn (and so only clickable) in the list of options.
+          // Alternatives are only clickable in the list of options (in details they are on 'routes-faded', never queried).
           if (!latest.current.detail) {
             setPick(null);
             latest.current.onSelect(other);
@@ -288,11 +290,11 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       const instance = map.current;
       if (!instance || !ready.current) return;
       instance.setLayoutProperty('ortho', 'visibility', base === 'satellite' ? 'visible' : 'none');
-      // In route details only the chosen route is drawn: nothing else to tap by mistake.
-      const features = options.filter(option => !detail || option.id === selectedId).flatMap(option =>
+      // In route details the other routes are drawn faded for context, on a layer that cannot be tapped.
+      const features = options.flatMap(option =>
         option.legs.map(leg => ({
           type: 'Feature' as const,
-          properties: { option: option.id, selected: option.id === selectedId, kind: leg.type === 'walk' ? 'walk' : leg.type === 'drive' ? 'drive' : leg.mode },
+          properties: { option: option.id, selected: option.id === selectedId, faded: detail && option.id !== selectedId, kind: leg.type === 'walk' ? 'walk' : leg.type === 'drive' ? 'drive' : leg.mode },
           geometry: { type: 'LineString' as const, coordinates: leg.geometry.map(([lat, lon]) => [lon, lat]) },
         })),
       );

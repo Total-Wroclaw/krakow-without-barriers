@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { ArrowDownUp, ArrowLeft, Clock, Compass, Footprints, List, Map as MapIcon, MapPin, Navigation, RefreshCw, Share2, TriangleAlert } from 'lucide-react';
+import { ArrowDownUp, ArrowLeft, Clock, Compass, Info, Footprints, List, Map as MapIcon, MapPin, Navigation, RefreshCw, Share2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { CityFact, CityPlace } from '@/lib/city-types';
 import type { PlaceObject, PlaceObjectSummary } from '@/lib/explore-types';
+import { errorText } from '@/lib/client';
 import { warsawNow } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import type { JourneyOption, JourneyResult, TransportMode } from '@/lib/journey-types';
@@ -140,15 +141,16 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           body: JSON.stringify({ from, to, preferences, date, time, transport, locale }),
           signal: controller.signal,
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? t('results.failed'));
+        // Proxies may answer with HTML (e.g. 502); never show parser errors to people.
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) throw new Error(typeof data?.error === 'string' ? data.error : '');
         const next = data as JourneyResult;
         setResult(next);
         setSelectedId(current => (next.options.some(o => o.id === current) ? current : (next.options.find(o => o.fits) ?? next.options[0])?.id ?? null));
       } catch (e) {
         if (!controller.signal.aborted) {
           setResult(null);
-          setError(e instanceof Error ? e.message : t('results.failed'));
+          setError(errorText(e, t('results.failed')));
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -191,8 +193,54 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
 
   function choose(id: string) {
     setSelectedId(id);
+    // A history entry for the detail view, so the phone's Back gesture returns to the list instead of leaving.
+    if (!detail && !embed) window.history.pushState({ krokDetail: true }, '', window.location.href);
     setDetail(true);
   }
+
+  function closeDetail() {
+    if (window.history.state?.krokDetail) window.history.back();
+    else setDetail(false);
+    setMobileView('list');
+  }
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => setDetail(!!e.state?.krokDetail);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // Keep the trip in the URL so refresh and shared links restore it.
+  useEffect(() => {
+    if (!hydrated || embed) return;
+    const url = new URL(window.location.href);
+    for (const key of ['from', 'to', 'mode']) url.searchParams.delete(key);
+    if (from) url.searchParams.set('from', encodePlace(from));
+    if (to) url.searchParams.set('to', encodePlace(to));
+    if (transport !== 'transit') url.searchParams.set('mode', transport);
+    window.history.replaceState(window.history.state, '', url);
+  }, [from, to, transport, hydrated, embed]);
+
+  // A different way of travelling means a different best option; don't keep a stale selection.
+  const firstTransport = useRef(true);
+  useEffect(() => {
+    if (firstTransport.current) {
+      firstTransport.current = false;
+      return;
+    }
+    setSelectedId(null);
+    setDetail(false);
+  }, [transport]);
+
+  // Move focus with the view so keyboard and screen-reader users land in the new content.
+  const detailHeading = useRef<HTMLHeadingElement>(null);
+  const resultsTitle = useRef<HTMLHeadingElement>(null);
+  const wasDetail = useRef(false);
+  useEffect(() => {
+    if (detail) detailHeading.current?.focus();
+    else if (wasDetail.current) resultsTitle.current?.focus();
+    wasDetail.current = detail;
+  }, [detail]);
 
   async function share() {
     if (!from || !to) return;
@@ -225,33 +273,6 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
       <a href="#planner" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2">
         {t('app.skip')}
       </a>
-
-      <div
-        className={cn(
-          'relative order-1 shrink-0 transition-[height] lg:order-2 lg:h-auto lg:flex-1',
-          searchActive ? 'h-0 overflow-hidden' : showMapOnMobile ? 'h-[68svh]' : detail ? 'h-[30svh]' : 'h-[34svh]',
-        )}
-      >
-        <MapView
-          options={exploring ? [] : options}
-          selectedId={exploring ? null : selectedId}
-          from={exploring ? null : from}
-          to={exploring ? null : to}
-          reports={exploring ? [] : routeReports}
-          objects={exploring ? objects : []}
-          selectedObjectId={objectId}
-          onSelect={choose}
-          onFact={openFact}
-          onReport={r => setOpenReport({ report: r, editing: false })}
-          onObject={setObjectId}
-          onMove={c => (mapCenter.current = c)}
-        />
-        {!embed ? (
-          <div className="absolute left-3 top-3 z-10 lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))] lg:left-4 lg:top-auto">
-            <ReportFab busy={busy} onClick={() => setChooser(true)} />
-          </div>
-        ) : null}
-      </div>
 
       <main id="planner" className="order-2 flex min-h-0 flex-1 flex-col border-border bg-background lg:order-1 lg:w-[440px] lg:flex-none lg:border-r">
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -343,7 +364,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                 ) : null
               ) : (
                 <section aria-labelledby="results-title" aria-busy={loading} className="flex flex-col gap-3">
-                  <h2 id="results-title" className="px-1 text-lg font-bold">
+                  <h2 id="results-title" ref={resultsTitle} tabIndex={-1} className="px-1 text-lg font-bold outline-none">
                     {loading ? t('results.searching') : options.length ? t('results.title', { n: options.length }) : t('results.titleEmpty')}
                   </h2>
                   <p className="sr-only" role="status">{loading ? t('results.searching') : options.length ? t('results.found', { n: options.length }) : ''}</p>
@@ -356,6 +377,9 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                     </div>
                   ) : (
                     <>
+                      {result?.errors.map(e => (
+                        <p key={e} className="flex items-start gap-2 rounded-lg bg-muted/70 px-3 py-2 text-sm"><Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />{e}</p>
+                      ))}
                       <ul className={cn('flex flex-col gap-3', loading && 'opacity-60')}>
                         {options.map(o => (
                           <li key={o.id}>
@@ -363,9 +387,6 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                           </li>
                         ))}
                       </ul>
-                      {result?.errors.map(e => (
-                        <p key={e} className="flex items-start gap-2 px-1 text-sm text-muted-foreground"><Clock className="mt-0.5 size-4 shrink-0" aria-hidden />{e}</p>
-                      ))}
                       {!options.length && !loading ? (
                         <div className="rounded-xl border bg-card p-4">
                           <p className="font-semibold">{t('results.none')}</p>
@@ -380,7 +401,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           ) : selected ? (
             <div className="flex flex-col gap-4 px-4 pb-10">
               <div className="flex items-center justify-between gap-2">
-                <Button variant="ghost" className="-ml-2 h-11" onClick={() => { setDetail(false); setMobileView('list'); }}>
+                <Button variant="ghost" className="-ml-2 h-11" onClick={closeDetail}>
                   <ArrowLeft />
                   {t('results.all')}
                 </Button>
@@ -389,20 +410,36 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                   <ToggleGroupItem value="map" className="h-10 gap-1.5 px-3"><MapIcon />{t('results.map')}</ToggleGroupItem>
                 </ToggleGroup>
               </div>
-              <h1 className="sr-only">{t('results.detailH1')}</h1>
+              <h1 ref={detailHeading} tabIndex={-1} className="sr-only">{t('results.detailH1')}</h1>
               <OptionCard option={selected} selected onSelect={() => setMobileView(v => (v === 'map' ? 'list' : 'map'))} />
               {selected.rideLinks?.length ? (
-                <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('taxi.open')}>
-                  <span className="text-sm text-muted-foreground">{t('taxi.open')}:</span>
-                  {selected.rideLinks.map(link => (
-                    <Button key={link.provider} variant="outline" className="h-11" asChild>
-                      <a href={link.url} target="_blank" rel="noreferrer">
-                        {({ uber: 'Uber', bolt: 'Bolt', freenow: 'FREENOW' } as const)[link.provider]}
-                        <span className="sr-only"> {t('fact.newTab')}</span>
-                      </a>
-                    </Button>
-                  ))}
-                </div>
+                <section className="flex flex-col gap-2" aria-labelledby="ride-apps">
+                  <h2 id="ride-apps" className="px-1 text-sm font-semibold">{t('taxi.open')}</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {selected.rideLinks.map(link => (
+                      <Button key={link.provider} variant={link.provider === 'uber' ? 'default' : 'outline'} className="h-11" asChild>
+                        <a href={link.url} target="_blank" rel="noreferrer">
+                          {({ uber: 'Uber', bolt: 'Bolt', freenow: 'FREENOW' } as const)[link.provider]}
+                          {link.provider !== 'uber' ? <span className="text-xs font-normal opacity-80">({t('taxi.website')})</span> : null}
+                          <span className="sr-only"> {t('fact.newTab')}</span>
+                        </a>
+                      </Button>
+                    ))}
+                    {to ? (
+                      <Button
+                        variant="ghost"
+                        className="h-11"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(to.name).catch(() => {});
+                          toast.success(t('taxi.copied'));
+                        }}
+                      >
+                        {t('taxi.copyDestination')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  <p className="px-1 text-xs text-muted-foreground">{t('taxi.linksNote')}</p>
+                </section>
               ) : null}
               {!embed ? (
                 <Button variant="outline" className="h-11 self-start" onClick={share}>
@@ -419,6 +456,34 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           {embed ? <p className="px-4 pb-6 text-center text-xs text-muted-foreground"><a href="/" target="_blank" rel="noreferrer" className="underline">{t('embed.powered')}</a></p> : null}
         </div>
       </main>
+
+      <div
+        className={cn(
+          'relative order-1 shrink-0 transition-[height] lg:order-2 lg:h-auto lg:flex-1',
+          searchActive ? 'h-0 overflow-hidden' : showMapOnMobile ? 'h-[68svh]' : detail ? 'h-[30svh]' : 'h-[34svh]',
+        )}
+      >
+        <MapView
+          options={exploring ? [] : options}
+          selectedId={exploring ? null : selectedId}
+          from={exploring ? null : from}
+          to={exploring ? null : to}
+          reports={exploring ? [] : routeReports}
+          objects={exploring ? objects : []}
+          selectedObjectId={objectId}
+          onSelect={choose}
+          onFact={openFact}
+          onReport={r => setOpenReport({ report: r, editing: false })}
+          onObject={setObjectId}
+          onMove={c => (mapCenter.current = c)}
+        />
+        {!embed ? (
+          <div className="absolute left-3 top-3 z-10 lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))] lg:left-4 lg:top-auto">
+            <ReportFab busy={busy} onClick={() => setChooser(true)} />
+          </div>
+        ) : null}
+      </div>
+
 
       <PreferencesPanel open={prefsOpen} onOpenChange={setPrefsOpen} preferences={preferences} onChange={setPreferences} />
       <FactSheet

@@ -15,7 +15,7 @@ type RawIndex = {
   addresses: [string, string, number, number, string, string, number, string][];
   pois: [string, number, number, number, number, string][];
 };
-type DocKind = 'street' | 'poi' | 'stop' | 'addresses';
+type DocKind = 'street' | 'poi' | 'stop' | 'addresses' | 'area';
 type Doc = {
   kind: DocKind;
   name: string;
@@ -25,21 +25,40 @@ type Doc = {
   extra: string[];
   lat: number;
   lon: number;
-  /** street/poi: index into raw arrays; addresses: unused. */
+  /** street/poi/area: index into raw arrays; addresses: unused. */
   ref: number;
   /** addresses: indices into raw.addresses sharing this street name. */
   members?: number[];
   /** stop: 'tram' | 'bus' | 'both'. */
   modes?: string;
 };
-type Index = { raw: RawIndex; docs: Doc[]; words: string[]; postings: Map<string, number[]>; extraWords: string[]; extraPostings: Map<string, number[]>; grid: Map<number, number[]>; gridAddresses: Map<number, number[]> };
+type Index = {
+  raw: RawIndex; docs: Doc[]; words: string[]; postings: Map<string, number[]>; extraWords: string[]; extraPostings: Map<string, number[]>; grid: Map<number, number[]>; gridAddresses: Map<number, number[]>;
+  /** Address counts per coarse cell: [inside Kraków, outside] (see krakowCells). */
+  cityCells: Map<number, [number, number]>;
+  /** Per doc: 1 inside Kraków, 0 outside, -1 not computed yet. */
+  inCity: Int8Array;
+  /** Folded names of other towns/villages ("zabierzow", "wielka wies"); a query naming one turns off the Kraków preference. */
+  towns: string[][];
+};
 
 const OSM_SOURCE = 'OpenStreetMap (ODbL)';
 const GTFS_SOURCE = 'Rozkład ZTP Kraków (GTFS)';
 const CENTRE = { lat: 50.0614, lon: 19.9366 };
 const ENVELOPE = { minLat: 49.94, maxLat: 50.2, minLon: 19.75, maxLon: 20.25 };
-const STOPWORDS = new Set(['ul', 'ulica', 'al', 'os', 'pl']);
-const KIND_BONUS: Record<DocKind, number> = { stop: 12, street: 10, poi: 8, addresses: 0 };
+// Street-type abbreviations. "ul." is dropped; "os.", "al.", "pl." are expanded and match softly
+// (a name may or may not include "Osiedle", "Aleja", "Plac").
+const ABBREVIATIONS: Record<string, string> = { ul: 'ulica', al: 'aleja', pl: 'plac', os: 'osiedle' };
+const DROPPED = new Set(['ulica']);
+const SOFT = new Set(['aleja', 'plac', 'osiedle']);
+const KIND_BONUS: Record<DocKind, number> = { stop: 12, street: 10, area: 10, poi: 8, addresses: 0 };
+// Search is Kraków-first: results inside the city get this bonus unless the query names another town.
+const KRAKOW_BONUS = 15;
+/** A few places everyone means by a short query ("rynek" → Rynek Główny). Folded names, Kraków only. */
+const PROMINENT = new Set(['rynek glowny', 'wawel', 'sukiennice', 'planty', 'kazimierz', 'nowa huta', 'podgorze', 'blonia', 'kopiec kosciuszki', 'dworzec glowny', 'plac centralny imienia ronalda reagana']);
+const PROMINENT_BONUS = 10;
+// Coarse cells (~1.1 × 1.1 km) for the Kraków/outside classification.
+const CITY_CELL_LAT = 0.01, CITY_CELL_LON = 0.015;
 const CELL = 0.0025;
 // Destinations people usually mean when several places share a name.
 const MAJOR = new Set(['Dworzec', 'Dworzec autobusowy', 'Przystanek kolejowy', 'Szpital', 'Przychodnia', 'Uczelnia', 'Muzeum', 'Zamek', 'Wzgórze', 'Park', 'Galeria handlowa', 'Teatr', 'Kino', 'Kościół', 'Plac', 'Stadion', 'Urząd', 'Sąd', 'Cmentarz', 'Biblioteka', 'Targowisko', 'Zoo', 'Błonia', 'Centrum kultury', 'Pomnik', 'Poczta']);
@@ -59,6 +78,32 @@ function metres(a: Point, b: Point) {
   return 6371000 * Math.hypot(x, y);
 }
 const cellKey = (lat: number, lon: number) => Math.floor(lat / CELL) * 100000 + Math.floor(lon / CELL);
+const cityCellKey = (y: number, x: number) => y * 100000 + x;
+
+/**
+ * Whether an address is in Kraków: postcodes 30-xxx/31-xxx are Kraków, any other postcode or an
+ * addr:city (the index keeps it only when it is not Kraków) is outside; otherwise unknown (null).
+ */
+function addressInKrakow(a: RawIndex['addresses'][number]): boolean | null {
+  if (/^3[01]-/.test(a[4])) return true;
+  if (a[4] || a[5]) return false;
+  return null;
+}
+/**
+ * Kraków membership of any point, without an admin boundary in the index: majority of classified
+ * addresses in the surrounding 3×3 coarse cells (~3 km); no addresses around → within 7 km of the Rynek.
+ */
+function pointInKrakow(cells: Map<number, [number, number]>, lat: number, lon: number) {
+  const cy = Math.floor(lat / CITY_CELL_LAT), cx = Math.floor(lon / CITY_CELL_LON);
+  let inside = 0, outside = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const c = cells.get(cityCellKey(cy + dy, cx + dx));
+    if (!c) continue;
+    const w = dy === 0 && dx === 0 ? 3 : 1; // the point's own cell counts most
+    inside += c[0] * w; outside += c[1] * w;
+  }
+  return inside + outside > 0 ? inside > outside : metres(CENTRE, { lat, lon }) < 7000;
+}
 
 function loadStops(): { name: string; lat: number; lon: number; modes: string }[] {
   const file = process.env.KROK_TRANSIT_DB ?? path.join(process.env.KROK_STORAGE_DIR ?? path.join(/* turbopackIgnore: true */ process.cwd(), '.runtime'), 'transit.sqlite');
@@ -95,6 +140,14 @@ function index(): Index {
   raw.streets.forEach((s, i) => docs.push({ kind: 'street', name: s[0], words: words(s[0]), extra: areaWords[s[3]] ?? [], lat: s[1], lon: s[2], ref: i }));
   raw.pois.forEach((p, i) => docs.push({ kind: 'poi', name: p[0], words: words(p[0]), extra: [...(areaWords[p[4]] ?? []), ...words(raw.categories[p[1]])], lat: p[2], lon: p[3], ref: i }));
   for (const s of loadStops()) docs.push({ kind: 'stop', name: s.name, words: words(s.name), extra: ['przystanek'], lat: s.lat, lon: s.lon, ref: -1, modes: s.modes });
+  // Districts, quarters, suburbs and villages (OSM place=*), one per name within 2 km.
+  const seenAreas: { name: string; lat: number; lon: number }[] = [];
+  raw.areas.forEach((a, i) => {
+    const name = fold(a[0]);
+    if (seenAreas.some(o => o.name === name && metres(o, { lat: a[1], lon: a[2] }) < 2000)) return;
+    seenAreas.push({ name, lat: a[1], lon: a[2] });
+    docs.push({ kind: 'area', name: a[0], words: words(a[0]), extra: [], lat: a[1], lon: a[2], ref: i });
+  });
   const groups = new Map<string, Doc>();
   raw.addresses.forEach((a, i) => {
     let g = groups.get(a[0]);
@@ -108,10 +161,25 @@ function index(): Index {
   docs.forEach((d, i) => { for (const w of d.words) add(postings, w, i); for (const w of d.extra) add(extraPostings, w, i); });
   // Reverse-geocoding grids: named places and streets, and addresses separately.
   const grid = new Map<number, number[]>();
-  docs.forEach((d, i) => { if (d.kind === 'addresses') return; const k = cellKey(d.lat, d.lon); const l = grid.get(k); if (l) l.push(i); else grid.set(k, [i]); });
+  docs.forEach((d, i) => { if (d.kind === 'addresses' || d.kind === 'area') return; const k = cellKey(d.lat, d.lon); const l = grid.get(k); if (l) l.push(i); else grid.set(k, [i]); });
   const gridAddresses = new Map<number, number[]>();
   raw.addresses.forEach((a, i) => { const k = cellKey(a[2], a[3]); const l = gridAddresses.get(k); if (l) l.push(i); else gridAddresses.set(k, [i]); });
-  cached = { raw, docs, words: [...postings.keys()].sort(), postings, extraWords: [...extraPostings.keys()].sort(), extraPostings, grid, gridAddresses };
+  const cityCells = new Map<number, [number, number]>();
+  for (const a of raw.addresses) {
+    const inside = addressInKrakow(a);
+    if (inside === null) continue;
+    const k = cityCellKey(Math.floor(a[2] / CITY_CELL_LAT), Math.floor(a[3] / CITY_CELL_LON));
+    const c = cityCells.get(k) ?? [0, 0];
+    c[inside ? 0 : 1]++;
+    cityCells.set(k, c);
+  }
+  // Other towns: addr:city values and areas outside Kraków, minus names that also exist inside Kraków (Kazimierz, Stare Miasto…).
+  const krakowNames = new Set(raw.areas.filter(a => pointInKrakow(cityCells, a[1], a[2])).map(a => fold(a[0])));
+  const townNames = new Set<string>();
+  for (const a of raw.addresses) if (a[5]) townNames.add(fold(a[5]));
+  for (const a of raw.areas) if (!pointInKrakow(cityCells, a[1], a[2])) townNames.add(fold(a[0]));
+  const towns = [...townNames].filter(n => !krakowNames.has(n)).map(n => words(n)).filter(w => w.length && w.join('').length >= 3);
+  cached = { raw, docs, words: [...postings.keys()].sort(), postings, extraWords: [...extraPostings.keys()].sort(), extraPostings, grid, gridAddresses, cityCells, inCity: new Int8Array(docs.length).fill(-1), towns };
   return cached;
 }
 
@@ -136,7 +204,7 @@ function addressSuggestion(raw: RawIndex, i: number): PlaceSuggestion {
   const a = raw.addresses[i];
   return { id: `osm:${a[7]}`, name: `${a[0]} ${a[1]}`.slice(0, 300), lat: a[2], lon: a[3], source: OSM_SOURCE, kind: 'address', detail: addressDetail(raw, a) };
 }
-function docSuggestion(raw: RawIndex, d: Doc): PlaceSuggestion {
+function docSuggestion(raw: RawIndex, d: Doc & { inKrakow?: boolean }): PlaceSuggestion {
   if (d.kind === 'street') {
     const area = areaName(raw, raw.streets[d.ref][3]);
     return { id: `osm-street:${d.lat}:${d.lon}`, name: d.name, lat: d.lat, lon: d.lon, source: OSM_SOURCE, kind: 'street', detail: area ? `Ulica · ${area}` : 'Ulica' };
@@ -146,21 +214,29 @@ function docSuggestion(raw: RawIndex, d: Doc): PlaceSuggestion {
     const area = areaName(raw, p[4]);
     return { id: `osm:${p[5]}`, name: d.name, lat: d.lat, lon: d.lon, source: OSM_SOURCE, kind: 'poi', detail: [raw.categories[p[1]], area].filter(Boolean).join(' · ') };
   }
+  if (d.kind === 'area') {
+    // Shown as a named place; the client has no separate icon for areas.
+    return { id: `area:${d.lat}:${d.lon}`, name: d.name, lat: d.lat, lon: d.lon, source: OSM_SOURCE, kind: 'poi', detail: d.inKrakow ? 'Część Krakowa' : 'Okolice Krakowa' };
+  }
   const mode = d.modes === 'both' ? 'tramwaj i autobus' : d.modes === 'tram' ? 'tramwaj' : 'autobus';
   return { id: `stop:${d.name}:${d.lat.toFixed(4)}:${d.lon.toFixed(4)}`.slice(0, 120), name: d.name, lat: d.lat, lon: d.lon, source: GTFS_SOURCE, kind: 'stop', detail: `Przystanek · ${mode}` };
 }
 
 type Match = { nameHits: number; exactHits: number; extraHits: number; numbers: string[]; ordered: boolean };
-/** Assign every query token to a distinct name word (exact first, then prefix), else context word, else house number. */
-function match(doc: Doc, tokens: string[]): Match | null {
+/**
+ * Assign every query token to a distinct name word (exact first, then prefix), else context word, else house number.
+ * Soft tokens (expanded "os.", "al.", "pl.") only count when the name has them.
+ */
+function match(doc: Doc, tokens: string[], soft: boolean[] = []): Match | null {
   const used = new Array<boolean>(doc.words.length).fill(false);
   const assigned = new Array<number>(tokens.length).fill(-1);
   let exactHits = 0, nameHits = 0, extraHits = 0;
-  tokens.forEach((t, ti) => { const wi = doc.words.findIndex((w, i) => !used[i] && w === t); if (wi >= 0) { used[wi] = true; assigned[ti] = wi; exactHits++; nameHits++; } });
+  tokens.forEach((t, ti) => { const wi = doc.words.findIndex((w, i) => !used[i] && w === t); if (wi >= 0) { used[wi] = true; assigned[ti] = wi; exactHits++; if (!soft[ti]) nameHits++; } });
   const numbers: string[] = [];
   for (let ti = 0; ti < tokens.length; ti++) {
     if (assigned[ti] >= 0) continue;
     const t = tokens[ti];
+    if (soft[ti]) continue;
     const wi = doc.words.findIndex((w, i) => !used[i] && w.startsWith(t));
     if (wi >= 0) { used[wi] = true; assigned[ti] = wi; nameHits++; continue; }
     if (doc.extra.some(w => w.startsWith(t))) { extraHits++; continue; }
@@ -170,7 +246,42 @@ function match(doc: Doc, tokens: string[]): Match | null {
   }
   if (!nameHits) return null;
   const order = assigned.filter(a => a >= 0);
-  return { nameHits, exactHits, extraHits, numbers, ordered: order.every((a, i) => !i || a > order[i - 1]) && order[0] === 0 };
+  // "Centrum A" is in order for "Osiedle Centrum A": a leading generic word may be skipped.
+  const first = order[0] === 0 || (order[0] === 1 && SOFT.has(doc.words[0]));
+  return { nameHits, exactHits, extraHits, numbers, ordered: first && order.every((a, i) => !i || a > order[i - 1]) };
+}
+
+/**
+ * Folded query tokens. "ul." is dropped and "os."/"al."/"pl." expanded (soft) anywhere in the query, also mid-query
+ * ("dluga ul. 10"); a bare "os"/"al"/"pl"/"ul" as the last token without a dot may still be a word being typed.
+ */
+export function queryTokens(query: string): { tokens: string[]; soft: boolean[] } {
+  const raw = fold(query).split(/(?=[^\p{L}\p{N}])|(?<=[^\p{L}\p{N}])/u);
+  const parts: { word: string; dot: boolean }[] = [];
+  raw.forEach((piece, i) => {
+    if (!/^[\p{L}\p{N}]+$/u.test(piece)) return;
+    parts.push({ word: piece, dot: raw[i + 1] === '.' });
+  });
+  const tokens: string[] = [];
+  const soft: boolean[] = [];
+  parts.forEach(({ word, dot }, i) => {
+    const expanded = ABBREVIATIONS[word];
+    const typing = i === parts.length - 1 && !dot;
+    if (expanded && !(typing && parts.length > 1) && !(parts.length === 1 && !dot)) {
+      if (DROPPED.has(expanded)) return;
+      tokens.push(expanded); soft.push(true);
+      return;
+    }
+    if (SOFT.has(word) || DROPPED.has(word)) {
+      if (DROPPED.has(word) && parts.length > 1) return;
+      tokens.push(word); soft.push(parts.length > 1);
+      return;
+    }
+    tokens.push(word); soft.push(false);
+  });
+  // Only generic words ("os.", "plac"): search for them literally.
+  if (tokens.length && soft.every(Boolean)) soft.fill(false);
+  return { tokens, soft };
 }
 
 function houseNumberMatches(hn: string, numbers: string[]) {
@@ -185,14 +296,13 @@ function houseNumberMatches(hn: string, numbers: string[]) {
  * Case/diacritic-insensitive word-prefix matching; numbers may match house numbers.
  */
 export function searchPlaces(query: string, near?: Point, limit = 8): PlaceSuggestion[] {
-  const all = words(query);
-  if (!all.length) return [];
-  // Drop "ul.", "al.", "os.", "pl." unless it is the only (or still being typed, last) token.
-  const tokens = all.filter((t, i) => !(STOPWORDS.has(t) && all.length > 1 && i < all.length - 1));
-  const { raw, docs, words: sorted, postings, extraWords, extraPostings } = index();
-  // Candidate set from the most selective non-numeric token (name or context words).
-  const selective = tokens.filter(t => !isNumeric(t) && !(t.length >= 4 && 'krakow'.startsWith(t)));
-  const seeds = selective.length ? selective : tokens;
+  const { tokens, soft } = queryTokens(query);
+  if (!tokens.length) return [];
+  const idx = index();
+  const { raw, docs, words: sorted, postings, extraWords, extraPostings } = idx;
+  // Candidate set from the most selective non-numeric, non-generic token (name or context words).
+  const selective = tokens.filter((t, i) => !soft[i] && !isNumeric(t) && !(t.length >= 4 && 'krakow'.startsWith(t)));
+  const seeds = selective.length ? selective : tokens.filter((_, i) => !soft[i]);
   let candidates: Set<number> | undefined;
   for (const t of seeds) {
     const set = new Set<number>();
@@ -203,26 +313,48 @@ export function searchPlaces(query: string, near?: Point, limit = 8): PlaceSugge
   }
   const origin = near ?? CENTRE;
   const distanceWeight = near ? 6 : 3;
+  // Prefer Kraków unless the query names another town ("rynek zabierzów", "długa 10 wieliczka").
+  const townWords = namedTownWords(idx.towns, tokens);
+  const preferKrakow = townWords.size === 0;
+  const krakow = (id: number) => {
+    if (idx.inCity[id] < 0) idx.inCity[id] = pointInKrakow(idx.cityCells, docs[id].lat, docs[id].lon) ? 1 : 0;
+    return idx.inCity[id] === 1;
+  };
+  const hard = tokens.filter((t, i) => !soft[i] && !isNumeric(t));
   const phrase = tokens.filter(t => !isNumeric(t)).join(' ');
+  const hardPhrase = hard.join(' ');
   const scored: { score: number; place: PlaceSuggestion }[] = [];
   for (const id of candidates ?? []) {
     const doc = docs[id];
-    const m = match(doc, tokens);
+    const m = match(doc, tokens, soft);
     if (!m) continue;
     const folded = doc.words.join(' ');
+    const generic = SOFT.has(doc.words[0]) ? doc.words.slice(1).join(' ') : null;
     let quality = 40 + m.exactHits * 4 - m.extraHits * 15 + (m.ordered ? 15 : 0);
-    if (phrase && folded === phrase) quality += 45;
-    else if (phrase && folded.startsWith(phrase)) quality += 30;
-    quality -= (doc.words.length - m.nameHits) * 3 + Math.min(doc.name.length, 60) * 0.2;
+    if (phrase && (folded === phrase || (hardPhrase && generic === hardPhrase))) quality += 45;
+    else if (phrase && (folded.startsWith(phrase) || (hardPhrase && generic?.startsWith(hardPhrase)))) quality += 30;
+    quality -= (doc.words.length - m.nameHits - (generic !== null ? 1 : 0)) * 3 + Math.min(doc.name.length, 60) * 0.2;
     if (doc.kind === 'addresses') {
-      if (!m.numbers.length) continue;
+      if (!m.numbers.length) {
+        // An osiedle is an addressing unit without a street ("os. Centrum A"): suggest the estate itself.
+        if (doc.words[0] === 'osiedle') {
+          const place = estateSuggestion(raw, doc, origin);
+          const inside = pointInKrakow(idx.cityCells, place.lat, place.lon);
+          const km = metres(origin, place) / 1000;
+          scored.push({ score: quality + KIND_BONUS.street + (preferKrakow && inside ? KRAKOW_BONUS : 0) - distanceWeight * Math.log2(1 + km), place });
+        }
+        continue;
+      }
       let shown = 0;
       for (const i of doc.members!) {
         const a = raw.addresses[i];
         const hit = houseNumberMatches(a[1], m.numbers);
         if (!hit) continue;
         const km = metres(origin, { lat: a[2], lon: a[3] }) / 1000;
-        scored.push({ score: quality + 25 + hit * 10 - fold(a[1]).length - distanceWeight * Math.log2(1 + km), place: addressSuggestion(raw, i) });
+        const inside = addressInKrakow(a) ?? pointInKrakow(idx.cityCells, a[2], a[3]);
+        // The group's context words mix all towns sharing the street name; reward the member in the named town.
+        const inTown = townWords.size > 0 && [...words(a[5]), ...words(areaName(raw, a[6]) ?? '')].some(w => townWords.has(w));
+        scored.push({ score: quality + 25 + hit * 10 - fold(a[1]).length + (preferKrakow && inside ? KRAKOW_BONUS : 0) + (inTown ? KRAKOW_BONUS : 0) - distanceWeight * Math.log2(1 + km), place: addressSuggestion(raw, i) });
         if (++shown > 200) break;
       }
       continue;
@@ -231,7 +363,9 @@ export function searchPlaces(query: string, near?: Point, limit = 8): PlaceSugge
     const km = metres(origin, doc) / 1000;
     const category = doc.kind === 'poi' ? raw.categories[raw.pois[doc.ref][1]] : '';
     if (MAJOR.has(category)) quality += 6; else if (MINOR.has(category)) quality -= 5;
-    scored.push({ score: quality + KIND_BONUS[doc.kind] - m.numbers.length * 30 - distanceWeight * Math.log2(1 + km), place: docSuggestion(raw, doc) });
+    const inside = krakow(id);
+    if (preferKrakow && inside) quality += KRAKOW_BONUS + (PROMINENT.has(folded) ? PROMINENT_BONUS : 0);
+    scored.push({ score: quality + KIND_BONUS[doc.kind] - m.numbers.length * 30 - distanceWeight * Math.log2(1 + km), place: docSuggestion(raw, { ...doc, inKrakow: inside }) });
   }
   scored.sort((a, b) => b.score - a.score);
   const out: PlaceSuggestion[] = [];
@@ -245,6 +379,29 @@ export function searchPlaces(query: string, near?: Point, limit = 8): PlaceSugge
     if (out.length >= limit) break;
   }
   return out;
+}
+
+/**
+ * True when the query qualifies a name with another town ("rynek zabierzow", "dluga 10 wieliczka").
+ * A query that is only a town name ("rynek", "kazimierz") is not a qualifier: the town itself is still suggested.
+ */
+function namedTownWords(towns: string[][], tokens: string[]) {
+  const out = new Set<string>();
+  for (const town of towns) if (town.length < tokens.length && tokens.some((_, i) => town.every((w, j) => tokens[i + j] === w))) for (const w of town) out.add(w);
+  return out;
+}
+
+/** An osiedle (address group) as one place: addresses near the one closest to the origin, averaged. */
+function estateSuggestion(raw: RawIndex, doc: Doc, origin: Point): PlaceSuggestion {
+  const members = doc.members!.map(i => raw.addresses[i]);
+  let nearest = members[0];
+  for (const a of members) if (metres(origin, { lat: a[2], lon: a[3] }) < metres(origin, { lat: nearest[2], lon: nearest[3] })) nearest = a;
+  const group = members.filter(a => metres({ lat: a[2], lon: a[3] }, { lat: nearest[2], lon: nearest[3] }) < 1000);
+  const lat = +(group.reduce((s, a) => s + a[2], 0) / group.length).toFixed(5);
+  const lon = +(group.reduce((s, a) => s + a[3], 0) / group.length).toFixed(5);
+  const area = areaName(raw, nearest[6]);
+  const city = nearest[5] || (pointInKrakow(index().cityCells, lat, lon) ? 'Kraków' : '');
+  return { id: `osm-estate:${lat}:${lon}`, name: doc.name, lat, lon, source: OSM_SOURCE, kind: 'street', detail: ['Osiedle', [area, city].filter((v, i, list) => v && list.indexOf(v) === i).join(', ')].filter(Boolean).join(' · ') };
 }
 
 /** Nearest address within 80 m, else nearest named place or street within 150 m. */

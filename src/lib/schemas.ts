@@ -36,6 +36,22 @@ export type Report = { id:string; observation:Observation; locationId:string; ph
   cityHistory?:CityHistoryEntry[] };
 export const cityStatuses=['new','in_review','forwarded','resolved','rejected'] as const;
 export type CityStatus=typeof cityStatuses[number];
-export type ReportPhoto={id:string;path:string;createdAt:string;analysis?:Observation};
-export type CityHistoryEntry={at:string;status:CityStatus;note:string};
+/** AI check for people, faces or licence plates on a report photo. */
+export const photoPeople=['none','present','unclear'] as const;
+export type PhotoPeople=typeof photoPeople[number];
+export const photoVisibilities=['public','hidden'] as const;
+export type PhotoVisibility=typeof photoVisibilities[number];
+/**
+ * Stored: path is always set; visibility decides public serving (missing = hidden, privacy by default).
+ * Public view (publicReport): hidden photos are { id, createdAt, hidden: true, reason: 'privacy' } without path or analysis.
+ */
+export type ReportPhoto={id:string;path?:string;createdAt:string;analysis?:Observation;
+  /** AI result; absent when AI failed or for photos from before the check. */
+  people?:PhotoPeople;
+  visibility?:PhotoVisibility;
+  /** Set when the city office decided visibility. */
+  reviewedAt?:string;
+  hidden?:true; reason?:'privacy'};
+/** photo: set when the entry records a photo decision instead of a status/note change. */
+export type CityHistoryEntry={at:string;status:CityStatus;note:string;photo?:{id:string;visibility:PhotoVisibility}};
 export const emptyObservation:Observation = {kind:'stairs',description:'',direction:'unknown',handrail:'unknown',surface:'unknown',uncertainty:'Brak pomiarów i weryfikacji terenowej.'};

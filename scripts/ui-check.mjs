@@ -54,7 +54,7 @@ for (const run of runs) {
 
   // One-tap photo report: AI analyses and saves, then we delete it again.
   if (process.env.REPORT !== '0') {
-    await page.getByRole('button', { name: 'Zgłoś przeszkodę zdjęciem' }).click();
+    await page.getByRole('button', { name: 'Zgłoś problem' }).click();
     await page.getByText('Nie udało mi się dotrzeć').waitFor();
     await shot('6a-report-chooser');
     const chooser = page.waitForEvent('filechooser');
@@ -67,6 +67,7 @@ for (const run of runs) {
     await page.waitForTimeout(500);
     await shot('7-report-edit');
     await page.getByRole('button', { name: 'Usuń zgłoszenie' }).click();
+    await page.getByRole('button', { name: 'Kliknij ponownie, aby usunąć' }).click();
     await page.getByText('Zgłoszenie usunięte.').waitFor();
   }
 

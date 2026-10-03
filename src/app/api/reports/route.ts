@@ -1,25 +1,27 @@
-import { publicReport } from '@/lib/reports-server';
+import { apiMessages } from '@/lib/i18n/request-locale';
+import { newEditToken, publicReport } from '@/lib/reports-server';
 import { boundedJson, guard, listReports, saveReport } from '@/lib/server';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     return Response.json({ reports: listReports().map(publicReport) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {
-    return Response.json({ error: 'Nie udało się odczytać zgłoszeń. Spróbuj ponownie.' }, { status: 500 });
+    return Response.json({ error: apiMessages(request).reports.readFailed }, { status: 500 });
   }
 }
 
+/** Legacy form. → 201 { report, editToken } (editToken is shown only once; see reports-server.ts). */
 export async function POST(request: Request) {
   const block = guard(request);
   if (block) return block;
+  let body: unknown;
   try {
-    return Response.json({ report: await saveReport(await boundedJson(request)) }, { status: 201 });
+    body = await boundedJson(request);
+    const { token, hash } = newEditToken();
+    return Response.json({ report: publicReport(await saveReport(body, hash)), editToken: token }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch {
-    return Response.json(
-      { error: 'Nie udało się zapisać. Sprawdź miejsce, opis, potwierdzenie i zdjęcie (JPEG/PNG/WebP, maks. 3 MB). Formularz pozostał otwarty.' },
-      { status: 400 },
-    );
+    return Response.json({ error: apiMessages(request, body).reports.saveFailed }, { status: 400 });
   }
 }

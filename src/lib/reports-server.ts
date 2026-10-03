@@ -2,12 +2,13 @@
 // report; "blocked" reports (it stopped me getting somewhere) may be text only.
 // The author can correct, extend with more photos or delete it afterwards; the city office
 // reviews it in /city (status workflow with an audit trail).
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { draftPhoto } from './ai';
 import { placeSchema } from './city-types';
 import { locales, type Locale } from './i18n/locales';
-import { cityStatuses, observationSchema, type CityStatus, type Observation, type Report, type ReportPhoto } from './schemas';
+import { cityStatuses, observationSchema, photoVisibilities, type CityStatus, type Observation, type PhotoPeople, type Report, type ReportPhoto } from './schemas';
+import { cityPhotoPath, initialVisibility, isPublicPhoto, photoList, publicPhotoPath, publicPhotos } from './report-photos';
 import { db, photoBytes } from './server';
 
 export const MAX_PHOTOS = 4;
@@ -45,9 +46,11 @@ function commentObservation(input: Pick<AutoReportInput, 'comment' | 'destinatio
   return { kind: 'other', description, direction: 'unknown', handrail: 'unknown', surface: 'unknown', uncertainty: 'Opis osoby zgłaszającej, bez zdjęcia i bez weryfikacji w terenie.' };
 }
 
-async function analyse(photo: string, locale: Locale): Promise<Observation | null> {
+type Analysis = { observation: Observation; people: PhotoPeople };
+async function analyse(photo: string, locale: Locale): Promise<Analysis | null> {
   try {
-    return await draftPhoto(photo, locale);
+    const { people, ...observation } = await draftPhoto(photo, locale);
+    return { observation, people };
   } catch {
     return null; // Keep the photo even when AI is unavailable; the user can describe it later.
   }
@@ -61,13 +64,47 @@ function writeReport(report: Report) {
   db().prepare('UPDATE reports SET body=? WHERE id=?').run(JSON.stringify(report), report.id);
 }
 
-export async function saveAutoReport(input: AutoReportInput): Promise<Report> {
+// ---- Author edit token -----------------------------------------------------------------
+// No accounts: creating a report returns a random token once (`editToken`); the client keeps it
+// (localStorage, keyed by report id) and sends it as `x-report-token` to edit, delete or add photos.
+// Only its SHA-256 hash is stored, in reports.edit_hash (never in the JSON body). Reports created
+// before tokens existed have no hash and can no longer be changed by anyone but the city.
+
+export const REPORT_TOKEN_HEADER = 'x-report-token';
+const hashToken = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
+
+/** 32 random bytes, base64url (43 characters). */
+export function newEditToken() {
+  const token = randomBytes(32).toString('base64url');
+  return { token, hash: hashToken(token) };
+}
+
+export type ReportAccess = 'ok' | 'not_found' | 'forbidden';
+/** Checks the author's token against the stored hash in constant time. */
+export function checkEditToken(id: string, token: string | null | undefined): ReportAccess {
+  const row = db().prepare('SELECT edit_hash FROM reports WHERE id=?').get(id) as { edit_hash: string | null } | undefined;
+  if (!row) return 'not_found';
+  if (!row.edit_hash || !token || token.length > 200) return 'forbidden';
+  const expected = Buffer.from(row.edit_hash, 'hex');
+  const given = Buffer.from(hashToken(token), 'hex');
+  return expected.length === given.length && timingSafeEqual(expected, given) ? 'ok' : 'forbidden';
+}
+
+/** The author may delete only while the city has not started handling the report. */
+export function authorCanDelete(id: string) {
+  const report = readReport(id);
+  return !!report && (report.cityStatus ?? 'new') === 'new';
+}
+
+export async function saveAutoReport(input: AutoReportInput, editTokenHash: string | null = null): Promise<Report> {
   const photo = input.photo ? await photoBytes(input.photo) : null;
   let observation: Observation;
   let analysis: Report['analysis'];
+  let people: PhotoPeople | undefined;
   if (input.photo) {
     const drafted = await analyse(input.photo, input.locale);
-    observation = drafted ?? failedObservation;
+    observation = drafted?.observation ?? failedObservation;
+    people = drafted?.people;
     analysis = drafted ? 'ai' : 'failed';
   } else {
     observation = commentObservation(input);
@@ -77,7 +114,7 @@ export async function saveAutoReport(input: AutoReportInput): Promise<Report> {
   const now = new Date().toISOString();
   const point = `point:${input.location.lat}:${input.location.lon}`;
   const photoPath = photo ? `/api/reports/${id}/photo` : null;
-  const photos: ReportPhoto[] = photo ? [{ id: 'main', path: photoPath!, createdAt: now, ...(analysis === 'ai' ? { analysis: observation } : {}) }] : [];
+  const photos: ReportPhoto[] = photo ? [{ id: 'main', path: photoPath!, createdAt: now, ...(analysis === 'ai' ? { analysis: observation } : {}), ...(people ? { people } : {}), visibility: initialVisibility(people) }] : [];
   const report: Report = {
     id,
     observation,
@@ -96,7 +133,7 @@ export async function saveAutoReport(input: AutoReportInput): Promise<Report> {
     photos,
     cityStatus: 'new',
   };
-  db().prepare('INSERT INTO reports (id,body,photo) VALUES (?,?,?)').run(id, JSON.stringify(report), photo);
+  db().prepare('INSERT INTO reports (id,body,photo,edit_hash) VALUES (?,?,?,?)').run(id, JSON.stringify(report), photo, editTokenHash);
   return report;
 }
 
@@ -119,16 +156,16 @@ export async function addReportPhoto(reportId: string, input: z.infer<typeof add
   if (photoCount(report) >= MAX_PHOTOS) return { error: 'limit' };
   const id = randomUUID();
   const createdAt = new Date().toISOString();
-  const photo: ReportPhoto = { id, path: `/api/reports/${reportId}/photos/${id}`, createdAt, ...(analysis ? { analysis } : {}) };
-  const photos = report.photos ?? (report.photoPath ? [{ id: 'main', path: report.photoPath, createdAt: report.obtainedAt }] : []);
+  const photo: ReportPhoto = { id, path: `/api/reports/${reportId}/photos/${id}`, createdAt, ...(analysis ? { analysis: analysis.observation, people: analysis.people } : {}), visibility: initialVisibility(analysis?.people) };
+  const photos = photoList(report);
   const next: Report = { ...report, photos: [...photos, photo] };
-  if (!next.photoPath) next.photoPath = photo.path;
+  if (!next.photoPath) next.photoPath = photo.path ?? null;
   // A text-only or failed report takes the first AI description; an AI or author-edited one stays as it is.
   if (analysis && (report.analysis === 'failed' || report.analysis === 'comment')) {
-    next.observation = analysis;
+    next.observation = analysis.observation;
     next.analysis = 'ai';
   }
-  db().prepare('INSERT INTO report_photos (id,report_id,photo,created_at,analysis) VALUES (?,?,?,?,?)').run(id, reportId, bytes, createdAt, analysis ? JSON.stringify(analysis) : null);
+  db().prepare('INSERT INTO report_photos (id,report_id,photo,created_at,analysis) VALUES (?,?,?,?,?)').run(id, reportId, bytes, createdAt, analysis ? JSON.stringify(analysis.observation) : null);
   writeReport(next);
   return { report: next, photo };
 }
@@ -143,12 +180,18 @@ export function reportPhoto(reportId: string, photoId: string): Uint8Array | nul
   return row?.photo ?? null;
 }
 
-/** First photo of a report: the original column, else the first added photo (text-only reports). */
+/** Photo bytes only if the photo is publicly visible (see report-photos.ts); hidden and unknown photos → null. */
+export function publicReportPhoto(reportId: string, photoId: string): Uint8Array | null {
+  const report = readReport(reportId);
+  const photo = report && photoList(report).find(p => p.id === photoId);
+  return photo && isPublicPhoto(photo) ? reportPhoto(reportId, photoId) : null;
+}
+
+/** First publicly visible photo of a report (GET /api/reports/[id]/photo). */
 export function firstReportPhoto(reportId: string): Uint8Array | null {
-  const main = reportPhoto(reportId, 'main');
-  if (main) return main;
-  const row = db().prepare('SELECT photo FROM report_photos WHERE report_id=? ORDER BY created_at, rowid LIMIT 1').get(reportId) as { photo: Uint8Array } | undefined;
-  return row?.photo ?? null;
+  const report = readReport(reportId);
+  const photo = report && photoList(report).find(isPublicPhoto);
+  return photo ? reportPhoto(reportId, photo.id) : null;
 }
 
 export function deleteReport(id: string) {
@@ -165,10 +208,16 @@ export function updateReport(id: string, observation: unknown): Report | null {
   return next;
 }
 
-/** Public view: city status and public reply are shown; the audit trail stays in the dashboard. */
+/** Public view: city status and public reply are shown; the audit trail stays in the dashboard. Hidden photos have no path. */
 export function publicReport(report: Report): Report {
   const { cityHistory: _history, ...rest } = report;
-  return rest;
+  return { ...rest, photoPath: publicPhotoPath(report), photos: publicPhotos(report) };
+}
+
+/** City dashboard view: every photo through the cookie-protected city route, with its visibility. */
+export function cityReport(report: Report): Report {
+  const photos = photoList(report).map(p => ({ ...p, path: cityPhotoPath(report.id, p.id), visibility: p.visibility ?? 'hidden' }));
+  return { ...report, photos, photoPath: photos[0]?.path ?? null };
 }
 
 // ---- City office -------------------------------------------------------------------------
@@ -197,6 +246,27 @@ export function updateCityReport(id: string, input: z.infer<typeof cityUpdateSch
   const next: Report = { ...report, cityStatus: status, cityUpdatedAt: at, cityHistory: [...(report.cityHistory ?? []), { at, status, note }] };
   if (note) next.cityNote = note;
   else delete next.cityNote;
+  writeReport(next);
+  return next;
+}
+
+export const photoVisibilitySchema = z.object({ visibility: z.enum(photoVisibilities) });
+
+/** City decision on one photo; recorded in cityHistory. null = report or photo not found. */
+export function setPhotoVisibility(id: string, photoId: string, visibility: ReportPhoto['visibility'] & string, now = new Date()): Report | null {
+  const report = readReport(id);
+  if (!report) return null;
+  const photos = photoList(report);
+  const index = photos.findIndex(p => p.id === photoId);
+  if (index < 0) return null;
+  const at = now.toISOString();
+  photos[index] = { ...photos[index], visibility, reviewedAt: at };
+  const next: Report = {
+    ...report,
+    photos,
+    cityUpdatedAt: at,
+    cityHistory: [...(report.cityHistory ?? []), { at, status: report.cityStatus ?? 'new', note: report.cityNote ?? '', photo: { id: photoId, visibility } }],
+  };
   writeReport(next);
   return next;
 }

@@ -1,5 +1,6 @@
 import { requireCity } from '@/lib/city-auth';
-import { cityUpdateSchema, updateCityReport } from '@/lib/reports-server';
+import { apiMessages } from '@/lib/i18n/request-locale';
+import { cityReport, cityUpdateSchema, updateCityReport } from '@/lib/reports-server';
 import { boundedJson, guard } from '@/lib/server';
 export const runtime = 'nodejs';
 
@@ -14,9 +15,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     input = cityUpdateSchema.parse(await boundedJson(request));
   } catch {
-    return Response.json({ error: 'Sprawdź status i odpowiedź (maks. 1000 znaków).' }, { status: 400 });
+    return Response.json({ error: apiMessages(request).city.updateInvalid }, { status: 400 });
   }
   const report = updateCityReport(id, input);
-  if (!report) return Response.json({ error: 'Nie znaleziono zgłoszenia.' }, { status: 404 });
-  return Response.json({ report });
+  if (!report) return Response.json({ error: apiMessages(request).reports.notFound }, { status: 404 });
+  return Response.json({ report: cityReport(report) });
 }

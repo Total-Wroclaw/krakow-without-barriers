@@ -8,11 +8,11 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import type { CityPlace } from '@/lib/city-types';
-import { postJson } from '@/lib/client';
+import { errorText, postJson } from '@/lib/client';
 import { useI18n } from '@/lib/i18n/client';
 import type { Report } from '@/lib/schemas';
 import { Panel } from './Panel';
-import { gpsPoint, inKrakow, shrink, type CaptureTarget } from './Reports';
+import { gpsPoint, inKrakow, rememberToken, reportToken, shrink, type CaptureTarget } from './Reports';
 
 type Where = 'gps' | 'selected' | 'map';
 const MAX_PHOTOS = 4;
@@ -38,6 +38,7 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
   const [comment, setComment] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [commentError, setCommentError] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +80,8 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (comment.trim().length < 3 && !photos.length) {
-      toast.error(t('report.needComment'));
+      setCommentError(true);
+      document.getElementById('blocked-comment')?.focus();
       return;
     }
     setBusy(true);
@@ -102,10 +104,11 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
         60000,
       );
       let report = data.report as Report;
+      rememberToken(report.id, data.editToken);
       // Further photos are attached one by one; each is analysed separately.
       for (const photo of photos.slice(1)) {
         try {
-          const more = await postJson(`/api/reports/${report.id}/photos`, { photo, locale }, 60000);
+          const more = await postJson(`/api/reports/${report.id}/photos?locale=${locale}`, { photo, locale }, 60000, { 'x-report-token': reportToken(report.id) ?? '' });
           if (more.report) report = more.report as Report;
         } catch {}
       }
@@ -113,7 +116,7 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
       toast.success(t('report.sent'), { id });
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('report.failed'), { id });
+      toast.error(errorText(err, t('report.failed')), { id });
     } finally {
       setBusy(false);
     }
@@ -153,7 +156,8 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="blocked-comment">{t('report.comment')}</Label>
-            <Textarea id="blocked-comment" value={comment} maxLength={800} onChange={e => setComment(e.target.value)} placeholder={t('report.commentPlaceholder')} className="min-h-24 text-base" />
+            {commentError ? <p id="blocked-comment-error" className="text-sm font-medium text-destructive">{t('report.needComment')}</p> : null}
+            <Textarea id="blocked-comment" value={comment} maxLength={800} aria-invalid={commentError || undefined} aria-describedby={commentError ? 'blocked-comment-error' : undefined} onChange={e => { setComment(e.target.value); setCommentError(false); }} placeholder={t('report.commentPlaceholder')} className="min-h-24 text-base" />
           </div>
 
           <div className="flex flex-col gap-2">

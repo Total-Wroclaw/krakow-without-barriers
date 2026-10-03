@@ -1,9 +1,10 @@
 // Official GUGiK orthophoto (WMS, free reuse with attribution) around a point.
-// The server only requests a fixed-size crop for coordinates inside Kraków; no arbitrary URLs.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+// The server only requests fixed-size crops (a few frame widths) for coordinates inside Kraków; no arbitrary URLs.
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { runtimeDir } from './server';
+import { aerialBbox, IMAGE_SIZE, type AerialWidth, type Bbox } from './aerial-geo';
 import type { Point } from './city-types';
 
 const ORTHO_BASE = 'https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS';
@@ -13,48 +14,54 @@ export const orthoServices = [`${ORTHO_BASE}/HighResolution`, `${ORTHO_BASE}/Sta
 export function wmsUrl(service: string, bbox: number[], width: number, height: number) {
   return `${service}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=Raster&STYLES=&SRS=EPSG:3857&BBOX=${bbox.map(v => v.toFixed(2)).join(',')}&WIDTH=${width}&HEIGHT=${height}&FORMAT=image/jpeg`;
 }
-const WIDTH_M = 240;
-const HEIGHT_M = 180;
-const cache = new Map<string, { at: number; jpeg: Buffer }>();
+const memory = new Map<string, Buffer>();
+const inflight = new Map<string, Promise<Buffer>>();
 
-function mercator({ lat, lon }: Point) {
-  const x = (lon * 20037508.34) / 180;
-  const y = (Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) * 20037508.34) / Math.PI;
-  return { x, y };
-}
-
-function orthoBbox(point: Point) {
-  // Mercator metres are stretched by 1/cos(lat) relative to ground metres.
-  const scale = 1 / Math.cos((point.lat * Math.PI) / 180);
-  const { x, y } = mercator(point);
-  const dx = (WIDTH_M * scale) / 2;
-  const dy = (HEIGHT_M * scale) / 2;
-  return [x - dx, y - dy, x + dx, y + dy];
-}
-
-export async function orthoCrop(point: Point) {
-  const key = `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 86_400_000) return hit.jpeg;
-  // Crops are also kept on disk so repeated aerial descriptions don't refetch the source.
-  const file = path.join(runtimeDir, 'aerial', `${key.replace(',', '_')}.jpg`);
-  try {
-    const jpeg = await readFile(file);
-    cache.set(key, { at: Date.now(), jpeg });
-    return jpeg;
-  } catch {}
-  let jpeg: Buffer | null = null;
+async function fetchCrop(bbox: Bbox) {
   for (const service of orthoServices) {
-    const res = await fetch(wmsUrl(service, orthoBbox(point), 640, 480), { signal: AbortSignal.timeout(15_000), headers: { 'User-Agent': 'KazdyKrok/0.3' } }).catch(() => null);
+    const res = await fetch(wmsUrl(service, bbox, IMAGE_SIZE.width, IMAGE_SIZE.height), { signal: AbortSignal.timeout(15_000), headers: { 'User-Agent': 'KazdyKrok/0.3' } }).catch(() => null);
     if (!res?.ok || !res.headers.get('content-type')?.startsWith('image/')) continue;
-    // Decode to validate the image and normalise it before it reaches the model.
-    jpeg = await sharp(Buffer.from(await res.arrayBuffer()), { limitInputPixels: 4_000_000 }).jpeg({ quality: 80 }).toBuffer();
-    break;
+    // Decode to validate the image and normalise it before it reaches the browser or the model.
+    return sharp(Buffer.from(await res.arrayBuffer()), { limitInputPixels: 4_000_000 }).jpeg({ quality: 80, mozjpeg: true }).toBuffer();
   }
-  if (!jpeg) throw new Error('Ortofotomapa jest niedostępna.');
-  if (cache.size > 200) cache.clear();
-  cache.set(key, { at: Date.now(), jpeg });
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, jpeg).catch(() => {});
+  throw new Error('Ortofotomapa jest niedostępna.');
+}
+
+/** A 960 × 720 orthophoto crop `widthM` metres wide around a (rounded) point; cached in memory and on disk. */
+export async function orthoCrop(point: Point, widthM: AerialWidth) {
+  const key = `${point.lat.toFixed(5)}_${point.lon.toFixed(5)}_w${widthM}`;
+  const hit = memory.get(key);
+  if (hit) return hit;
+  const file = path.join(runtimeDir, 'aerial', 'crops', `${key}.jpg`);
+  let job = inflight.get(key);
+  if (!job) {
+    job = (async () => {
+      const cached = await readFile(file).catch(() => null);
+      if (cached) return cached;
+      const jpeg = await fetchCrop(aerialBbox(point, widthM));
+      await mkdir(path.dirname(file), { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`;
+      await writeFile(tmp, jpeg);
+      await rename(tmp, file);
+      return jpeg;
+    })().finally(() => inflight.delete(key));
+    inflight.set(key, job);
+  }
+  const jpeg = await job;
+  if (memory.size > 120) memory.clear();
+  memory.set(key, jpeg);
   return jpeg;
+}
+
+/**
+ * The analysis copy of a crop: small hollow rings mark the listed pins so the model can tie its
+ * description to them. Rings only (no text), so no fonts are needed on the server.
+ */
+export async function withPinRings(jpeg: Buffer, positions: { x: number; y: number }[]) {
+  const { width, height } = IMAGE_SIZE;
+  const rings = positions
+    .map(p => `<circle cx="${(p.x * width).toFixed(1)}" cy="${(p.y * height).toFixed(1)}" r="13" fill="none" stroke="#ffffff" stroke-width="5"/><circle cx="${(p.x * width).toFixed(1)}" cy="${(p.y * height).toFixed(1)}" r="13" fill="none" stroke="#c4122f" stroke-width="2.5"/>`)
+    .join('');
+  const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${rings}</svg>`);
+  return sharp(jpeg).composite([{ input: svg }]).jpeg({ quality: 80 }).toBuffer();
 }

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { CityPlace } from '@/lib/city-types';
-import { postJson } from '@/lib/client';
+import { errorText, postJson } from '@/lib/client';
 import { formatDate } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import type { MessageKey } from '@/lib/i18n/messages';
@@ -31,6 +31,34 @@ export function useReportTitle() {
     },
     [t],
   );
+}
+
+const TOKENS_KEY = 'krok-report-tokens-v1';
+
+/** Edit tokens are returned once when a report is created; only their author can change or delete it. */
+export function rememberToken(id: string, token: unknown) {
+  if (typeof token !== 'string') return;
+  try {
+    const all = JSON.parse(localStorage.getItem(TOKENS_KEY) ?? '{}');
+    all[id] = token;
+    localStorage.setItem(TOKENS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function reportToken(id: string): string | null {
+  try {
+    return JSON.parse(localStorage.getItem(TOKENS_KEY) ?? '{}')[id] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function forgetToken(id: string) {
+  try {
+    const all = JSON.parse(localStorage.getItem(TOKENS_KEY) ?? '{}');
+    delete all[id];
+    localStorage.setItem(TOKENS_KEY, JSON.stringify(all));
+  } catch {}
 }
 
 export async function shrink(file: File) {
@@ -115,6 +143,7 @@ export function useReportCapture({ fallback, onSaved, onOpen }: {
           ...(chosen.factId && !useGps ? { factId: chosen.factId } : {}),
         }, 45000);
         const report = data.report as Report;
+        rememberToken(report.id, data.editToken);
         onSaved(report);
         if (report.analysis === 'failed') {
           toast.warning(t('report.noAi'), { id });
@@ -127,7 +156,7 @@ export function useReportCapture({ fallback, onSaved, onOpen }: {
           });
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : t('report.failed'), { id });
+        toast.error(errorText(e, t('report.failed')), { id });
       } finally {
         setBusy(false);
         target.current = null;
@@ -171,13 +200,19 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
   const [editing, setEditing] = useState(startEditing);
   const [draft, setDraft] = useState<Observation | null>(report?.observation ?? null);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
+    setConfirmDelete(false);
     setEditing(startEditing);
     setDraft(report?.observation ?? null);
   }, [report, startEditing]);
 
   if (!report || !draft) return null;
+  // Only the author (who holds the edit token from creation) may change, extend or delete a report.
+  const token = reportToken(report.id);
+  const mine = !!token;
+  const hiddenPhotos = report.photos?.filter(p => p.hidden).length ?? 0;
 
   async function save() {
     if (!report || !draft) return;
@@ -188,14 +223,14 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
     }
     setBusy(true);
     try {
-      const res = await fetch(`/api/reports/${report.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ observation: parsed.data }) });
+      const res = await fetch(`/api/reports/${report.id}?locale=${locale}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-report-token': token ?? '' }, body: JSON.stringify({ observation: parsed.data, locale }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onChange(data.report);
       setEditing(false);
       toast.success(t('report.saved'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('report.saveFailed'));
+      toast.error(errorText(e, t('report.saveFailed')));
     } finally {
       setBusy(false);
     }
@@ -203,13 +238,21 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
 
   async function remove() {
     if (!report) return;
-    setBusy(true);
-    const res = await fetch(`/api/reports/${report.id}`, { method: 'DELETE' });
-    setBusy(false);
-    if (!res.ok) {
-      toast.error(t('report.deleteFailed'));
+    // Two-step delete: the first click asks for confirmation.
+    if (!confirmDelete) {
+      setConfirmDelete(true);
       return;
     }
+    setBusy(true);
+    const res = await fetch(`/api/reports/${report.id}?locale=${locale}`, { method: 'DELETE', headers: { 'x-report-token': token ?? '' } });
+    setBusy(false);
+    if (!res.ok) {
+      // e.g. the city is already handling the report: show the server's explanation.
+      const data = await res.json().catch(() => null);
+      toast.error(typeof data?.error === 'string' ? data.error : t('report.deleteFailed'));
+      return;
+    }
+    forgetToken(report.id);
     onDelete(report.id);
     toast.success(t('report.deleted'));
   }
@@ -268,29 +311,32 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <p className="text-base">{draft.description}</p>
-            <dl className="grid grid-cols-2 gap-3 text-sm">
+            {report.analysis !== 'comment' ? <p className="text-base">{draft.description}</p> : null}
+            {report.analysis === 'comment' ? null : <dl className="grid grid-cols-2 gap-3 text-sm">
               <Detail term={t('report.rail')} value={t(handrailKeys[draft.handrail])} />
               <Detail term={t('report.surface')} value={t(surfaceKeys[draft.surface])} />
               {draft.kind === 'stairs' ? <Detail term={t('report.direction')} value={t(directionKeys[draft.direction])} /> : null}
               <Detail term={t('report.place')} value={report.locationSource === 'gps' ? t('report.fromGps') : report.location?.name ?? t('report.mapPoint')} />
-            </dl>
-            <Button variant="outline" className="h-11 self-start" onClick={() => setEditing(true)}>
-              {t('report.edit')}
-            </Button>
+            </dl>}
+            {mine ? (
+              <Button variant="outline" className="h-11 self-start" onClick={() => setEditing(true)}>
+                {t('report.edit')}
+              </Button>
+            ) : null}
           </div>
         )}
 
-        {report.photos && report.photos.length > 1 ? (
+        {report.photos && report.photos.filter(p => p.path && p.path !== report.photoPath).length ? (
           <div className="flex flex-wrap gap-2">
-            {report.photos.slice(1).map(p => (
+            {report.photos.filter(p => p.path && p.path !== report.photoPath).map(p => (
               // eslint-disable-next-line @next/next/no-img-element
               <img key={p.id} src={p.path} alt={t('report.photoAlt', { description: p.analysis?.description ?? draft.description })} className="size-24 rounded-lg bg-muted object-cover" />
             ))}
           </div>
         ) : null}
         {report.comment ? <p className="rounded-lg bg-muted/70 p-3 text-sm">{report.comment}</p> : null}
-        {(report.photos?.length ?? (report.photoPath ? 1 : 0)) < 4 ? (
+        {hiddenPhotos ? <p className="rounded-lg bg-muted/70 p-3 text-sm">{t('report.photoPending', { n: hiddenPhotos })}</p> : null}
+        {mine && (report.photos?.length ?? (report.photoPath ? 1 : 0)) < 4 ? (
           <AddPhoto reportId={report.id} onAdded={onChange} />
         ) : null}
         {report.cityStatus ? (
@@ -309,10 +355,12 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
           {report.analysis === 'ai' ? ` ${t('report.byAi')}` : report.analysis === 'edited' ? ` ${t('report.byAuthor')}` : ''}
         </StatusRow>
 
-        <Button variant="ghost" className="h-11 self-start text-destructive hover:text-destructive" onClick={remove} disabled={busy}>
-          <Trash2 />
-          {t('report.delete')}
-        </Button>
+        {mine ? (
+          <Button variant="ghost" className="h-11 self-start text-destructive hover:text-destructive" onClick={remove} disabled={busy}>
+            <Trash2 />
+            {confirmDelete ? t('report.confirmDelete') : t('report.delete')}
+          </Button>
+        ) : null}
       </div>
     </Panel>
   );
@@ -337,11 +385,11 @@ function AddPhoto({ reportId, onAdded }: { reportId: string; onAdded: (r: Report
           if (!file) return;
           setBusy(true);
           try {
-            const data = await postJson(`/api/reports/${reportId}/photos`, { photo: await shrink(file), locale }, 60000);
+            const data = await postJson(`/api/reports/${reportId}/photos?locale=${locale}`, { photo: await shrink(file), locale }, 60000, { 'x-report-token': reportToken(reportId) ?? '' });
             onAdded(data.report as Report);
             toast.success(t('report.photoAdded'));
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : t('report.failed'));
+            toast.error(errorText(err, t('report.failed')));
           } finally {
             setBusy(false);
           }

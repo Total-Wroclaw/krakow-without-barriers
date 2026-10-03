@@ -9,8 +9,9 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { AccessFeature, FeatureKey, FeatureValue, ObjectCategory, ObjectPage, ObjectQuery, ObjectSource, PartnerInfo, PlaceObject, PlaceObjectSummary } from './explore-types';
 import type { CityVenuesFile } from './city-venues';
-import type { Locale } from './i18n/locales';
+import { locales, type Locale } from './i18n/locales';
 import type { Report } from './schemas';
+import { publicPhotoPath } from './report-photos';
 import { fold, words } from './places';
 
 // ---------- Types of raw inputs ----------
@@ -281,7 +282,7 @@ function attachReports(cat: Catalog, reports: Report[]) {
       ?? (r.location ? nearby(cat, r.location, 30)[0]?.rec : undefined);
     if (!target) continue;
     // Conservative: user reports are listed as unverified sources with their own description, not turned into facts.
-    target.sources.push({ id: `user:${r.id}`, kind: 'user', label: LABELS.user.pl, labelKey: 'userObservation', observation: r.observation.kind, note: r.observation.description.slice(0, 300), ...(r.photoPath ? { url: r.photoPath } : {}), obtainedAt: r.obtainedAt, confirmedAt: null, editedAt: r.editedAt ?? null, status: 'unverified' });
+    target.sources.push({ id: `user:${r.id}`, kind: 'user', label: LABELS.user.pl, labelKey: 'userObservation', observation: r.observation.kind, note: r.observation.description.slice(0, 300), ...(publicPhotoPath(r) ? { url: publicPhotoPath(r)! } : {}), obtainedAt: r.obtainedAt, confirmedAt: null, editedAt: r.editedAt ?? null, status: 'unverified' });
   }
 }
 
@@ -447,9 +448,30 @@ export const partnerSubmissionSchema = z.object({
   promote: z.boolean(),
   plan: z.enum(['free', 'partner']),
   existingObjectId: z.string().max(120).optional(),
+  /** Interface language of the form: language of error messages and of the returned object. Not stored. */
+  locale: z.enum(locales).optional(),
 }).strict();
 export type PartnerSubmission = z.infer<typeof partnerSubmissionSchema>;
 export class PartnerInputError extends Error {}
+
+type FieldMessages = Record<'location' | 'unknown' | 'other', string> & Partial<Record<string, string>>;
+const LOCATION_FIELDS = new Set(['lat', 'lon']);
+
+/** One localised message per invalid top-level field; unknown keys are listed by name. */
+export function partnerFieldErrors(error: z.ZodError, messages: FieldMessages) {
+  const out = new Map<string, string>();
+  for (const issue of error.issues) {
+    if (issue.code === 'unrecognized_keys') {
+      for (const key of issue.keys) out.set([...issue.path, key].join('.'), messages.unknown);
+      continue;
+    }
+    const field = String(issue.path[0] ?? '');
+    if (out.has(field)) continue;
+    const message = LOCATION_FIELDS.has(field) ? messages.location : messages[field] ?? messages.other;
+    out.set(field, message);
+  }
+  return [...out].map(([path, message]) => ({ path, message }));
+}
 
 // ---------- Lazy singleton over files + SQLite ----------
 type Base = { osm: OsmFile | null; city: CityVenuesFile | null };
@@ -487,7 +509,8 @@ export async function listObjectPage(query: ObjectQuery): Promise<ObjectPage> { 
 export async function getObject(id: string, locale: Locale = 'pl'): Promise<PlaceObject | null> { return getFromCatalog(await catalog(), id, locale); }
 /** Validate and store a partner submission; returns the public object (contact e-mail is never included). */
 export async function savePartnerObject(input: unknown, locale: Locale = 'pl'): Promise<PlaceObject> {
-  const data = partnerSubmissionSchema.parse(input);
+  const { locale: formLocale, ...data } = partnerSubmissionSchema.parse(input);
+  if (formLocale) locale = formLocale;
   if (data.existingObjectId && !(await catalog()).byId.has(data.existingObjectId)) throw new PartnerInputError('existingObjectId');
   const record: PartnerRecord = { ...data, id: randomUUID(), obtainedAt: new Date().toISOString() };
   const { db } = await store();

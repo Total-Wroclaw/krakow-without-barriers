@@ -5,7 +5,7 @@ import { cityStatuses, type CityStatus, type Report } from './schemas';
 export const cityStatusLabel: Record<CityStatus, string> = {
   new: 'Nowe',
   in_review: 'W trakcie analizy',
-  forwarded: 'Przekazane do jednostki',
+  forwarded: 'Przekazane do zarządcy',
   resolved: 'Rozwiązane',
   rejected: 'Odrzucone',
 };
@@ -79,7 +79,7 @@ const columns = ['id', 'utworzono', 'typ', 'status', 'rodzaj', 'opis', 'komentar
 /** UTF-8 with BOM so Excel opens Polish characters correctly. Photo links are relative to the app origin. */
 export function reportsCsv(reports: Report[], origin = '') {
   const rows = reports.map(r => {
-    const photos = (r.photos?.map(p => p.path) ?? (r.photoPath ? [r.photoPath] : [])).map(p => `${origin}${p}`).join(' ');
+    const photos = (r.photos?.map(p => p.path) ?? [r.photoPath]).filter(Boolean).map(p => `${origin}${p}`).join(' ');
     return [
       r.id,
       r.obtainedAt,

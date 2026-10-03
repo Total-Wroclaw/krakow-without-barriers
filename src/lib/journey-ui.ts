@@ -64,16 +64,18 @@ export function strip(option: JourneyOption) {
 }
 
 type T = (key: MessageKey, vars?: Record<string, string | number>) => string;
+type TP = (key: MessageKey, n: number, vars?: Record<string, string | number>) => string;
 
-export function stairLabel(fact: CityFact, t: T) {
+export function stairLabel(fact: CityFact, t: T, tp?: TP) {
   const dir = t(fact.direction === 'down' ? 'fact.dirDown' : fact.direction === 'up' ? 'fact.dirUp' : 'fact.dirUnknown');
-  const steps = fact.tags.step_count ? t('fact.stepsN', { n: fact.tags.step_count }) : null;
+  const count = Number(fact.tags.step_count);
+  const steps = Number.isInteger(count) && count > 0 ? (tp ? tp('fact.stepsN', count) : t('fact.stepsN', { n: count })) : null;
   const rail = handrail(fact.tags);
   return [t('fact.stairsTitle', { dir }), steps, rail === 'yes' ? t('fact.withRail') : rail === 'no' ? t('fact.withoutRail') : null].filter(Boolean).join(', ');
 }
 
-export function factTitle(fact: CityFact, t: T) {
-  if (fact.kind === 'stairs') return stairLabel(fact, t);
+export function factTitle(fact: CityFact, t: T, tp?: TP) {
+  if (fact.kind === 'stairs') return stairLabel(fact, t, tp);
   if (fact.kind === 'bench') {
     const bench = t(fact.tags.backrest === 'yes' ? 'fact.benchBack' : 'fact.bench');
     return fact.restAfterMinutes ? `${t('fact.restAfter', { n: fact.restAfterMinutes })}: ${bench.toLocaleLowerCase()}` : bench;

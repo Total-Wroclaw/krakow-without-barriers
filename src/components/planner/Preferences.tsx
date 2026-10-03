@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { postJson } from '@/lib/client';
+import { errorText, postJson } from '@/lib/client';
 import { distance } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import type { MessageKey } from '@/lib/i18n/messages';
@@ -93,7 +93,7 @@ export function PreferencesBar({ preferences, onOpen }: { preferences: Preferenc
 }
 
 const optionClass =
-  'h-auto min-h-12 justify-start gap-2 rounded-lg! border border-border bg-card px-3 py-2.5 text-left text-sm font-medium data-[state=on]:border-primary data-[state=on]:bg-accent data-[state=on]:text-accent-foreground';
+  'h-auto min-h-12 justify-start gap-2 whitespace-normal rounded-lg! border border-border bg-card px-3 py-2.5 text-left text-sm font-medium data-[state=on]:border-primary data-[state=on]:bg-accent data-[state=on]:text-accent-foreground';
 
 export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: {
   open: boolean;
@@ -118,7 +118,7 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
       onChange(preferencesSchema.parse(data.result.preferences));
       setNote(data.result.note || t('prefs.aiDone'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('prefs.aiFailed'));
+      toast.error(errorText(e, t('prefs.aiFailed')));
     } finally {
       setBusy(false);
     }

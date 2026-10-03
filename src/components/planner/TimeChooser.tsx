@@ -46,6 +46,9 @@ export function TimeChooser({ value, onChange }: { value: When; onChange: (w: Wh
             <Label htmlFor="trip-time">{t('time.hour')}</Label>
             <Input id="trip-time" type="time" value={time} onChange={e => setTime(e.target.value)} className="h-11 text-base" />
           </div>
+          {day === 'today' && /^\d\d:\d\d$/.test(time) && time < now.time ? (
+            <p className="text-sm font-medium text-barrier" role="status">{t('time.past')}</p>
+          ) : null}
           <Button
             className="h-11"
             disabled={!/^\d\d:\d\d$/.test(time)}

@@ -3,6 +3,7 @@ import { draftPhoto, draftPreferences } from '@/lib/ai';
 import { locales } from '@/lib/i18n/locales';
 import { preferencesSchema } from '@/lib/schemas';
 import { boundedJson, guard } from '@/lib/server';
+import { apiMessages } from '@/lib/i18n/request-locale';
 export const runtime = 'nodejs';
 
 const locale = z.enum(locales).default('pl');
@@ -14,13 +15,16 @@ const schema = z.discriminatedUnion('action', [
 export async function POST(request: Request) {
   const block = guard(request, true);
   if (block) return block;
+  let body: unknown;
   try {
-    const input = schema.parse(await boundedJson(request));
+    body = await boundedJson(request);
+    const input = schema.parse(body);
     const result = input.action === 'preferences' ? await draftPreferences(input.text, input.base, input.locale) : await draftPhoto(input.photo, input.locale);
     return Response.json({ result }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ error: 'Sprawdź treść formularza.' }, { status: 400 });
+    const m = apiMessages(request, body).ai;
+    if (error instanceof z.ZodError || error instanceof SyntaxError) return Response.json({ error: m.badRequest }, { status: 400 });
     // No provider exception details or user inputs enter logs/responses.
-    return Response.json({ error: 'AI nie jest teraz dostępne. Spróbuj ponownie albo ustaw potrzeby ręcznie.' }, { status: 503 });
+    return Response.json({ error: m.unavailable }, { status: 503 });
   }
 }

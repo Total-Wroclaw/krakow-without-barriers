@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <I18nProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </I18nProvider>
-        <Toaster position="top-center" theme="light" richColors closeButton />
+        <Toaster position="top-center" theme="light" closeButton />
       </body>
     </html>
   );

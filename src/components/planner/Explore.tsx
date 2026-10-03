@@ -73,16 +73,18 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
   const [category, setCategory] = useState<ObjectCategory | 'all'>('museum');
   const [query, setQuery] = useState('');
   const [withData, setWithData] = useState(true);
-  type State = { loading: boolean; more: boolean; error: string; objects: PlaceObjectSummary[]; total: number; next: number | null };
-  const [state, setState] = useState<State>({ loading: true, more: false, error: '', objects: [], total: 0, next: null });
+  type State = { loading: boolean; more: boolean; moreFailed: boolean; error: string; objects: PlaceObjectSummary[]; total: number; next: number | null };
+  const [state, setState] = useState<State>({ loading: true, more: false, moreFailed: false, error: '', objects: [], total: 0, next: null });
   const sentinel = useRef<HTMLDivElement>(null);
   const origin = useRef(center);
 
   const params = useCallback(
     (offset: number) => {
       const p = new URLSearchParams({ locale, lat: String(origin.current.lat), lon: String(origin.current.lon), limit: '30', offset: String(offset) });
-      if (category !== 'all') p.set('category', category);
-      if (query.trim().length >= 2) p.set('q', query.trim());
+      // A typed search looks across every category; the chips filter browsing.
+      const searching = query.trim().length >= 2;
+      if (category !== 'all' && !searching) p.set('category', category);
+      if (searching) p.set('q', query.trim());
       if (withData) p.set('withData', '1');
       return p;
     },
@@ -99,11 +101,11 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
         const res = await fetch(`/api/objects?${params(0)}`, { signal: controller.signal });
         const data = (await res.json()) as ObjectPage & { error?: string };
         if (!res.ok) throw new Error(data.error);
-        setState({ loading: false, more: false, error: '', objects: data.objects, total: data.total ?? data.objects.length, next: data.nextOffset ?? null });
+        setState({ loading: false, more: false, moreFailed: false, error: '', objects: data.objects, total: data.total ?? data.objects.length, next: data.nextOffset ?? null });
         onResults(data.objects);
       } catch {
         if (!controller.signal.aborted) {
-          setState({ loading: false, more: false, error: t('explore.failed'), objects: [], total: 0, next: null });
+          setState({ loading: false, more: false, moreFailed: false, error: t('explore.failed'), objects: [], total: 0, next: null });
           onResults([]);
         }
       }
@@ -116,22 +118,21 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
   }, [params]);
 
   const loadMore = useCallback(async () => {
-    if (state.loading || state.more || state.next === null) return;
+    if (state.loading || state.more || state.next === null || state.moreFailed) return;
     setState(s => ({ ...s, more: true }));
     try {
       const res = await fetch(`/api/objects?${params(state.next)}`);
       const data = (await res.json()) as ObjectPage;
       if (!res.ok) throw new Error();
-      setState(s => {
-        const seen = new Set(s.objects.map(o => o.id));
-        const objects = [...s.objects, ...data.objects.filter(o => !seen.has(o.id))];
-        onResults(objects);
-        return { ...s, more: false, objects, total: data.total ?? s.total, next: data.nextOffset ?? null };
-      });
+      const seen = new Set(state.objects.map(o => o.id));
+      const objects = [...state.objects, ...data.objects.filter(o => !seen.has(o.id))];
+      setState(s => ({ ...s, more: false, objects, total: data.total ?? s.total, next: data.nextOffset ?? null }));
+      onResults(objects);
     } catch {
-      setState(s => ({ ...s, more: false, next: null }));
+      // Keep the cursor so "try again" continues where it stopped.
+      setState(s => ({ ...s, more: false, moreFailed: true }));
     }
-  }, [state.loading, state.more, state.next, params, onResults]);
+  }, [state.loading, state.more, state.next, state.moreFailed, state.objects, params, onResults]);
 
   // Infinite scroll: load the next page when the end of the list comes into view.
   useEffect(() => {
@@ -241,6 +242,13 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
             <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
             {t('explore.loadingMore')}
           </p>
+        ) : state.moreFailed ? (
+          <div className="flex items-center gap-3 px-1">
+            <p className="text-sm font-medium">{t('explore.failed')}</p>
+            <Button variant="outline" className="h-10" onClick={() => setState(s => ({ ...s, moreFailed: false }))}>
+              {t('results.retry')}
+            </Button>
+          </div>
         ) : !state.loading && state.objects.length && state.next === null ? (
           <p className="px-1 text-sm text-muted-foreground">{t('explore.end')}</p>
         ) : null}

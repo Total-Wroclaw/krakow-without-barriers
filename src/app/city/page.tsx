@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import CityDashboard from '@/components/city/CityDashboard';
 import CityLogin from '@/components/city/CityLogin';
 import { CITY_COOKIE, cityEnabled, verifySession } from '@/lib/city-auth';
-import { listAllReports } from '@/lib/reports-server';
+import { cityReport, listAllReports } from '@/lib/reports-server';
 
 export const metadata: Metadata = {
   title: 'Panel zgłoszeń — Urząd Miasta Krakowa · Każdy Krok',
@@ -23,5 +23,5 @@ export default async function CityPage() {
   }
   const token = (await cookies()).get(CITY_COOKIE)?.value;
   if (!verifySession(token)) return <CityLogin />;
-  return <CityDashboard initialReports={listAllReports()} />;
+  return <CityDashboard initialReports={listAllReports().map(cityReport)} />;
 }

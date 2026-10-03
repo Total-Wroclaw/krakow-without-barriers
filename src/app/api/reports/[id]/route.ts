@@ -1,26 +1,44 @@
 import { z } from 'zod';
-import { deleteReport, publicReport, updateReport } from '@/lib/reports-server';
+import { apiMessages } from '@/lib/i18n/request-locale';
+import { authorCanDelete, checkEditToken, deleteReport, publicReport, REPORT_TOKEN_HEADER, updateReport } from '@/lib/reports-server';
 import { boundedJson, guard } from '@/lib/server';
 export const runtime = 'nodejs';
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+type Context = { params: Promise<{ id: string }> };
+
+/** Author only (header x-report-token). 404 unknown id, 403 wrong/missing token, 409 once the city has changed the status. */
+export async function DELETE(request: Request, { params }: Context) {
   const block = guard(request);
   if (block) return block;
   const { id } = await params;
+  const m = apiMessages(request).reports;
+  const access = checkEditToken(id, request.headers.get(REPORT_TOKEN_HEADER));
+  if (access === 'not_found') return Response.json({ error: m.notFound }, { status: 404 });
+  if (access === 'forbidden') return Response.json({ error: m.forbidden }, { status: 403 });
+  if (!authorCanDelete(id)) return Response.json({ error: m.deleteLocked, code: 'city_handling' }, { status: 409 });
   deleteReport(id);
   return Response.json({ deleted: true });
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+/** Author only (header x-report-token). { observation, locale? } → { report } */
+export async function PATCH(request: Request, { params }: Context) {
   const block = guard(request);
   if (block) return block;
   const { id } = await params;
+  let body: unknown;
   try {
-    const body = z.object({ observation: z.unknown() }).parse(await boundedJson(request));
-    const report = updateReport(id, body.observation);
-    if (!report) return Response.json({ error: 'Nie znaleziono zgłoszenia.' }, { status: 404 });
+    body = await boundedJson(request);
+  } catch {}
+  const m = apiMessages(request, body).reports;
+  const access = checkEditToken(id, request.headers.get(REPORT_TOKEN_HEADER));
+  if (access === 'not_found') return Response.json({ error: m.notFound }, { status: 404 });
+  if (access === 'forbidden') return Response.json({ error: m.forbidden }, { status: 403 });
+  try {
+    const input = z.object({ observation: z.unknown(), locale: z.string().optional() }).parse(body);
+    const report = updateReport(id, input.observation);
+    if (!report) return Response.json({ error: m.notFound }, { status: 404 });
     return Response.json({ report: publicReport(report) });
   } catch {
-    return Response.json({ error: 'Sprawdź opis zgłoszenia.' }, { status: 400 });
+    return Response.json({ error: m.observationInvalid }, { status: 400 });
   }
 }

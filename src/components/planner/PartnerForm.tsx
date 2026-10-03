@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { CityPlace } from '@/lib/city-types';
-import { postJson } from '@/lib/client';
+import { errorText, postJson } from '@/lib/client';
 import type { FeatureKey, FeatureValue, ObjectCategory, PlaceObject } from '@/lib/explore-types';
 import { useI18n } from '@/lib/i18n/client';
 import { categories } from './Explore';
@@ -32,7 +32,7 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
   const [website, setWebsite] = useState('');
   const [email, setEmail] = useState('');
   const [description, setDescription] = useState('');
-  const [plan, setPlan] = useState<'free' | 'partner'>('partner');
+  const [plan, setPlan] = useState<'free' | 'partner'>('free');
   const [rows, setRows] = useState<Record<string, Row>>({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ lat: number; lon: number; name: string } | null>(null);
@@ -58,7 +58,7 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
       const features = Object.entries(rows)
         .filter(([, r]) => r.value !== 'none')
         .map(([key, r]) => ({ key, value: r.value, ...(r.detail.trim() ? { detail: r.detail.trim() } : {}) }));
-      await postJson('/api/partners/objects', {
+      await postJson(`/api/partners/objects?locale=${locale}`, {
         name: name.trim(),
         category,
         lat: place.lat,
@@ -71,12 +71,11 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
         promote: plan === 'partner',
         plan,
         ...(existing ? { existingObjectId: existing.id } : {}),
-        locale,
       });
       toast.success(t('partner.sent'));
       setDone({ lat: place.lat, lon: place.lon, name: name.trim() });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('partner.failed'));
+      toast.error(errorText(err, t('partner.failed')));
     } finally {
       setBusy(false);
     }

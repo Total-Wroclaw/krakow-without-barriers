@@ -70,7 +70,7 @@ type Props = {
 };
 
 export default function MapView({ options, selectedId, from, to, reports, objects = [], selectedObjectId, onSelect, onFact, onReport, onObject, onMove }: Props) {
-  const { t } = useI18n();
+  const { t, tp } = useI18n();
   const reportTitle = useReportTitle();
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
@@ -80,6 +80,7 @@ export default function MapView({ options, selectedId, from, to, reports, object
   const latest = useRef({ onSelect, onFact, onReport, onObject, onMove });
   latest.current = { onSelect, onFact, onReport, onObject, onMove };
   const render = useRef<() => void>(() => {});
+  const lastView = useRef('');
 
   useEffect(() => {
     if (!container.current) return;
@@ -89,6 +90,19 @@ export default function MapView({ options, selectedId, from, to, reports, object
       center: KRAKOW,
       zoom: 12.3,
       attributionControl: { compact: true },
+      // Control labels in the interface language; the canvas carries the single map landmark.
+      locale: {
+        'NavigationControl.ZoomIn': t('map.zoomIn'),
+        'NavigationControl.ZoomOut': t('map.zoomOut'),
+        'GeolocateControl.FindMyLocation': t('map.locate'),
+        'GeolocateControl.LocationNotAvailable': t('search.geoFailed'),
+        'AttributionControl.ToggleAttribution': t('map.attribution'),
+        'Map.Title': t('map.region'),
+      },
+    });
+    // Start with the attribution collapsed on narrow screens; it stays one tap away.
+    instance.once('load', () => {
+      if (window.innerWidth < 640) container.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
     });
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     instance.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true } }), 'top-right');
@@ -170,7 +184,7 @@ export default function MapView({ options, selectedId, from, to, reports, object
         for (const fact of allFacts(selected)) {
           const icon = fact.kind === 'toilet' ? icons.toilet : fact.kind === 'bench' ? icons.bench : fact.kind === 'entrance' ? icons.entrance : fact.kind === 'kerb' ? icons.kerb : fact.kind === 'surface' ? icons.surface : icons[fact.direction];
           const bg = fact.kind === 'toilet' ? '#2443b0' : fact.kind === 'bench' ? '#0f766e' : fact.kind === 'entrance' ? '#2443b0' : '#a1460a';
-          const el = markerElement(factTitle(fact, t), icon, bg, fact.kind === 'stairs' ? 34 : 30);
+          const el = markerElement(factTitle(fact, t, tp), icon, bg, fact.kind === 'stairs' ? 34 : 30);
           // Stairs always show; benches and entrances only once zoomed in, to avoid clutter.
           if (fact.kind !== 'stairs' && fact.kind !== 'kerb' && fact.kind !== 'toilet' && !fact.restAfterMinutes) el.classList.add('map-minor');
           el.addEventListener('click', () => latest.current.onFact(fact));
@@ -200,6 +214,11 @@ export default function MapView({ options, selectedId, from, to, reports, object
       if (from) add(endpointElement('start', t('map.start', { name: from.name })), from.lat, from.lon);
       if (to) add(endpointElement('end', t('map.goal', { name: to.name })), to.lat, to.lon);
 
+      // Only move the camera when what is shown changes — not on a base-map or language switch,
+      // so a user's own zoom is kept.
+      const viewKey = JSON.stringify([selectedId, from?.lat, from?.lon, to?.lat, to?.lon, selectedObjectId, objects.length, objects[0]?.id, selected ? 1 : 0]);
+      if (viewKey === lastView.current) return;
+      lastView.current = viewKey;
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const chosenObject = objects.find(o => o.id === selectedObjectId);
       if (chosenObject) {
@@ -222,11 +241,11 @@ export default function MapView({ options, selectedId, from, to, reports, object
       }
     };
     render.current();
-  }, [options, selectedId, from, to, reports, objects, selectedObjectId, t, reportTitle, base]);
+  }, [options, selectedId, from, to, reports, objects, selectedObjectId, t, tp, reportTitle, base]);
 
   return (
     <div className="relative size-full">
-      <div ref={container} className="size-full" role="region" aria-label={t('map.region')} />
+      <div ref={container} className="size-full" />
       <ToggleGroup
         type="single"
         value={base}

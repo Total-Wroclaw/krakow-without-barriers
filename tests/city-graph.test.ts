@@ -119,10 +119,11 @@ test('cross-city journey: up to 4 timed transit options by departure, very long 
   for (const option of transit) assertTransitShape(option, 14 * 3600);
 });
 
-test('short trip lists walking first; transfer journeys include walking transfers between platforms', { skip: !hasTransit }, () => {
+test('options that fit today come first; transfer journeys include walking transfers between platforms', { skip: !hasTransit }, () => {
   const short = planJourney({ from: rynek, to: wawel, preferences: defaultPreferences, date: '2026-10-03', time: '14:00' });
-  assert.equal(short.options[0].kind, 'walk');
-  assert.equal(short.options[0].label, walkLabels.preferred);
+  const firstUnfit = short.options.findIndex(o => !o.fits);
+  if (firstUnfit >= 0) assert.ok(short.options.slice(firstUnfit).every(o => !o.fits), 'no fitting option after a non-fitting one');
+  assert.ok(short.options.some(o => o.kind === 'walk' && o.label === walkLabels.preferred), 'the barrier-aware walk is still offered');
 
   const result = planJourney({ from: place('Plac Nowy', 50.05165, 19.94471), to: place('Bronowice Małe', 50.08143, 19.88104), preferences: defaultPreferences, date: '2026-10-03', time: '14:00' });
   const transit = result.options.filter(o => o.kind === 'transit');

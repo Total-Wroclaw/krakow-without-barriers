@@ -56,11 +56,12 @@ test('blocked report saves without a photo, no AI, comment as conservative obser
 });
 
 test('photo report keeps the first photo as photoPath; at most 4 photos per report', async () => {
-  const r = await reports.saveAutoReport(reports.autoReportSchema.parse({ photo, location, locationSource: 'gps', comment: 'Brak podjazdu' }));
+  const { token, hash } = reports.newEditToken();
+  const r = await reports.saveAutoReport(reports.autoReportSchema.parse({ photo, location, locationSource: 'gps', comment: 'Brak podjazdu' }), hash);
   assert.equal(r.analysis, 'failed');
   assert.equal(r.photoPath, `/api/reports/${r.id}/photo`);
   assert.equal(r.photos?.length, 1);
-  assert.ok(reports.firstReportPhoto(r.id));
+  assert.ok(reports.reportPhoto(r.id, 'main'));
   for (let i = 0; i < 3; i++) {
     const added = await reports.addReportPhoto(r.id, { photo, locale: 'pl' });
     assert.ok(!('error' in added));
@@ -69,7 +70,7 @@ test('photo report keeps the first photo as photoPath; at most 4 photos per repo
     assert.equal(added.report.photoPath, r.photoPath);
   }
   assert.deepEqual(await reports.addReportPhoto(r.id, { photo, locale: 'pl' }), { error: 'limit' });
-  const response = await photosRoute.POST(json(`/api/reports/${r.id}/photos`, 'POST', { photo }), ctx({ id: r.id }));
+  const response = await photosRoute.POST(json(`/api/reports/${r.id}/photos`, 'POST', { photo }, { 'x-report-token': token }), ctx({ id: r.id }));
   assert.equal(response.status, 409);
   assert.deepEqual(await reports.addReportPhoto('missing', { photo, locale: 'pl' }), { error: 'not_found' });
   // Photos are scoped to their report.
@@ -78,7 +79,7 @@ test('photo report keeps the first photo as photoPath; at most 4 photos per repo
   const first = await reports.addReportPhoto(other.id, { photo, locale: 'pl' });
   assert.ok(!('error' in first));
   assert.equal(first.report.photoPath, first.photo.path, 'text-only report gets its first added photo as photoPath');
-  assert.ok(reports.firstReportPhoto(other.id));
+  assert.ok(reports.reportPhoto(other.id, first.photo.id));
   assert.equal(reports.reportPhoto(r.id, first.photo.id), null);
   reports.deleteReport(other.id);
   assert.equal(reports.reportPhoto(other.id, first.photo.id), null);

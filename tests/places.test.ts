@@ -52,3 +52,35 @@ test('suggestions fit the place schema and are fast', () => {
   for (const q of queries) for (const p of searchPlaces(q, { lat: 50.06, lon: 19.94 }, 8)) placeSchema.parse(p);
   assert.ok((performance.now() - start) / queries.length < 20);
 });
+
+test('Kraków first: "rynek" ranks Rynek Główny and Kraków squares above other towns', () => {
+  const results = searchPlaces('rynek');
+  assert.equal(results[0].name, 'Rynek Główny');
+  const firstOutside = results.findIndex(p => /Zabierzów|Liszki|Mogilany/.test(p.detail ?? ''));
+  const krakowSquares = results.filter(p => /Stare Miasto|Dębniki|Podgórze|Kleparz/.test(p.detail ?? '')).length;
+  assert.ok(firstOutside === -1 || firstOutside >= krakowSquares, results.map(p => `${p.name} | ${p.detail}`).join('\n'));
+  // Naming another town turns the preference off.
+  assert.match(searchPlaces('rynek zabierzów')[0].detail ?? '', /Zabierzów/);
+  assert.match(searchPlaces('długa 10')[0].detail ?? '', /Kraków/);
+  assert.match(searchPlaces('dluga 10 wieliczka')[0].detail ?? '', /Wieliczka/);
+});
+
+test('districts and quarters are suggested by name', () => {
+  const top = searchPlaces('Kazimierz')[0];
+  assert.equal(top.name, 'Kazimierz');
+  assert.equal(top.detail, 'Część Krakowa');
+  assert.ok(Math.abs(top.lat - 50.052) < 0.01 && Math.abs(top.lon - 19.945) < 0.01);
+  assert.equal(searchPlaces('nowa huta')[0].name, 'Nowa Huta');
+});
+
+test('street-type abbreviations: "os." finds Osiedle …, prefixes are stripped mid-query', () => {
+  const estate = searchPlaces('os. centrum a')[0];
+  assert.equal(estate.name, 'Osiedle Centrum A');
+  assert.match(estate.detail ?? '', /Nowa Huta/);
+  assert.equal(searchPlaces('os centrum a 1')[0].name, 'Osiedle Centrum A 1');
+  assert.equal(searchPlaces('osiedle centrum a 1')[0].name, 'Osiedle Centrum A 1');
+  assert.equal(searchPlaces('dluga ul. 10')[0].name, 'Długa 10');
+  assert.equal(searchPlaces('al. mickiewicza')[0].name, 'Aleja Adama Mickiewicza');
+  assert.equal(searchPlaces('pl. nowy')[0].name, 'Plac Nowy');
+  assert.equal(searchPlaces('kraków, ul. Floriańska 5')[0].name, 'Floriańska 5');
+});

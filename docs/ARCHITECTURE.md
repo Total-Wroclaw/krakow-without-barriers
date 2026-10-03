@@ -103,6 +103,8 @@ Warianty samochodowe/taksówki są na początku listy, za nimi jak dotąd piesze
 
 `places.ts` ładuje indeks raz (~230 ms), dalej zapytanie trwa < 4 ms: prefiksy słów bez wielkości liter i polskich znaków, numery domów, ranking z bliskością. Przystanki dochodzą z lokalnego rozkładu. Brak zapytań do zewnętrznego geokodera podczas pisania. Odwrotne geokodowanie („Moja lokalizacja”): adres ≤ 80 m, inaczej miejsce/ulica ≤ 150 m.
 
+Najpierw Kraków: indeks nie ma granicy administracyjnej, więc przynależność punktu do miasta ustalamy z adresów — kody 30-/31- to Kraków, inny kod albo `addr:city` to poza miastem; o punkcie decyduje większość sklasyfikowanych adresów w siatce ~1 km (3×3 komórki), a bez adresów odległość ≤ 7 km od Rynku. Wyniki w Krakowie dostają premię, chyba że zapytanie oprócz nazwy wymienia inną miejscowość („rynek zabierzów”, „długa 10 wieliczka” — wtedy premię dostaje adres w tej miejscowości). Krótka lista znanych nazw (Rynek Główny, Wawel, Kazimierz…) ma dodatkową premię. Nazwy części miasta i miejscowości (OSM `place=suburb|quarter|neighbourhood|village…`) są podpowiadane jako miejsca („Część Krakowa” / „Okolice Krakowa”). Skróty „ul.” (pomijany), „os.”, „al.”, „pl.” (rozwijane do „osiedle”, „aleja”, „plac” i dopasowywane miękko) działają w dowolnym miejscu zapytania; „os. centrum a” bez numeru podpowiada samo osiedle (środek jego adresów).
+
 ## Odkrywaj: obiekty, źródła, partnerzy
 
 ```
@@ -141,14 +143,18 @@ Dwa rodzaje zgłoszeń (`Report.type`): `barrier` — utrudnienie na trasie (dom
 
 | Metoda i ścieżka | Treść | Wynik |
 | --- | --- | --- |
-| `POST /api/reports/auto` | `{ photo?, location, locationSource: 'gps'\|'map'\|'fact', factId?, locale?, type?: 'barrier'\|'blocked', comment? (≤ 800), destination? (≤ 200) }` | 201 `{ report }` |
-| `POST /api/reports/[id]/photos` | `{ photo, locale? }` — kolejne zdjęcie, maks. 4 na zgłoszenie (z pierwszym) | 201 `{ report, photo }`, 409 po limicie, 404 |
-| `GET /api/reports/[id]/photo` | pierwsze zdjęcie (zgodne z `photoPath`) | JPEG |
-| `GET /api/reports/[id]/photos/[photoId]` | dowolne zdjęcie (`main` = pierwsze zapisane ze zgłoszeniem) | JPEG |
-| `PATCH` / `DELETE /api/reports/[id]` | poprawa opisu / usunięcie (razem ze zdjęciami) | |
+| `POST /api/reports/auto` | `{ photo?, location, locationSource: 'gps'\|'map'\|'fact', factId?, locale?, type?: 'barrier'\|'blocked', comment? (≤ 800), destination? (≤ 200) }` | 201 `{ report, editToken }` |
+| `POST /api/reports/[id]/photos` | nagłówek `x-report-token`; `{ photo, locale? }` — kolejne zdjęcie, maks. 4 na zgłoszenie (z pierwszym); także po zmianie statusu przez miasto | 201 `{ report, photo }`, 409 po limicie, 403, 404 |
+| `GET /api/reports/[id]/photo` | pierwsze **publiczne** zdjęcie (zgodne z publicznym `photoPath`) | JPEG, 404 gdy brak |
+| `GET /api/reports/[id]/photos/[photoId]` | zdjęcie, tylko jeśli publiczne (`main` = pierwsze zapisane ze zgłoszeniem) | JPEG, 404 dla ukrytych |
+| `PATCH` / `DELETE /api/reports/[id]` | nagłówek `x-report-token`; poprawa opisu `{ observation, locale? }` / usunięcie (razem ze zdjęciami) | 403 zły/brak tokenu, 404, DELETE 409 gdy miasto zmieniło status |
 | `GET /api/reports` | ostatnie 100 zgłoszeń z `cityStatus` i `cityNote`, bez `cityHistory` | |
 
-Zdjęcie jest wymagane, chyba że `type: 'blocked'` albo jest komentarz (≥ 3 znaki). Bez zdjęcia nie ma AI: obserwacja to `kind: 'other'`, `description` = komentarz (albo „Nie udało się dotrzeć do celu: …”), `analysis: 'comment'`. Każde zdjęcie przechodzi przez `photoBytes()` (dekodowanie, zmniejszenie, bez EXIF/GPS) i jest opisywane przez AI osobno (`photos[].analysis`). Opis zgłoszenia zmienia się tylko, gdy nie pochodził ze zdjęcia (`failed`, `comment`) — wtedy bierze pierwszy opis AI; opis od AI lub poprawiony przez autora zostaje. Komentarz i cel podróży zostają w osobnych polach. ID zgłoszenia (UUID) działa jak klucz autora: kto je zna, może dodać zdjęcie, poprawić lub usunąć — tak jak dotąd.
+Zdjęcie jest wymagane, chyba że `type: 'blocked'` albo jest komentarz (≥ 3 znaki). Bez zdjęcia nie ma AI: obserwacja to `kind: 'other'`, `description` = komentarz (albo „Nie udało się dotrzeć do celu: …”), `analysis: 'comment'`. Każde zdjęcie przechodzi przez `photoBytes()` (dekodowanie, zmniejszenie, bez EXIF/GPS) i jest opisywane przez AI osobno (`photos[].analysis`). Opis zgłoszenia zmienia się tylko, gdy nie pochodził ze zdjęcia (`failed`, `comment`) — wtedy bierze pierwszy opis AI; opis od AI lub poprawiony przez autora zostaje. Komentarz i cel podróży zostają w osobnych polach. **Token autora:** utworzenie zgłoszenia zwraca jednorazowo `editToken` (32 losowe bajty, base64url). Klient trzyma go w localStorage pod id zgłoszenia i wysyła jako nagłówek `x-report-token` przy `PATCH`/`DELETE /api/reports/[id]` i `POST /api/reports/[id]/photos`. Serwer zapisuje tylko SHA-256 tokenu w kolumnie `reports.edit_hash` (poza JSON-em `body`, więc nigdy nie trafia do API) i porównuje w stałym czasie. Nieznane id → 404, brak/zły token → 403. Gdy miasto zmieni `cityStatus` z `new`, autor nie może już usunąć zgłoszenia (409), ale może dodawać zdjęcia. Zgłoszenia sprzed tokenów nie mają skrótu — zmienić je może tylko urząd.
+
+**Zdjęcia a prywatność:** AI przy opisie zwraca też `people: 'none'|'present'|'unclear'` (osoby, twarze, tablice rejestracyjne). Publicznie serwowane jest tylko zdjęcie z `visibility: 'public'`, czyli `people: 'none'` albo zatwierdzone przez urząd. Gdy AI nie zadziałało, widać ludzi lub nie da się tego wykluczyć — zdjęcie jest ukryte; tak samo zdjęcia sprzed tej zmiany. W publicznym JSON-ie ukryte zdjęcie to `{ id, createdAt, hidden: true, reason: 'privacy' }` bez ścieżki i opisu AI, a `photoPath` wskazuje pierwsze publiczne zdjęcie albo jest `null`. Panel miasta widzi wszystkie zdjęcia przez `GET /api/city/reports/[id]/photos/[photoId]` (ciasteczko) i decyduje `PATCH …/photos/[photoId] { visibility: 'public'|'hidden' }`; decyzja trafia do `cityHistory` (`photo: { id, visibility }`).
+
+**Błędy API** są w języku żądania: `locale` z treści JSON, potem `?locale=`, potem `Accept-Language`, domyślnie polski (`src/lib/i18n/request-locale.ts`, teksty w `server-messages.ts` → `api`). Formularz partnera zwraca 400 `{ error, fields: [{ path, message }] }`.
 
 Magazyn: `reports(id, body JSON, photo BLOB)` — pierwsze zdjęcie jak wcześniej; `report_photos(id, report_id, photo BLOB, created_at, analysis JSON NULL)` — kolejne. Lista `photos: {id, path, createdAt, analysis?}[]` jest w `body`; dodanie zdjęcia sprawdza limit ponownie po analizie AI, synchronicznie tuż przed zapisem.
 
@@ -156,9 +162,10 @@ Magazyn: `reports(id, body JSON, photo BLOB)` — pierwsze zdjęcie jak wcześni
 
 | Metoda i ścieżka | Treść |
 | --- | --- |
-| `POST /api/city/login` | `{ password }` → 204 + ciasteczko; 5 nieudanych prób na klienta i 50 łącznie na 15 min, potem 429 |
+| `POST /api/city/login` | `{ password }` → 204 + ciasteczko; 5 nieudanych prób na klienta na 15 min, potem 429; przy wielu nieudanych próbach łącznie (> 20 na 15 min) każda odpowiedź jest opóźniana o 250 ms za każdą kolejną, maks. 3 s — bez globalnej blokady, której ktoś mógłby użyć do zablokowania urzędników |
 | `POST /api/city/logout` | usuwa ciasteczko |
-| `GET /api/city/reports?status=&type=&from=&to=&q=` | `{ reports }` z `cityHistory`, do 5000 najnowszych |
+| `GET /api/city/reports?status=&type=&from=&to=&q=` | `{ reports }` z `cityHistory`, do 5000 najnowszych; ścieżki zdjęć prowadzą do trasy miasta; `from` > `to` → 400 |
+| `GET` / `PATCH /api/city/reports/[id]/photos/[photoId]` | zdjęcie (także ukryte) / `{ visibility: 'public'\|'hidden' }` → `{ report }` |
 | `PATCH /api/city/reports/[id]` | `{ status?: 'new'\|'in_review'\|'forwarded'\|'resolved'\|'rejected', note? (≤ 1000, pusta = usuń) }` |
 | `GET /api/city/reports.csv?…` | CSV (UTF-8 z BOM, RFC 4180, przecinek); te same filtry |
 
@@ -179,7 +186,12 @@ Next.js 16 (App Router), React 19, shadcn/ui (Radix) + Tailwind 4. MapLibre GL 6
 
 ## Trwałość, bezpieczeństwo, prywatność
 
-SQLite WAL, zapytania parametryzowane; zgłoszenie i pierwsze zdjęcie w jednym rekordzie, kolejne zdjęcia w `report_photos`. Panel miasta za hasłem i podpisanym ciasteczkiem (wyżej). Klucz API tylko w pamięci serwera. Walidacja Zod każdego żądania, zdjęcia JPEG/PNG/WebP faktycznie dekodowane, limity wielkości, kontrola Origin/Host przy zapisie, prosty limit zapytań AI w pamięci procesu. Preferencje i ostatnie miejsca są tylko w localStorage. GPS: lokalizacja zgłoszenia lub punkt startu, bez śladu.
+SQLite WAL, zapytania parametryzowane; zgłoszenie i pierwsze zdjęcie w jednym rekordzie, kolejne zdjęcia w `report_photos`. Panel miasta za hasłem i podpisanym ciasteczkiem (wyżej). Klucz API tylko w pamięci serwera. Walidacja Zod każdego żądania, zdjęcia JPEG/PNG/WebP faktycznie dekodowane, limity wielkości, kontrola Origin/Host przy zapisie, prosty limit zapytań AI w pamięci procesu.
+
+**Bezpieczeństwo:**
+- `guard()` (`src/lib/server.ts`): nagłówek `Origin` musi zgadzać się z `Host`. Zapis (nie GET/HEAD/OPTIONS) bez `Origin` z `Sec-Fetch-Site: cross-site|same-site` → 403. W produkcji zapis bez `Origin` wymaga `Referer` z tym samym hostem albo `Sec-Fetch-Site: same-origin` — przeglądarki zawsze wysyłają `Origin` przy POST/PATCH/DELETE; skrypty i narzędzia muszą wysłać `Origin: https://<host>`. Poza produkcją (dev, testy) żądania bez tych nagłówków przechodzą.
+- Adres klienta do limitów (`src/lib/client-ip.ts`): `CF-Connecting-IP`, jeśli jest (ustawia go Cloudflare), inaczej **ostatni** wpis `X-Forwarded-For` — ten dopisuje nasz Traefik, wcześniejsze może podać klient. Założenie: port Node nie jest publiczny, ruch idzie tylko przez proxy. Bez nagłówków: wspólny klucz `local`.
+- Nagłówki (`next.config.ts`): `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=()`; wszędzie poza `/embed` `X-Frame-Options: SAMEORIGIN` i CSP `frame-ancestors 'self'`; `/embed` ma `frame-ancestors *` (widżet partnera; lokalizację przyznaje `<iframe allow="geolocation">`). Brak CSP dla skryptów celowo: MapLibre używa workerów, kafelki z OpenFreeMap i z naszego proxy. Preferencje i ostatnie miejsca są tylko w localStorage. GPS: lokalizacja zgłoszenia lub punkt startu, bez śladu.
 
 ## Dalej
 

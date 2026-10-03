@@ -63,7 +63,7 @@ export function FactSheet({ fact, reports, onClose, onReport, onOpenReport }: {
   onReport: (fact: CityFact) => void;
   onOpenReport: (report: Report) => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t, tp, locale } = useI18n();
   const reportTitle = useReportTitle();
   if (!fact) return null;
   const rail = handrail(fact.tags);
@@ -87,7 +87,7 @@ export function FactSheet({ fact, reports, onClose, onReport, onOpenReport }: {
   const conflicts = conflictingReports(fact, reports);
 
   return (
-    <Panel open onOpenChange={open => !open && onClose()} title={factTitle(fact, t)}>
+    <Panel open onOpenChange={open => !open && onClose()} title={factTitle(fact, t, tp)}>
       <div className="flex flex-col gap-5 pt-1">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           {rows.map(([term, value]) => (

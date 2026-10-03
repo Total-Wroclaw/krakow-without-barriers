@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Command as CommandPrimitive } from 'cmdk';
 import { Building2, Clock3, LoaderCircle, LocateFixed, MapPin, Route, TramFront, X } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
@@ -7,6 +7,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { pointSchema, type CityPlace } from '@/lib/city-types';
 import type { PlaceSuggestion } from '@/lib/journey-types';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { errorText } from '@/lib/client';
 import { useI18n } from '@/lib/i18n/client';
 import type { MessageKey } from '@/lib/i18n/messages';
 import { cn } from '@/lib/utils';
@@ -73,6 +74,8 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const hintId = useId();
 
   useEffect(() => setQuery(value?.name ?? ''), [value]);
   useEffect(() => onActiveChange?.(open), [open, onActiveChange]);
@@ -86,6 +89,8 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
   });
 
   const typed = query.trim();
+  // Text typed but never picked from the list does not count as a place; say so instead of silently showing nothing.
+  const unresolved = touched && !open && typed.length > 0 && typed !== value?.name;
   const searching = open && typed.length >= 2 && typed !== value?.name;
 
   useEffect(() => {
@@ -130,7 +135,7 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
     try {
       choose(await locateMe(t));
     } catch (e) {
-      onError(e instanceof Error ? e.message : t('search.geoFailed'));
+      onError(errorText(e, t('search.geoFailed')));
     } finally {
       setLocating(false);
     }
@@ -139,8 +144,14 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
   const settled = results.query === typed;
   const list = searching ? results.places : [];
 
+  const hint = unresolved ? (
+    <p id={hintId} className="px-3 pb-1.5 text-sm font-medium text-barrier">
+      {t('search.pickFromList')}
+    </p>
+  ) : null;
+
   const field = (
-    <div className="flex min-h-12 items-center gap-3 rounded-lg px-3 focus-within:bg-accent/60">
+    <div className="flex min-h-12 items-center gap-3 rounded-lg px-3 focus-within:bg-accent/60 focus-within:ring-2 focus-within:ring-ring">
       <span
         aria-hidden="true"
         className={cn(
@@ -164,10 +175,14 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
         }}
         onKeyDown={e => {
           if (e.key === 'Escape') setOpen(false);
+          else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !open) setOpen(true);
         }}
         onBlur={() => {
           if (inline) setTimeout(() => setOpen(false), 150);
+          setTouched(true);
         }}
+        aria-describedby={unresolved ? hintId : undefined}
+        aria-invalid={unresolved || undefined}
         placeholder={placeholder}
         autoComplete="off"
         enterKeyHint="search"
@@ -225,6 +240,7 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
     return (
       <Command label={label} shouldFilter={false} loop className="overflow-visible bg-transparent">
         {field}
+        {hint}
         {open ? (
           // Keep focus in the input while tapping a suggestion.
           <div className="mx-1 mt-1 overflow-hidden rounded-xl border bg-popover shadow-sm" onMouseDown={e => e.preventDefault()}>
@@ -251,6 +267,7 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
           {suggestions}
         </PopoverContent>
       </Popover>
+      {hint}
     </Command>
   );
 }

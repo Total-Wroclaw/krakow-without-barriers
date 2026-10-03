@@ -125,7 +125,7 @@ export function OptionCard({ option, selected, onSelect }: { option: JourneyOpti
           <p className="text-sm text-muted-foreground">{option.label}</p>
         </div>
         <p className="shrink-0 text-right">
-          <span className="block text-xl font-bold tabular-nums">{duration(option.duration, locale)}</span>
+          <span className="block text-xl font-bold tabular-nums">{duration(option.departure !== null && option.arrival !== null ? option.arrival - option.departure : option.duration, locale)}</span>
         </p>
       </div>
 

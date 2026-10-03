@@ -35,6 +35,8 @@ function Tile({ label, value, hint, onClick, pressed }: { label: string; value: 
 
 const plural = new Intl.PluralRules('pl-PL');
 const countLabel = (n: number) => `${n} ${({ one: 'zgłoszenie', few: 'zgłoszenia' } as Record<string, string>)[plural.select(n)] ?? 'zgłoszeń'}`;
+/** After "z" Polish needs the genitive: "z 1 zgłoszenia", "z 3 zgłoszeń". */
+const ofCountLabel = (n: number) => `${n} ${n === 1 ? 'zgłoszenia' : 'zgłoszeń'}`;
 
 function filterQuery(f: CityFilter) {
   const p = new URLSearchParams();
@@ -56,7 +58,8 @@ export default function CityDashboard({ initialReports }: { initialReports: Repo
 
   const stats = useMemo(() => summary(reports, now), [reports, now]);
   const weekAgo = useMemo(() => new Date(now - 7 * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' }), [now]);
-  const visible = useMemo(() => filterReports(reports, filter), [reports, filter]);
+  const badRange = !!filter.from && !!filter.to && filter.from > filter.to;
+  const visible = useMemo(() => (badRange ? [] : filterReports(reports, filter)), [reports, filter, badRange]);
   const open = reports.find(r => r.id === openId) ?? null;
   const filtered = filter.status !== 'all' || filter.type !== 'all' || !!filter.from || !!filter.to || !!filter.q;
   const set = (patch: Partial<CityFilter>) => setFilter(f => ({ ...f, ...patch }));
@@ -99,7 +102,7 @@ export default function CityDashboard({ initialReports }: { initialReports: Repo
               <RefreshCw aria-hidden="true" className={cn(loading && 'animate-spin')} /> Odśwież
             </Button>
             <Button variant="outline" asChild>
-              <a href={`/api/city/reports.csv${query ? `?${query}` : ''}`} download>
+              <a href={`/api/city/reports.csv${query ? `?${query}` : ''}`} download aria-disabled={badRange || undefined} onClick={e => badRange && e.preventDefault()}>
                 <Download aria-hidden="true" /> Eksport CSV{filtered ? ' (filtr)' : ''}
               </a>
             </Button>
@@ -177,8 +180,13 @@ export default function CityDashboard({ initialReports }: { initialReports: Repo
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="f-to">Do dnia</Label>
-                <Input id="f-to" type="date" value={filter.to ?? ''} min={filter.from} onChange={e => set({ to: e.target.value || undefined })} />
+                <Input id="f-to" type="date" value={filter.to ?? ''} min={filter.from} aria-invalid={badRange} aria-describedby={badRange ? 'f-range-error' : undefined} onChange={e => set({ to: e.target.value || undefined })} />
               </div>
+              {badRange && (
+                <p id="f-range-error" role="alert" className="text-sm text-destructive sm:col-span-full">
+                  Data „od” nie może być późniejsza niż data „do”.
+                </p>
+              )}
               <Button variant="ghost" onClick={() => setFilter(emptyCityFilter)} disabled={!filtered}>
                 <FilterX aria-hidden="true" /> Wyczyść
               </Button>
@@ -192,7 +200,7 @@ export default function CityDashboard({ initialReports }: { initialReports: Repo
               Zgłoszenia
             </h2>
             <p role="status" className="text-sm text-muted-foreground">
-              {visible.length === reports.length ? `${countLabel(reports.length)}, od najnowszych` : `${visible.length} z ${countLabel(reports.length)} (filtr)`}
+              {visible.length === reports.length ? `${countLabel(reports.length)}, od najnowszych` : `Pokazano ${visible.length} z ${ofCountLabel(reports.length)} (filtr)`}
             </p>
           </div>
           {visible.length === 0 ? (

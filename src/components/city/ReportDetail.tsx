@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Save, X } from 'lucide-react';
+import { Eye, EyeOff, Save, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,7 +10,8 @@ import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { cityStatusLabel, kindLabel, statusOf } from '@/lib/city-reports';
-import { cityStatuses, type CityStatus, type Observation, type Report, type ReportPhoto } from '@/lib/schemas';
+import { photoList } from '@/lib/report-photos';
+import { cityStatuses, type CityStatus, type Observation, type PhotoVisibility, type Report, type ReportPhoto } from '@/lib/schemas';
 import { formatDate, MapLinks, StatusBadge, TypeBadge } from './shared';
 import ReportMap from './ReportMap';
 
@@ -47,13 +49,60 @@ function ObservationFacts({ o }: { o: Observation }) {
   );
 }
 
+const peopleLabel = { none: 'AI: nie widać osób ani tablic rejestracyjnych', present: 'AI: widać osoby, twarze lub tablice rejestracyjne', unclear: 'AI: nie można wykluczyć osób lub tablic' } as const;
+
+function PhotoPrivacy({ photo, busy, onChange }: { photo: ReportPhoto; busy: boolean; onChange: (visibility: PhotoVisibility) => void }) {
+  const isPublic = photo.visibility === 'public';
+  return (
+    <div className="grid gap-2 rounded-md bg-muted/50 p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={isPublic ? 'secondary' : 'outline'}>{isPublic ? 'Publiczne' : photo.reviewedAt ? 'Ukryte przez urząd' : 'Ukryte — czeka na sprawdzenie'}</Badge>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {photo.people ? peopleLabel[photo.people] : 'AI nie sprawdziło tego zdjęcia — sprawdź, czy nie widać osób ani tablic rejestracyjnych.'}
+        {photo.reviewedAt && <> · decyzja urzędu {formatDate(photo.reviewedAt)}</>}
+      </p>
+      {isPublic ? (
+        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onChange('hidden')} className="justify-self-start">
+          <EyeOff aria-hidden="true" /> Ukryj zdjęcie przed mieszkańcami
+        </Button>
+      ) : (
+        <Button type="button" size="sm" disabled={busy} onClick={() => onChange('public')} className="justify-self-start">
+          <Eye aria-hidden="true" /> Opublikuj zdjęcie (nie widać osób ani tablic)
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function Detail({ report: r, onSaved, onUnauthorized }: { report: Report; onSaved: (report: Report) => void; onUnauthorized: () => void }) {
   const [status, setStatus] = useState<CityStatus>(statusOf(r));
   const [note, setNote] = useState(r.cityNote ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const dirty = status !== statusOf(r) || note.trim() !== (r.cityNote ?? '');
-  const photos: ReportPhoto[] = r.photos ?? (r.photoPath ? [{ id: 'main', path: r.photoPath, createdAt: r.obtainedAt, ...(r.analysis === 'ai' ? { analysis: r.observation } : {}) }] : []);
+  const photos: ReportPhoto[] = photoList(r);
+  const [photoBusy, setPhotoBusy] = useState<string | null>(null);
+
+  async function setVisibility(photo: ReportPhoto, visibility: PhotoVisibility) {
+    setPhotoBusy(photo.id);
+    try {
+      const response = await fetch(`/api/city/reports/${encodeURIComponent(r.id)}/photos/${encodeURIComponent(photo.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibility }),
+      });
+      if (response.status === 401) return onUnauthorized();
+      const body = (await response.json().catch(() => null)) as { report?: Report; error?: string } | null;
+      if (!response.ok || !body?.report) throw new Error(body?.error ?? 'Nie udało się zapisać decyzji o zdjęciu.');
+      onSaved(body.report);
+      toast.success(visibility === 'public' ? 'Zdjęcie jest teraz publiczne.' : 'Zdjęcie jest ukryte przed mieszkańcami.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Nie udało się zapisać decyzji o zdjęciu.');
+    } finally {
+      setPhotoBusy(null);
+    }
+  }
   const title = r.location?.name ?? r.locationId;
 
   async function save(event: React.FormEvent) {
@@ -141,6 +190,11 @@ function Detail({ report: r, onSaved, onUnauthorized }: { report: Report; onSave
           <h3 id="d-photos" className="font-semibold">
             Zdjęcia ({photos.length})
           </h3>
+          {photos.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Zdjęcia, na których mogą być osoby lub tablice rejestracyjne, są ukryte przed mieszkańcami, dopóki ich nie opublikujesz.
+            </p>
+          )}
           {photos.length === 0 ? (
             <p className="text-sm text-muted-foreground">Zgłoszenie bez zdjęcia.</p>
           ) : (
@@ -165,6 +219,7 @@ function Detail({ report: r, onSaved, onUnauthorized }: { report: Report; onSave
                   ) : (
                     <p className="text-sm text-muted-foreground">Brak opisu AI dla tego zdjęcia.</p>
                   )}
+                  <PhotoPrivacy photo={p} busy={photoBusy === p.id} onChange={v => setVisibility(p, v)} />
                 </li>
               ))}
             </ul>
@@ -228,8 +283,17 @@ function Detail({ report: r, onSaved, onUnauthorized }: { report: Report; onSave
                   <time dateTime={h.at} className="text-muted-foreground">
                     {formatDate(h.at)}
                   </time>{' '}
-                  · <span className="font-medium">{cityStatusLabel[h.status]}</span>
-                  {h.note && <p className="mt-1">{h.note}</p>}
+                  ·{' '}
+                  {h.photo ? (
+                    <span className="font-medium">
+                      Zdjęcie {Math.max(1, photos.findIndex(p => p.id === h.photo!.id) + 1)}: {h.photo.visibility === 'public' ? 'opublikowane' : 'ukryte'}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="font-medium">{cityStatusLabel[h.status]}</span>
+                      {h.note && <p className="mt-1">{h.note}</p>}
+                    </>
+                  )}
                 </li>
               ))}
             </ol>

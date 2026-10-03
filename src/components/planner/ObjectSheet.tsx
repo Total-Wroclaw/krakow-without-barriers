@@ -116,6 +116,8 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
             {missing.length ? <p className="text-sm text-muted-foreground">{t('explore.missing', { list: missing.map(k => t(`feature.${k}`)).join(', ') })}</p> : null}
           </section>
 
+          <AerialSection lat={o.lat} lon={o.lon} name={o.name} objectId={o.id} />
+
           {o.openingHours ? (
             <p className="text-sm">
               <span className="font-semibold">{t('explore.hours')}: </span>
@@ -147,8 +149,6 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
             ))}
           </section>
 
-          <AerialSection lat={o.lat} lon={o.lon} name={o.name} />
-
           <Button variant="secondary" className="h-11 self-start" onClick={() => onOwner(o)}>
             <Store />
             {t('explore.owner')}
@@ -167,14 +167,23 @@ function PlaceFrame({ title, description, onClose, children }: { title: string; 
   const { t } = useI18n();
   const wide = useMediaQuery('(min-width: 1024px)');
   const heading = useRef<HTMLHeadingElement>(null);
+  // Captured on first render, before focus moves into the card, so closing returns focus to the opener.
+  const opener = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null);
+
+  const close = useRef(onClose);
+  close.current = onClose;
 
   useEffect(() => {
     if (!wide) return;
+    const back = opener.current;
     heading.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('[role=dialog][data-state=open]') && close.current();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [wide, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (back instanceof HTMLElement && back.isConnected) back.focus();
+    };
+  }, [wide]);
 
   if (!wide) {
     return (

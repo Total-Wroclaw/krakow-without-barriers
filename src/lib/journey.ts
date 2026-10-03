@@ -93,6 +93,11 @@ export function planJourney(
     addError(message(error, m.errors.transitFailed));
   }
 
-  const options = applyExtras([...drive, ...orderOptions(walking, transit, preferences)], graph, preferences, locale, toilets);
+  const all = applyExtras([...drive, ...orderOptions(walking, transit, preferences)], graph, preferences, locale, toilets);
+  // Options that fit today's needs come first; the original order is kept within each group.
+  const options = [...all.filter(o => o.fits), ...all.filter(o => !o.fits)];
+  // When stairs cannot be avoided at all, say so instead of leaving people to guess from red labels.
+  const avoidsStairs = preferences.avoidStairs || preferences.mobility === 'wheelchair' || preferences.mobility === 'stroller';
+  if (avoidsStairs && options.length && options.every(o => o.stairs.up + o.stairs.down + o.stairs.unknown > 0)) addError(m.errors.stairsOnly);
   return { from, to, date, options, errors };
 }

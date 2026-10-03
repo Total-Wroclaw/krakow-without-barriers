@@ -75,8 +75,20 @@ export function JourneyDetail({ option, reports, onFact, onReport }: Props) {
   );
 }
 
-function FactChip({ fact, onFact }: { fact: CityFact; onFact: (f: CityFact) => void }) {
-  const { t } = useI18n();
+/** Identical chips (e.g. three plain benches) collapse into one with a count. */
+function groupFacts(facts: CityFact[], title: (f: CityFact) => string) {
+  const groups = new Map<string, { fact: CityFact; count: number }>();
+  for (const f of facts) {
+    const key = f.kind === 'stairs' || f.restAfterMinutes ? f.id : `${f.kind}:${title(f)}`;
+    const g = groups.get(key);
+    if (g) g.count++;
+    else groups.set(key, { fact: f, count: 1 });
+  }
+  return [...groups.values()];
+}
+
+function FactChip({ fact, onFact, count = 1 }: { fact: CityFact; onFact: (f: CityFact) => void; count?: number }) {
+  const { t, tp } = useI18n();
   const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Toilet : fact.kind === 'entrance' ? DoorOpen : fact.kind === 'kerb' ? OctagonAlert : fact.kind === 'surface' ? Grid3x3 : fact.direction === 'up' ? ArrowUp : fact.direction === 'down' ? ArrowDown : CircleDot;
   return (
     <button
@@ -88,7 +100,8 @@ function FactChip({ fact, onFact }: { fact: CityFact; onFact: (f: CityFact) => v
       )}
     >
       <Icon className="size-4 shrink-0" aria-hidden />
-      {factTitle(fact, t)}
+      {factTitle(fact, t, tp)}
+      {count > 1 ? <span className="tabular-nums">×{count}</span> : null}
     </button>
   );
 }
@@ -115,7 +128,7 @@ function WalkPart({ leg, next, onFact, last }: { leg: WalkLeg; next?: Leg; onFac
       ) : null}
       {others.length ? (
         <div className="flex flex-wrap gap-2">
-          {others.map(f => <FactChip key={f.id} fact={f} onFact={onFact} />)}
+          {groupFacts(others, f => factTitle(f, t, tp)).map(({ fact: f, count }) => <FactChip key={f.id} fact={f} count={count} onFact={onFact} />)}
         </div>
       ) : null}
       {leg.steps.length > 1 ? (

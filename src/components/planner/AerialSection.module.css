@@ -1,0 +1,83 @@
+/*
+ * "Reading the photo" state over the aerial map. --scan (0..1, set from JS each frame) is the beam position,
+ * so the beam, the grid it reveals and the pins it passes stay in sync. Reduced motion: static tint and grid.
+ */
+/* --scan is set on the map wrapper so pins (outside .scan) inherit it too. */
+.scan {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 50%, rgb(20 33 61 / 0.04), rgb(20 33 61 / 0.28));
+  transition: opacity 700ms ease;
+}
+
+.leaving {
+  opacity: 0;
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.5) 1px, transparent 1px);
+  background-size: 10% 13.3333%;
+  /* The grid shows only in a band trailing the beam and fades out behind it. */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent calc((var(--scan) - 0.4) * 100%),
+    rgb(0 0 0 / 0.55) calc(var(--scan) * 100%),
+    transparent calc(var(--scan) * 100% + 2px)
+  );
+}
+
+.trail {
+  position: absolute;
+  inset-inline: 0;
+  height: 34%;
+  top: calc(var(--scan) * 100% - 34%);
+  background: linear-gradient(to bottom, rgb(186 230 253 / 0), rgb(186 230 253 / 0.16) 70%, rgb(224 242 254 / 0.42));
+}
+
+.beam {
+  position: absolute;
+  inset-inline: 0;
+  height: 2px;
+  top: calc(var(--scan) * 100% - 1px);
+  background: linear-gradient(to right, rgb(255 255 255 / 0.2), #ffffff 20%, #ffffff 80%, rgb(255 255 255 / 0.2));
+  box-shadow:
+    0 0 10px 2px rgb(224 242 254 / 0.95),
+    0 0 28px 8px rgb(125 211 252 / 0.45);
+}
+
+/* A pin lights up while the beam passes it: intensity = 1 − |scan − y| × 12, clamped to 0..1. */
+.lit {
+  --lit: clamp(0, calc(1 - max(var(--scan) - var(--y), var(--y) - var(--scan)) * 12), 1);
+  filter: brightness(calc(1 + var(--lit) * 0.45));
+  box-shadow: 0 0 0 calc(var(--lit) * 7px) rgb(255 255 255 / 0.55);
+  border-radius: 9999px;
+}
+
+.map :global(.maplibregl-canvas) {
+  outline: none;
+}
+
+.map:has(:global(.maplibregl-canvas:focus-visible)) {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trail,
+  .beam {
+    display: none;
+  }
+  .grid {
+    mask-image: none;
+    opacity: 0.25;
+  }
+  .lit {
+    filter: none;
+    box-shadow: none;
+  }
+}

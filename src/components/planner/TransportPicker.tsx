@@ -24,10 +24,10 @@ export function TransportPicker({ value, onChange }: { value: TransportMode; onC
         <ToggleGroupItem
           key={mode}
           value={mode}
-          className="h-11 gap-1 rounded-lg! px-1.5 text-sm data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+          className="h-auto min-h-12 flex-col gap-0.5 rounded-lg! px-1 py-1.5 text-xs leading-tight data-[state=on]:bg-accent data-[state=on]:text-accent-foreground sm:flex-row sm:gap-1.5 sm:text-sm"
         >
           <Icon aria-hidden />
-          <span className="truncate">{t(key)}</span>
+          <span className="text-center">{t(key)}</span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

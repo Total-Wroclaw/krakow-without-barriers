@@ -3,6 +3,7 @@ import { guard } from '@/lib/server';
 import { pointSchema } from '@/lib/city-types';
 import { locales } from '@/lib/i18n/locales';
 import { listObjectPage } from '@/lib/objects';
+import { apiMessages } from '@/lib/i18n/request-locale';
 export const runtime = 'nodejs';
 const categories = ['museum', 'landmark', 'culture', 'office', 'toilet', 'hotel', 'food', 'health', 'park', 'parking', 'other'] as const;
 const schema = z.object({
@@ -18,11 +19,11 @@ const schema = z.object({
 export async function GET(request: Request) {
   const block = guard(request); if (block) return block;
   const parsed = schema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-  if (!parsed.success) return Response.json({ error: 'Nieprawidłowe parametry wyszukiwania.' }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: apiMessages(request).objects.badQuery }, { status: 400 });
   try {
     // ObjectPage: { objects, total, nextOffset } (nextOffset null on the last page).
     return Response.json(await listObjectPage(parsed.data), { headers: { 'Cache-Control': 'private, max-age=30' } });
   } catch {
-    return Response.json({ error: 'Lista miejsc jest chwilowo niedostępna.' }, { status: 503 });
+    return Response.json({ error: apiMessages(request).objects.listUnavailable }, { status: 503 });
   }
 }

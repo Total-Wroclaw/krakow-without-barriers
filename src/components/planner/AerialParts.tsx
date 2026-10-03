@@ -1,7 +1,7 @@
 'use client';
 // Pieces shared by the aerial map and its text equivalent: badges, fact wording and the point card.
 import { useState, type ReactNode } from 'react';
-import { Accessibility, BusFront, Check, ChevronDown, CircleHelp, Coins, DoorOpen, ExternalLink, Footprints, Grip, MapPin, Minus, Navigation2, SquareParking, TramFront, X, type LucideIcon } from 'lucide-react';
+import { Accessibility, BusFront, ChevronDown, CircleHelp, Coins, DoorOpen, ExternalLink, Footprints, Grip, MapPin, Navigation2, SquareParking, TramFront, type LucideIcon } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { compass, distance } from '@/lib/aerial-geo';
 import { lineMiddle, type AerialLine, type AerialObservation, type AerialOverlay, type AerialPin } from '@/lib/aerial-types';
@@ -134,25 +134,19 @@ export function usePointLabel() {
 type Tone = 'good' | 'warn' | 'bad' | 'neutral';
 type Tile = { icon: LucideIcon; label: string; value: string; tone: Tone };
 
-const toneClass: Record<Tone, string> = {
-  good: 'bg-rest-soft text-rest',
-  warn: 'bg-barrier-soft text-barrier',
-  bad: 'bg-barrier-soft text-barrier',
-  neutral: 'bg-muted text-foreground',
-};
-const toneIcon: Record<Tone, LucideIcon | null> = { good: Check, warn: Minus, bad: X, neutral: null };
+const toneClass: Record<Tone, string> = { good: 'text-rest', warn: 'text-barrier', bad: 'text-barrier', neutral: 'text-foreground' };
 const compassAngle: Record<string, number> = { n: 0, ne: 45, e: 90, se: 135, s: 180, sw: 225, w: 270, nw: 315 };
 
-/** Facts of a pin or stairs as tiles; facts nobody has mapped are returned separately as one "no data" line. */
+/** Facts of a pin or stairs as rows; facts nobody has mapped are returned separately as one "no data" line. */
 function useTiles() {
-  const { t, tp } = useI18n();
+  const { t } = useI18n();
   return (point: Extract<MapPoint, { type: 'pin' | 'stairs' }>): { tiles: Tile[]; unknown: string[]; chips: string[] } => {
     const tiles: Tile[] = [];
     const unknown: string[] = [];
     const chips: string[] = [];
     if (point.type === 'stairs') {
       const l = point.line;
-      if (l.steps !== undefined) tiles.push({ icon: Footprints, label: t('tile.steps'), value: tp('aerial.steps', l.steps), tone: 'bad' });
+      if (l.steps !== undefined) tiles.push({ icon: Footprints, label: t('tile.steps'), value: String(l.steps), tone: l.steps <= 2 ? 'warn' : 'bad' });
       else unknown.push(t('tile.steps').toLocaleLowerCase());
       if (l.handrail === 'yes' || l.handrail === 'no') tiles.push({ icon: Grip, label: t('tile.handrail'), value: t(l.handrail === 'yes' ? 'fvalue.yes' : 'fvalue.no'), tone: l.handrail === 'yes' ? 'good' : 'bad' });
       else unknown.push(t('tile.handrail').toLocaleLowerCase());
@@ -165,7 +159,7 @@ function useTiles() {
       if (w === 'unknown') unknown.push(t('tile.wheelchair').toLocaleLowerCase());
       else tiles.push({ icon: Accessibility, label: t('tile.wheelchair'), value: t(`fvalue.${w}`), tone: w === 'yes' ? 'good' : w === 'limited' ? 'warn' : 'bad' });
       if (pin.steps === undefined) unknown.push(t('tile.steps').toLocaleLowerCase());
-      else tiles.push({ icon: Footprints, label: t('tile.steps'), value: pin.steps === 0 ? t('tile.none') : tp('aerial.steps', pin.steps), tone: pin.steps === 0 ? 'good' : 'bad' });
+      else tiles.push({ icon: Footprints, label: t('tile.steps'), value: pin.steps === 0 ? t('tile.none') : String(pin.steps), tone: pin.steps === 0 ? 'good' : 'bad' });
       if (pin.ramp) tiles.push({ icon: Accessibility, label: t('tile.ramp'), value: t('fvalue.yes'), tone: 'good' });
       if (pin.doorWidth) tiles.push({ icon: DoorOpen, label: t('tile.door'), value: `${pin.doorWidth} cm`, tone: pin.doorWidth >= 90 ? 'good' : pin.doorWidth >= 80 ? 'warn' : 'bad' });
       if (pin.automaticDoor) tiles.push({ icon: DoorOpen, label: t('tile.autoDoor'), value: t('fvalue.yes'), tone: 'good' });
@@ -206,7 +200,7 @@ function Direction({ from, to }: { from: Point; to: Point }) {
   );
 }
 
-/** Hover/tap card of a point: a header, fact tiles with icons, unknowns in one line, distance and source in a footer. */
+/** Hover/tap card of a point: a header, one row per mapped fact (icon, label, value), unknowns in one line, distance and source in a footer. */
 export function PointCard({ point, overlay }: { point: MapPoint; overlay: AerialOverlay }) {
   const { t, locale } = useI18n();
   const tilesOf = useTiles();
@@ -265,23 +259,15 @@ export function PointCard({ point, overlay }: { point: MapPoint; overlay: Aerial
         </div>
       </div>
       {tiles.length ? (
-        <ul className="grid grid-cols-2 gap-1.5">
-          {tiles.map(tile => {
-            const ToneIcon = toneIcon[tile.tone];
-            return (
-              <li key={tile.label} className={cn('flex items-start gap-2 rounded-lg px-2 py-1.5', toneClass[tile.tone])}>
-                <tile.icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span className="min-w-0">
-                  <span className="block text-[11px] leading-tight opacity-80">{tile.label}</span>
-                  <span className="flex items-center gap-1 text-sm font-semibold leading-tight">
-                    {ToneIcon ? <ToneIcon className="size-3.5 shrink-0" strokeWidth={3} aria-hidden /> : null}
-                    <span className="break-words">{tile.value}</span>
-                  </span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <dl className="flex flex-col divide-y rounded-lg border">
+          {tiles.map(tile => (
+            <div key={tile.label} className="flex items-start gap-2 px-2.5 py-1.5 text-sm">
+              <tile.icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <dt className="shrink-0 text-muted-foreground">{tile.label}</dt>
+              <dd className={cn('ml-auto min-w-0 text-right font-semibold break-words', toneClass[tile.tone])}>{tile.value}</dd>
+            </div>
+          ))}
+        </dl>
       ) : null}
       {unknown.length ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

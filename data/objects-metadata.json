@@ -1,0 +1,50 @@
+{
+  "obtainedAt": "2026-10-03T17:16:50.312237+00:00",
+  "sourceDate": "2026-10-02T20:21:34Z",
+  "bbox": [
+    19.75,
+    49.94,
+    20.25,
+    50.2
+  ],
+  "url": "https://download.geofabrik.de/europe/poland/malopolskie.html",
+  "sha256": "14c4f8561b99407442f31abf30a7c1c625ee01ab6e88c32d4c86b59923da7912",
+  "licence": "ODbL-1.0",
+  "counts": {
+    "culture": 225,
+    "food": 238,
+    "health": 820,
+    "hotel": 446,
+    "landmark": 635,
+    "museum": 99,
+    "office": 166,
+    "park": 167,
+    "toilet": 284
+  },
+  "withAccessibilityData": {
+    "culture": 63,
+    "food": 238,
+    "health": 206,
+    "hotel": 70,
+    "landmark": 90,
+    "museum": 23,
+    "office": 30,
+    "park": 6,
+    "toilet": 160
+  },
+  "withEntranceAccessibilityData": {
+    "culture": 21,
+    "food": 12,
+    "health": 58,
+    "hotel": 6,
+    "landmark": 18,
+    "museum": 3,
+    "office": 10,
+    "toilet": 17
+  },
+  "total": 3080,
+  "totalWithAccessibilityData": 886,
+  "entranceNodesInArea": 14333,
+  "bytes": 190279,
+  "note": "withAccessibilityData = object or an assigned entrance has at least one accessibility tag (wheelchair*, toilets:wheelchair, ramp*, step_count, elevator, automatic_door, door/width). Not a count of accessible places."
+}

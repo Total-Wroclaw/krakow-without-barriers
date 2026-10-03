@@ -1,0 +1,20 @@
+{
+  "obtainedAt": "2026-10-03T14:05:49.011612+00:00",
+  "sourceDate": "2026-10-02T20:21:34Z",
+  "bbox": [
+    19.75,
+    49.94,
+    20.25,
+    50.2
+  ],
+  "url": "https://download.geofabrik.de/europe/poland/malopolskie.html",
+  "sha256": "14c4f8561b99407442f31abf30a7c1c625ee01ab6e88c32d4c86b59923da7912",
+  "licence": "ODbL-1.0",
+  "counts": {
+    "nodes": 735530,
+    "ways": 196973,
+    "stairs": 7206,
+    "benches": 14187,
+    "entrances": 14333
+  }
+}

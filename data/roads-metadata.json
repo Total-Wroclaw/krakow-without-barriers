@@ -1,0 +1,34 @@
+{
+  "obtainedAt": "2026-10-03T17:22:08.030052+00:00",
+  "sourceDate": "2026-10-02T20:21:34Z",
+  "bbox": [
+    19.75,
+    49.94,
+    20.25,
+    50.2
+  ],
+  "url": "https://download.geofabrik.de/europe/poland/malopolskie.html",
+  "sha256": "14c4f8561b99407442f31abf30a7c1c625ee01ab6e88c32d4c86b59923da7912",
+  "licence": "ODbL-1.0",
+  "counts": {
+    "roadWays": 102774,
+    "roadNodes": 415223,
+    "trafficSignals": 1057,
+    "oneway": 10433,
+    "withMaxspeed": 16397,
+    "destinationOnly": 716,
+    "skipped": {
+      "access": 30391,
+      "reversible": 13,
+      "outsideBbox": 251936
+    },
+    "parkings": 11045,
+    "parkingsNamed": 116,
+    "parkingsWithDisabledTag": 992,
+    "parkingsWithDisabledSpaces": 616,
+    "parkingsWithFeeTag": 2590,
+    "disabledSpaceFeatures": 1673,
+    "disabledSpaceCapacity": 1770,
+    "disabledSpacesOutsideCarParks": 1281
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "obtainedAt": "2026-10-03T15:12:33.387622+00:00",
+  "sourceDate": "2026-10-02T20:21:34Z",
+  "bbox": [
+    19.75,
+    49.94,
+    20.25,
+    50.2
+  ],
+  "url": "https://download.geofabrik.de/europe/poland/malopolskie.html",
+  "sha256": "14c4f8561b99407442f31abf30a7c1c625ee01ab6e88c32d4c86b59923da7912",
+  "licence": "ODbL-1.0",
+  "counts": {
+    "areas": 1385,
+    "streets": 6261,
+    "streetNames": 3923,
+    "addresses": 155891,
+    "pois": 20381,
+    "categories": 164
+  },
+  "bytes": 2877485
+}

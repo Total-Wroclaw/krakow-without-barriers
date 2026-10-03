@@ -1,0 +1,452 @@
+// "Odkrywaj" catalogue: places with concrete accessibility facts from several sources, never merged into one badge.
+// Server-only (reads data files and SQLite). Sources:
+//   OSM extract (data/krakow-objects.json.gz) · UMK list (data/krakow-city-venues.json) · partners (SQLite) · user reports (SQLite).
+// Each fact keeps its source; conflicting sources are shown side by side; missing facts stay missing.
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import type { AccessFeature, FeatureKey, FeatureValue, ObjectCategory, ObjectQuery, ObjectSource, PartnerInfo, PlaceObject, PlaceObjectSummary } from './explore-types';
+import type { CityVenuesFile } from './city-venues';
+import type { Locale } from './i18n/locales';
+import type { Report } from './schemas';
+import { fold, words } from './places';
+
+// ---------- Types of raw inputs ----------
+export type OsmEntrance = { id: string; d: number; ts: string | null; t: Record<string, string> };
+export type OsmRecord = { id: string; also?: string[]; c: ObjectCategory; k: string; n: string | null; la: number; lo: number; ts: string | null; t: Record<string, string>; e: OsmEntrance[] };
+export type OsmFile = { obtainedAt: string; sourceDate: string | null; objects: OsmRecord[] };
+export type PartnerFeatureInput = { key: FeatureKey; value: FeatureValue; detail?: string };
+/** Stored partner submission. contactEmail is private: it never leaves this module. */
+export type PartnerRecord = {
+  id: string; name: string; category: ObjectCategory; lat: number; lon: number; address?: string; website?: string;
+  contactEmail: string; features: PartnerFeatureInput[]; description?: string; promote: boolean; plan: 'free' | 'partner';
+  existingObjectId?: string; obtainedAt: string; example?: boolean; tagline?: string;
+};
+export type CatalogInput = { osm?: OsmFile | null; city?: CityVenuesFile | null; partners?: PartnerRecord[]; reports?: Report[] };
+
+// ---------- Labels ----------
+const CATEGORY_LABELS: Record<ObjectCategory, Record<Locale, string>> = {
+  museum: { pl: 'Muzeum', en: 'Museum', uk: 'Музей' },
+  landmark: { pl: 'Zabytek i atrakcja', en: 'Landmark', uk: 'Пам’ятка' },
+  culture: { pl: 'Kultura', en: 'Culture', uk: 'Культура' },
+  office: { pl: 'Urząd', en: 'Public office', uk: 'Установа' },
+  toilet: { pl: 'Toaleta', en: 'Toilet', uk: 'Туалет' },
+  hotel: { pl: 'Nocleg', en: 'Accommodation', uk: 'Житло' },
+  food: { pl: 'Gastronomia', en: 'Food and drink', uk: 'Їжа та напої' },
+  health: { pl: 'Zdrowie', en: 'Health', uk: 'Здоров’я' },
+  park: { pl: 'Park', en: 'Park', uk: 'Парк' },
+  parking: { pl: 'Parking', en: 'Parking', uk: 'Паркінг' },
+  other: { pl: 'Inne', en: 'Other', uk: 'Інше' },
+};
+export const categoryLabel = (category: ObjectCategory, locale: Locale = 'pl') => CATEGORY_LABELS[category]?.[locale] ?? CATEGORY_LABELS.other[locale];
+const UNNAMED_TOILET: Record<Locale, string> = { pl: 'Toaleta publiczna', en: 'Public toilet', uk: 'Громадський туалет' };
+const LABELS = {
+  osm: { pl: 'OpenStreetMap', en: 'OpenStreetMap', uk: 'OpenStreetMap' },
+  osmEntrance: { pl: 'OpenStreetMap — wejście', en: 'OpenStreetMap — entrance', uk: 'OpenStreetMap — вхід' },
+  city: { pl: 'Urząd Miasta Krakowa — wykaz dostępności budynków', en: 'Kraków City Hall — building accessibility list', uk: 'Мерія Кракова — перелік доступності будівель' },
+  partner: { pl: 'Dane właściciela obiektu (niezweryfikowane w terenie)', en: 'Venue owner data (not verified on site)', uk: 'Дані власника об’єкта (не перевірено на місці)' },
+  example: { pl: 'Dane demonstracyjne — nie dotyczą prawdziwego miejsca', en: 'Demo data — not a real venue', uk: 'Демонстраційні дані — не реальне місце' },
+  user: { pl: 'Zgłoszenie użytkownika (niezweryfikowane)', en: 'User report (unverified)', uk: 'Повідомлення користувача (не перевірено)' },
+};
+const OBSERVATION_LABELS: Record<Report['observation']['kind'], Record<Locale, string>> = {
+  stairs: { pl: 'schody', en: 'stairs', uk: 'сходи' }, entrance: { pl: 'wejście', en: 'entrance', uk: 'вхід' }, bench: { pl: 'ławka', en: 'bench', uk: 'лавка' },
+  surface: { pl: 'nawierzchnia', en: 'surface', uk: 'покриття' }, other: { pl: 'inne', en: 'other', uk: 'інше' },
+};
+const ENTRANCE_KIND: Record<string, string> = { main: 'główne', service: 'służbowe', secondary: 'boczne', emergency: 'awaryjne', exit: 'wyjście', staircase: 'klatka schodowa', yes: '' };
+
+// ---------- OSM tags → features ----------
+const yesNo = (v: string | undefined): FeatureValue | undefined => {
+  if (v === undefined) return undefined;
+  const x = v.trim().toLowerCase();
+  if (x === 'yes' || x === 'designated') return 'yes';
+  if (x === 'limited' || x === 'partial') return 'limited';
+  if (x === 'no') return 'no';
+  if (x === 'unknown') return 'unknown';
+  return undefined;
+};
+/** Parse OSM width ("0.9", "90 cm", "0,9 m") to centimetres. */
+export function widthCm(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const m = raw.replace(',', '.').match(/^\s*(\d+(?:\.\d+)?)\s*(cm|m)?\s*$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const cm = m[2]?.toLowerCase() === 'cm' || (!m[2] && n > 10) ? n : n * 100;
+  return cm >= 40 && cm <= 600 ? Math.round(cm) : null;
+}
+/** Polish door clear width requirement for accessible buildings is 90 cm; 80–89 cm passes many but not all wheelchairs. */
+export function doorWidthValue(cm: number): FeatureValue { return cm >= 90 ? 'yes' : cm >= 80 ? 'limited' : 'no'; }
+const stepsPl = (n: number) => `${n} ${n === 1 ? 'stopień' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'stopnie' : 'stopni'}`;
+const description = (t: Record<string, string>, key = 'wheelchair:description') => t[`${key}:pl`] ?? t[key] ?? t[`${key}:en`];
+
+/** Facts stated on the object itself. Only explicit tags produce facts. */
+export function osmObjectFeatures(t: Record<string, string>, category: ObjectCategory, sourceId: string): AccessFeature[] {
+  const out: AccessFeature[] = [];
+  const push = (key: FeatureKey, value: FeatureValue | undefined, detail?: string) => { if (value) out.push({ key, value, sourceId, ...(detail ? { detail: detail.slice(0, 300) } : {}) }); };
+  const wheelchair = yesNo(t.wheelchair);
+  // On a toilet, wheelchair=* describes the toilet itself.
+  if (category === 'toilet') push('accessible_toilet', wheelchair ?? yesNo(t['toilets:wheelchair']), description(t));
+  else {
+    push('step_free_entrance', wheelchair, description(t));
+    push('accessible_toilet', yesNo(t['toilets:wheelchair']), description(t, 'toilets:wheelchair:description'));
+  }
+  if (t.step_count && /^\d+$/.test(t.step_count)) { const n = Number(t.step_count); push('entrance_steps', n > 0 ? 'yes' : 'no', stepsPl(n)); }
+  push('ramp', yesNo(t['ramp:wheelchair']) ?? yesNo(t.ramp));
+  push('lift', yesNo(t.elevator));
+  const cm = widthCm(t['door:width']);
+  if (cm) push('door_width', doorWidthValue(cm), `${cm} cm`);
+  if (t.automatic_door) push('automatic_door', t.automatic_door === 'no' ? 'no' : 'yes', t.automatic_door === 'yes' || t.automatic_door === 'no' ? undefined : t.automatic_door);
+  push('hearing_loop', yesNo(t.hearing_loop));
+  const disabledParking = t['capacity:disabled'];
+  if (disabledParking && /^\d+$/.test(disabledParking)) push('disabled_parking', Number(disabledParking) > 0 ? 'yes' : 'no', `${disabledParking} miejsc`);
+  else push('disabled_parking', yesNo(disabledParking));
+  return out;
+}
+/** Facts from an entrance node (wheelchair, step_count, ramp, width, automatic door). */
+export function osmEntranceFeatures(e: OsmEntrance, sourceId: string): AccessFeature[] {
+  const t = e.t;
+  const kind = ENTRANCE_KIND[t.entrance] ?? t.entrance ?? '';
+  const where = [`wejście${kind ? ` ${kind}` : ''}`, e.d > 0 ? `ok. ${Math.round(e.d)} m od punktu obiektu` : ''].filter(Boolean).join(', ');
+  const out: AccessFeature[] = [];
+  const push = (key: FeatureKey, value: FeatureValue | undefined, detail?: string) => { if (value) out.push({ key, value, sourceId, detail: [where, detail].filter(Boolean).join(': ').slice(0, 300) }); };
+  push('step_free_entrance', yesNo(t.wheelchair), description(t));
+  if (t.step_count && /^\d+$/.test(t.step_count)) { const n = Number(t.step_count); push('entrance_steps', n > 0 ? 'yes' : 'no', stepsPl(n)); }
+  push('ramp', yesNo(t['ramp:wheelchair']) ?? yesNo(t.ramp));
+  const cm = widthCm(t['door:width'] ?? t.width);
+  if (cm) push('door_width', doorWidthValue(cm), `${cm} cm`);
+  if (t.automatic_door) push('automatic_door', t.automatic_door === 'no' ? 'no' : 'yes', t.automatic_door === 'yes' || t.automatic_door === 'no' ? undefined : t.automatic_door);
+  return out;
+}
+
+// ---------- Internal record ----------
+type Rec = {
+  id: string; name: string | null; names: Partial<Record<Locale, string>>; aliases: string[];
+  category: ObjectCategory; lat: number; lon: number; address?: string; website?: string; openingHours?: string; description?: string;
+  osmIds: string[]; sources: (ObjectSource & { labelKey: keyof typeof LABELS | 'userObservation'; note?: string; observation?: Report['observation']['kind'] })[];
+  features: AccessFeature[]; partner?: PartnerInfo;
+  /** Precomputed folded search words. */
+  searchName: string[]; searchExtra: string[];
+};
+const osmUrl = (id: string) => `https://www.openstreetmap.org/${id.replace(':', '/')}`;
+export const objectId = (osmId: string) => `osm-${osmId.replace(':', '-')}`;
+function metres(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  const x = ((b.lon - a.lon) * Math.PI / 180) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
+  const y = (b.lat - a.lat) * Math.PI / 180;
+  return 6371000 * Math.hypot(x, y);
+}
+function osmAddress(t: Record<string, string>) {
+  const street = t['addr:street'] ?? t['addr:place'];
+  if (!street || !t['addr:housenumber']) return undefined;
+  return `${street} ${t['addr:housenumber']}`;
+}
+
+function fromOsm(o: OsmRecord, obtainedAt: string): Rec {
+  const sid = `osm:${o.id}`;
+  const rec: Rec = {
+    id: objectId(o.id), name: o.n, names: { ...(o.t['name:en'] ? { en: o.t['name:en'] } : {}), ...(o.t['name:uk'] ? { uk: o.t['name:uk'] } : {}) }, aliases: [],
+    category: o.c, lat: o.la, lon: o.lo, address: osmAddress(o.t), website: o.t.website ?? o.t['contact:website'], openingHours: o.t.opening_hours,
+    osmIds: [o.id, ...(o.also ?? [])],
+    sources: [{ id: sid, kind: 'osm', label: LABELS.osm.pl, labelKey: 'osm', url: osmUrl(o.id), obtainedAt, editedAt: o.ts, confirmedAt: o.t['check_date:wheelchair'] ?? o.t.check_date ?? null, status: 'map' }],
+    features: osmObjectFeatures(o.t, o.c, sid), searchName: [], searchExtra: [],
+  };
+  for (const e of o.e) {
+    const esid = `osm:${e.id}`;
+    const facts = osmEntranceFeatures(e, esid);
+    if (!facts.length) continue;
+    rec.sources.push({ id: esid, kind: 'osm', label: LABELS.osmEntrance.pl, labelKey: 'osmEntrance', url: osmUrl(e.id), obtainedAt, editedAt: e.ts, confirmedAt: e.t['check_date'] ?? null, status: 'map' });
+    rec.features.push(...facts);
+  }
+  return rec;
+}
+
+const GENERIC_NAME_WORDS = new Set(['urzad', 'miasta', 'krakowa', 'krakow', 'wydzial', 'zarzad', 'miejski', 'miejskie', 'w', 'i', 'im', 'dla', 'oddzial', 'krakowie', 'budynek', 'ul', 'ulica']);
+const significant = (name: string) => words(name).filter(w => w.length >= 3 && !GENERIC_NAME_WORDS.has(w));
+/** Names share a distinctive word, or one contains the other. */
+export function similarNames(a: string, b: string) {
+  const fa = fold(a), fb = fold(b);
+  if (fa.includes(fb) || fb.includes(fa)) return true;
+  const sb = new Set(significant(b));
+  return significant(a).some(w => sb.has(w));
+}
+const ADDRESS_NOISE = new Set(['ulica', 'ul', 'aleja', 'al', 'plac', 'pl', 'osiedle', 'os', 'rynek']);
+function addressKey(address: string) {
+  const w = words(address).filter(x => !ADDRESS_NOISE.has(x));
+  const number = w.find(x => /^\d/.test(x));
+  const street = w.filter(x => !/^\d/.test(x)).pop();
+  return number && street ? `${street} ${number}` : null;
+}
+/** Same street (last name word) and same first house number, ignoring "ulica"/"al." prefixes and first names. */
+export const sameAddress = (a?: string, b?: string) => !!a && !!b && addressKey(a) !== null && addressKey(a) === addressKey(b);
+
+// ---------- Catalogue ----------
+type Grid = Map<number, number[]>;
+const CELL = 0.002;
+const cellKey = (lat: number, lon: number) => Math.floor(lat / CELL) * 100000 + Math.floor(lon / CELL);
+export type Catalog = { recs: Rec[]; byId: Map<string, Rec>; byOsm: Map<string, Rec>; grid: Grid };
+function nearby(cat: Catalog, p: { lat: number; lon: number }, radius: number) {
+  const out: { rec: Rec; d: number }[] = [];
+  const cy = Math.floor(p.lat / CELL), cx = Math.floor(p.lon / CELL);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) for (const i of cat.grid.get((cy + dy) * 100000 + cx + dx) ?? []) {
+    const d = metres(p, cat.recs[i]); if (d <= radius) out.push({ rec: cat.recs[i], d });
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
+function index(recs: Rec[]): Catalog {
+  const byId = new Map<string, Rec>(), byOsm = new Map<string, Rec>(), grid: Grid = new Map();
+  recs.forEach((r, i) => {
+    byId.set(r.id, r);
+    for (const o of r.osmIds) byOsm.set(o, r);
+    const k = cellKey(r.lat, r.lon); const l = grid.get(k); if (l) l.push(i); else grid.set(k, [i]);
+  });
+  return { recs, byId, byOsm, grid };
+}
+function addRec(cat: Catalog, r: Rec) {
+  cat.recs.push(r); cat.byId.set(r.id, r);
+  const k = cellKey(r.lat, r.lon); const l = cat.grid.get(k); if (l) l.push(cat.recs.length - 1); else cat.grid.set(k, [cat.recs.length - 1]);
+}
+function finishSearch(r: Rec) {
+  r.searchName = [...words(r.name ?? UNNAMED_TOILET.pl), ...Object.values(r.names).flatMap(n => words(n!)), ...r.aliases.flatMap(words)];
+  r.searchExtra = [...words(r.address ?? ''), ...words(categoryLabel(r.category, 'pl')), ...words(categoryLabel(r.category, 'en'))];
+}
+
+function attachCity(cat: Catalog, file: CityVenuesFile) {
+  for (const v of file.venues) {
+    if (v.lat === null || v.lon === null) continue; // Unresolved address: listed in the data file, never placed on a guessed point.
+    const sid = `city:${v.id}`;
+    const source = { id: sid, kind: 'city' as const, label: LABELS.city.pl, labelKey: 'city' as const, url: file.source.url, obtainedAt: file.source.obtainedAt, confirmedAt: null, editedAt: null, status: 'city' as const };
+    const features = v.features.map(f => ({ ...f, sourceId: sid }));
+    const desc = `${v.name}: ${v.adaptations.join('; ')}`;
+    // Same place: OSM object within 60 m with a similar name, or an OSM office at the same address within 150 m.
+    const match = nearby(cat, v as { lat: number; lon: number }, 150).find(({ rec, d }) => (d <= 60 && !!rec.name && similarNames(rec.name, v.name)) || (rec.category === 'office' && sameAddress(rec.address, v.address)));
+    if (match) {
+      const rec = match.rec;
+      rec.sources.push(source); rec.features.push(...features);
+      if (!rec.name || !similarNames(rec.name, v.name)) rec.aliases.push(v.name);
+      rec.description = rec.description ? `${rec.description}\n${desc}` : desc;
+      rec.address ??= v.address;
+      continue;
+    }
+    // Several city units can share one building (e.g. Powstania Warszawskiego 10): they stay separate entries.
+    addRec(cat, { id: `city-${v.id}`, name: v.name, names: {}, aliases: [], category: 'office', lat: v.lat, lon: v.lon, address: v.address, description: desc, osmIds: [], sources: [source], features, searchName: [], searchExtra: [] });
+  }
+}
+
+export const DEMO_PARTNER: PartnerRecord = {
+  id: 'demo-hotel', name: 'Hotel Przykładowy (dane demonstracyjne)', category: 'hotel', lat: 50.06325, lon: 19.94135,
+  address: 'Adres przykładowy — to nie jest prawdziwy hotel', contactEmail: 'demo@example.invalid',
+  description: 'Przykład, jak obiekt partnerski opisuje dostępność. Wszystkie dane są demonstracyjne i nie dotyczą żadnego prawdziwego miejsca.',
+  tagline: 'Przykładowa wizytówka partnera', promote: true, plan: 'partner', example: true, obtainedAt: '2026-10-03T00:00:00.000Z',
+  features: [
+    { key: 'step_free_entrance', value: 'yes', detail: 'Wejście główne bez progu (przykład)' },
+    { key: 'entrance_steps', value: 'no', detail: '0 stopni (przykład)' },
+    { key: 'door_width', value: 'yes', detail: '95 cm (przykład)' },
+    { key: 'automatic_door', value: 'yes', detail: 'Drzwi przesuwne na czujnik (przykład)' },
+    { key: 'lift', value: 'yes', detail: 'Winda 110 × 140 cm do wszystkich pięter (przykład)' },
+    { key: 'accessible_toilet', value: 'yes', detail: 'Łazienka przystosowana w 2 pokojach i przy recepcji (przykład)' },
+    { key: 'disabled_parking', value: 'yes', detail: '2 miejsca przy wejściu (przykład)' },
+    { key: 'hearing_loop', value: 'yes', detail: 'Pętla indukcyjna przy recepcji (przykład)' },
+    { key: 'staff_assistance', value: 'yes', detail: 'Pomoc personelu przez całą dobę (przykład)' },
+    { key: 'seating', value: 'yes', detail: 'Miejsca do odpoczynku w holu (przykład)' },
+    { key: 'surface', value: 'yes', detail: 'Równe płyty przed wejściem (przykład)' },
+  ],
+};
+export const DEMO_PARTNER_OBJECT_ID = `partner-${DEMO_PARTNER.id}`;
+
+function partnerInfo(p: PartnerRecord): PartnerInfo {
+  // In the prototype promotion needs the paid "partner" plan; billing and verification are future work.
+  return { promoted: p.promote && p.plan === 'partner', plan: p.plan, example: !!p.example, ...(p.website ? { website: p.website } : {}), ...(p.tagline ? { tagline: p.tagline } : {}) };
+}
+function attachPartner(cat: Catalog, p: PartnerRecord) {
+  const sid = `partner:${p.id}`;
+  const status = p.example ? 'example' as const : 'partner' as const;
+  const source = { id: sid, kind: 'partner' as const, label: (p.example ? LABELS.example : LABELS.partner).pl, labelKey: p.example ? 'example' as const : 'partner' as const, ...(p.website ? { url: p.website } : {}), obtainedAt: p.obtainedAt, confirmedAt: null, editedAt: p.obtainedAt, status };
+  const features = p.features.map(f => ({ key: f.key, value: f.value, sourceId: sid, ...(f.detail ? { detail: f.detail } : {}) }));
+  const existing = p.existingObjectId ? cat.byId.get(p.existingObjectId) : undefined;
+  if (existing) {
+    existing.sources.push(source); existing.features.push(...features);
+    existing.partner = partnerInfo(p);
+    existing.website ??= p.website;
+    if (p.description) existing.description = existing.description ? `${existing.description}\n${p.description}` : p.description;
+    return existing;
+  }
+  const rec: Rec = { id: `partner-${p.id}`, name: p.name, names: {}, aliases: [], category: p.category, lat: p.lat, lon: p.lon, address: p.address, website: p.website, description: p.description, osmIds: [], sources: [source], features, partner: partnerInfo(p), searchName: [], searchExtra: [] };
+  addRec(cat, rec);
+  return rec;
+}
+
+function attachReports(cat: Catalog, reports: Report[]) {
+  for (const r of reports) {
+    const target = (/^(node|way):\d+$/.test(r.locationId) ? cat.byOsm.get(r.locationId) : undefined)
+      ?? (r.location ? nearby(cat, r.location, 30)[0]?.rec : undefined);
+    if (!target) continue;
+    // Conservative: user reports are listed as unverified sources with their own description, not turned into facts.
+    target.sources.push({ id: `user:${r.id}`, kind: 'user', label: LABELS.user.pl, labelKey: 'userObservation', observation: r.observation.kind, note: r.observation.description.slice(0, 300), ...(r.photoPath ? { url: r.photoPath } : {}), obtainedAt: r.obtainedAt, confirmedAt: null, editedAt: r.editedAt ?? null, status: 'unverified' });
+  }
+}
+
+/** Build a catalogue from explicit inputs (used by the lazy singleton and by tests). */
+export function buildCatalog(input: CatalogInput): Catalog {
+  const obtained = input.osm?.obtainedAt ?? new Date(0).toISOString();
+  const cat = index((input.osm?.objects ?? []).map(o => fromOsm(o, obtained)));
+  if (input.city) attachCity(cat, input.city);
+  for (const p of input.partners ?? []) attachPartner(cat, p);
+  if (input.reports?.length) attachReports(cat, input.reports);
+  for (const r of cat.recs) finishSearch(r);
+  return cat;
+}
+
+// ---------- Presentation ----------
+const RANK: FeatureKey[] = ['step_free_entrance', 'entrance_steps', 'accessible_toilet', 'lift', 'ramp', 'stair_lift', 'door_width', 'difficult_building', 'automatic_door', 'disabled_parking', 'staff_assistance', 'sign_language', 'hearing_loop', 'seating', 'surface'];
+const SOURCE_PRIORITY: Record<string, number> = { city: 0, map: 1, partner: 2, example: 2, unverified: 3 };
+const known = (f: AccessFeature) => f.value !== 'unknown';
+export function conflictsOf(features: AccessFeature[]): FeatureKey[] {
+  const values = new Map<FeatureKey, Set<FeatureValue>>();
+  for (const f of features) { if (!known(f)) continue; const s = values.get(f.key) ?? new Set(); s.add(f.value); values.set(f.key, s); }
+  return RANK.filter(k => { const s = values.get(k); return !!s && s.has('yes') && s.has('no'); });
+}
+function summaryOf(r: Rec, locale: Locale, origin?: { lat: number; lon: number }): PlaceObjectSummary & { conflicts: FeatureKey[] } {
+  const statusOf = new Map(r.sources.map(s => [s.id, s.status]));
+  const prio = (f: AccessFeature) => SOURCE_PRIORITY[statusOf.get(f.sourceId) ?? 'unverified'] ?? 9;
+  const sorted = [...r.features].sort((a, b) => RANK.indexOf(a.key) - RANK.indexOf(b.key) || prio(a) - prio(b));
+  const highlights: AccessFeature[] = [];
+  for (const f of sorted) if (known(f) && !highlights.some(h => h.key === f.key) && highlights.length < 4) highlights.push(f);
+  // Overall wheelchair value as stated by the best source for step-free entrance (city > map object > map entrance > partner).
+  const entranceSources = new Set(r.sources.filter(s => s.labelKey === 'osmEntrance').map(s => s.id));
+  const rank = (f: AccessFeature) => prio(f) * 2 + (entranceSources.has(f.sourceId) ? 1 : 0);
+  const entrance = r.features.filter(f => f.key === 'step_free_entrance' && known(f)).sort((a, b) => rank(a) - rank(b))[0];
+  // Different entrances of one building legitimately differ (e.g. steps at the front, ramp from the yard), so entrance-node
+  // facts are shown as details but do not create conflicts; conflicts are between whole-object claims of different sources.
+  const conflicts = conflictsOf(r.features.filter(f => !entranceSources.has(f.sourceId)));
+  const toiletValue = r.category === 'toilet' ? r.features.find(f => f.key === 'accessible_toilet')?.value : undefined;
+  const name = r.names[locale] ?? r.name ?? UNNAMED_TOILET[locale];
+  return {
+    id: r.id, name, category: r.category, categoryLabel: categoryLabel(r.category, locale), lat: r.lat, lon: r.lon,
+    ...(r.address ? { address: r.address } : {}),
+    wheelchair: entrance?.value ?? toiletValue ?? 'unknown', highlights,
+    knownCount: new Set(r.features.filter(known).map(f => f.key)).size,
+    hasConflict: conflicts.length > 0, conflicts,
+    ...(r.partner ? { partner: r.partner } : {}),
+    ...(origin ? { distance: Math.round(metres(origin, r)) } : {}),
+  };
+}
+function fullOf(r: Rec, locale: Locale): PlaceObject {
+  const { conflicts, ...summary } = summaryOf(r, locale);
+  return {
+    ...summary, conflicts, features: r.features,
+    sources: r.sources.map(({ labelKey, observation, note, ...s }) => ({
+      ...s,
+      label: labelKey === 'userObservation' ? `${LABELS.user[locale]}: ${OBSERVATION_LABELS[observation ?? 'other'][locale]}` : LABELS[labelKey][locale],
+      ...(note ? { note } : {}),
+    })),
+    ...(r.website ? { website: r.website } : {}), ...(r.openingHours ? { openingHours: r.openingHours } : {}), ...(r.description ? { description: r.description } : {}),
+  };
+}
+
+const knownKeys = (r: Rec) => new Set(r.features.filter(known).map(f => f.key)).size;
+/** Promoted partners are lifted only when within this distance of the user's point (if given). */
+const PROMOTION_RADIUS = 5000;
+export function queryCatalog(cat: Catalog, query: ObjectQuery): PlaceObjectSummary[] {
+  const locale = query.locale ?? 'pl';
+  const limit = Math.min(Math.max(query.limit ?? 30, 1), 100);
+  const origin = query.lat !== undefined && query.lon !== undefined ? { lat: query.lat, lon: query.lon } : undefined;
+  const tokens = words(query.q ?? '');
+  const scored: { r: Rec; score: number; d: number }[] = [];
+  for (const r of cat.recs) {
+    if (query.category && r.category !== query.category) continue;
+    if (query.withData && !knownKeys(r)) continue;
+    let score = 0;
+    if (tokens.length) {
+      let ok = true;
+      for (const t of tokens) {
+        if (r.searchName.some(w => w === t)) score += 3;
+        else if (r.searchName.some(w => w.startsWith(t))) score += 2;
+        else if (r.searchExtra.some(w => w.startsWith(t))) score += 1;
+        else { ok = false; break; }
+      }
+      if (!ok) continue;
+    }
+    scored.push({ r, score, d: origin ? metres(origin, r) : 0 });
+  }
+  const promoted = (x: { r: Rec; d: number }) => !!x.r.partner?.promoted && (!origin || x.d <= PROMOTION_RADIUS);
+  // With a text query: relevance, then distance. Without: objects with more known facts first, then distance,
+  // so "no data" entries do not crowd the top. Promoted partners always lead within the matched set (flagged).
+  const byData = (a: { r: Rec }, b: { r: Rec }) => knownKeys(b.r) - knownKeys(a.r);
+  const byDistance = (a: { d: number }, b: { d: number }) => (origin ? a.d - b.d : 0);
+  scored.sort((a, b) => Number(promoted(b)) - Number(promoted(a))
+    || (tokens.length ? b.score - a.score || byDistance(a, b) || byData(a, b) : byData(a, b) || byDistance(a, b))
+    || (a.r.name ?? '').localeCompare(b.r.name ?? '', 'pl'));
+  return scored.slice(0, limit).map(x => { const { conflicts: _c, ...s } = summaryOf(x.r, locale, origin); return s; });
+}
+export function getFromCatalog(cat: Catalog, id: string, locale: Locale = 'pl'): PlaceObject | null {
+  const r = cat.byId.get(id);
+  return r ? fullOf(r, locale) : null;
+}
+
+// ---------- Partner submissions ----------
+const featureKeys = ['step_free_entrance', 'entrance_steps', 'ramp', 'lift', 'stair_lift', 'door_width', 'automatic_door', 'accessible_toilet', 'disabled_parking', 'seating', 'sign_language', 'hearing_loop', 'staff_assistance', 'difficult_building', 'surface'] as const satisfies readonly FeatureKey[];
+const categories = ['museum', 'landmark', 'culture', 'office', 'toilet', 'hotel', 'food', 'health', 'park', 'parking', 'other'] as const satisfies readonly ObjectCategory[];
+export const partnerSubmissionSchema = z.object({
+  name: z.string().trim().min(2).max(160),
+  category: z.enum(categories),
+  lat: z.number().min(49.94).max(50.2),
+  lon: z.number().min(19.75).max(20.25),
+  address: z.string().trim().max(200).optional(),
+  website: z.url({ protocol: /^https?$/ }).max(300).optional(),
+  contactEmail: z.email().max(200),
+  features: z.array(z.object({ key: z.enum(featureKeys), value: z.enum(['yes', 'limited', 'no', 'unknown']), detail: z.string().trim().max(200).optional() })).max(30)
+    .refine(list => new Set(list.map(f => f.key)).size === list.length, 'Each feature key may appear once.'),
+  description: z.string().trim().max(600).optional(),
+  promote: z.boolean(),
+  plan: z.enum(['free', 'partner']),
+  existingObjectId: z.string().max(120).optional(),
+}).strict();
+export type PartnerSubmission = z.infer<typeof partnerSubmissionSchema>;
+export class PartnerInputError extends Error {}
+
+// ---------- Lazy singleton over files + SQLite ----------
+type Base = { osm: OsmFile | null; city: CityVenuesFile | null };
+let base: Base | undefined;
+let cached: { cat: Catalog; at: number } | undefined;
+const OVERLAY_TTL = 15_000;
+function loadBase(): Base {
+  if (base) return base;
+  const root = /* turbopackIgnore: true */ process.cwd();
+  const osmFile = path.join(root, 'data/krakow-objects.json.gz');
+  const cityFile = path.join(root, 'data/krakow-city-venues.json');
+  base = {
+    osm: existsSync(osmFile) ? JSON.parse(gunzipSync(readFileSync(osmFile)).toString('utf8')) as OsmFile : null,
+    city: existsSync(cityFile) ? JSON.parse(readFileSync(cityFile, 'utf8')) as CityVenuesFile : null,
+  };
+  return base;
+}
+async function store() { return import('./server'); }
+function ensurePartnerTable(db: import('node:sqlite').DatabaseSync) {
+  db.exec('CREATE TABLE IF NOT EXISTS partner_objects (id TEXT PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL)');
+}
+async function catalog(): Promise<Catalog> {
+  if (cached && Date.now() - cached.at < OVERLAY_TTL) return cached.cat;
+  const { db, listReports } = await store();
+  ensurePartnerTable(db());
+  const partners = (db().prepare('SELECT body FROM partner_objects ORDER BY rowid').all() as { body: string }[]).map(r => JSON.parse(r.body) as PartnerRecord);
+  const demo = process.env.KROK_DEMO_PARTNER === '0' ? [] : [DEMO_PARTNER];
+  // The base (OSM + city) is parsed once; rebuilding records from it with the overlay takes a few ms.
+  const cat = buildCatalog({ ...loadBase(), partners: [...demo, ...partners], reports: listReports() });
+  cached = { cat, at: Date.now() };
+  return cat;
+}
+export async function listObjects(query: ObjectQuery): Promise<PlaceObjectSummary[]> { return queryCatalog(await catalog(), query); }
+export async function getObject(id: string, locale: Locale = 'pl'): Promise<PlaceObject | null> { return getFromCatalog(await catalog(), id, locale); }
+/** Validate and store a partner submission; returns the public object (contact e-mail is never included). */
+export async function savePartnerObject(input: unknown, locale: Locale = 'pl'): Promise<PlaceObject> {
+  const data = partnerSubmissionSchema.parse(input);
+  if (data.existingObjectId && !(await catalog()).byId.has(data.existingObjectId)) throw new PartnerInputError('existingObjectId');
+  const record: PartnerRecord = { ...data, id: randomUUID(), obtainedAt: new Date().toISOString() };
+  const { db } = await store();
+  ensurePartnerTable(db());
+  db().prepare('INSERT INTO partner_objects (id, body, created_at) VALUES (?, ?, ?)').run(record.id, JSON.stringify(record), record.obtainedAt);
+  cached = undefined;
+  const object = await getObject(data.existingObjectId ?? `partner-${record.id}`, locale);
+  if (!object) throw new Error('Partner object not found after save');
+  return object;
+}

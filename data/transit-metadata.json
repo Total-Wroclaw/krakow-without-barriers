@@ -1,0 +1,36 @@
+{
+  "obtainedAt": "2026-10-03T13:40:59.995053+00:00",
+  "source": "https://gtfs.ztp.krakow.pl/",
+  "feeds": [
+    {
+      "feed": "A",
+      "url": "https://gtfs.ztp.krakow.pl/GTFS_KRK_A.zip",
+      "sha256": "ad37a5cfca38bb919cf5aa8b152217332a78e6a7c69d78cc7dfea2a0ad44cad7",
+      "version": "20260930_20261005",
+      "stops": 2984,
+      "routes": 162,
+      "trips": 86234,
+      "connections": 1746829
+    },
+    {
+      "feed": "M",
+      "url": "https://gtfs.ztp.krakow.pl/GTFS_KRK_M.zip",
+      "sha256": "258672e87d7077c53a68972804cfea8df23f41734895df9a6bfbf521db2b9062",
+      "version": "1684_1685",
+      "stops": 767,
+      "routes": 33,
+      "trips": 22644,
+      "connections": 426470
+    },
+    {
+      "feed": "T",
+      "url": "https://gtfs.ztp.krakow.pl/GTFS_KRK_T.zip",
+      "sha256": "450d5f7ae7e086e0d471b09bd26441eaf81ac1d1f8a417e4ebe419e421597403",
+      "version": "20261002",
+      "stops": 352,
+      "routes": 23,
+      "trips": 15361,
+      "connections": 415982
+    }
+  ]
+}

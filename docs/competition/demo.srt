@@ -1,0 +1,34 @@
+1
+00:00:00,000 --> 00:00:08,000
+Każdy Krok: czy dam radę przejść tę trasę dzisiaj?
+Polski prototyp. Preferencje dotyczą barier, nie diagnozy.
+
+2
+00:00:08,000 --> 00:00:20,000
+AI przygotowuje szkic dzisiejszych potrzeb. Użytkownik go zatwierdza.
+Trasy liczy deterministyczny graf OSM, nie model językowy.
+
+3
+00:00:20,000 --> 00:00:40,000
+Kraków: dojścia piesze + planowy rozkład tramwajów i autobusów ZTP.
+Mapa i równoważna lista. Ortofotomapa GUGiK nie jest obrazem na żywo.
+
+4
+00:00:40,000 --> 00:01:04,000
+Wawel: około 409 m bez schodów oznaczonych w grafie
+lub 378 m z jednym odcinkiem schodów. Dystans z geometrii OSM.
+
+5
+00:01:04,000 --> 00:01:20,000
+Brak danych nie oznacza dostępności.
+Źródło, data pozyskania i nieznana weryfikacja pozostają widoczne.
+
+6
+00:01:20,000 --> 00:01:32,000
+Zdjęcie w tej demonstracji jest ilustracją testową.
+Nie przedstawia rzeczywistej obserwacji terenowej w Krakowie.
+
+7
+00:01:32,000 --> 00:01:51,000
+AI tworzy szkic. Użytkownik poprawia opis i potwierdza treść.
+Zapis jest trwały, a zgłoszenie nadal niezweryfikowane.

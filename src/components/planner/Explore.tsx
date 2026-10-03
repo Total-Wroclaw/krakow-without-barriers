@@ -1,0 +1,207 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { Check, CircleHelp, Minus, Search, Star, Store, TriangleAlert, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import type { AccessFeature, FeatureValue, ObjectCategory, PlaceObjectSummary } from '@/lib/explore-types';
+import { distance } from '@/lib/format';
+import { useI18n } from '@/lib/i18n/client';
+import { cn } from '@/lib/utils';
+
+export const categories: ObjectCategory[] = ['museum', 'landmark', 'culture', 'office', 'toilet', 'hotel', 'health', 'park', 'food'];
+
+export const valueStyle: Record<FeatureValue, { icon: typeof Check; className: string }> = {
+  yes: { icon: Check, className: 'bg-rest-soft text-rest' },
+  limited: { icon: Minus, className: 'bg-barrier-soft text-barrier' },
+  no: { icon: X, className: 'bg-barrier-soft text-barrier' },
+  unknown: { icon: CircleHelp, className: 'bg-muted text-muted-foreground' },
+};
+
+/** For these keys "yes" describes a barrier (e.g. steps at the entrance), so colours invert. */
+const barrierKeys = new Set(['entrance_steps', 'difficult_building']);
+export function featureStyle(feature: AccessFeature) {
+  if (barrierKeys.has(feature.key) && (feature.value === 'yes' || feature.value === 'no')) {
+    return feature.value === 'yes' ? { icon: TriangleAlert, className: valueStyle.no.className } : { icon: Check, className: valueStyle.yes.className };
+  }
+  return valueStyle[feature.value];
+}
+
+export function FeatureChip({ feature }: { feature: AccessFeature }) {
+  const { t } = useI18n();
+  const { icon: Icon, className } = featureStyle(feature);
+  return (
+    <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium', className)}>
+      <Icon className="size-3.5" aria-hidden />
+      {t(`feature.${feature.key}`)}
+      <span className="sr-only">: {t(`fvalue.${feature.value}`)}</span>
+    </span>
+  );
+}
+
+export function PartnerBadges({ partner }: { partner?: PlaceObjectSummary['partner'] }) {
+  const { t } = useI18n();
+  if (!partner) return null;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {partner.promoted ? (
+        <span className="inline-flex items-center gap-1 rounded-md bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">
+          <Star className="size-3" aria-hidden />
+          {t('explore.promoted')}
+        </span>
+      ) : (
+        <span className="rounded-md bg-accent px-1.5 py-0.5 text-xs font-semibold text-accent-foreground">{t('explore.partner')}</span>
+      )}
+      {partner.example ? <span className="rounded-md bg-barrier-soft px-1.5 py-0.5 text-xs font-semibold text-barrier">{t('explore.example')}</span> : null}
+    </span>
+  );
+}
+
+type Props = {
+  center: { lat: number; lon: number };
+  selectedId: string | null;
+  onResults: (objects: PlaceObjectSummary[]) => void;
+  onSelect: (id: string) => void;
+  onOwner: () => void;
+};
+
+export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Props) {
+  const { t, tp, locale } = useI18n();
+  const [category, setCategory] = useState<ObjectCategory | 'all'>('museum');
+  const [query, setQuery] = useState('');
+  const [withData, setWithData] = useState(true);
+  const [state, setState] = useState<{ loading: boolean; error: string; objects: PlaceObjectSummary[] }>({ loading: true, error: '', objects: [] });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setState(s => ({ ...s, loading: true, error: '' }));
+      try {
+        const params = new URLSearchParams({ locale, lat: String(center.lat), lon: String(center.lon), limit: '40' });
+        if (category !== 'all') params.set('category', category);
+        if (query.trim().length >= 2) params.set('q', query.trim());
+        if (withData) params.set('withData', '1');
+        const res = await fetch(`/api/objects?${params}`, { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        setState({ loading: false, error: '', objects: data.objects });
+        onResults(data.objects);
+      } catch {
+        if (!controller.signal.aborted) {
+          setState({ loading: false, error: t('explore.failed'), objects: [] });
+          onResults([]);
+        }
+      }
+    }, 200);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+    // The centre is read when the query changes; panning alone does not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, query, locale, withData]);
+
+  return (
+    <div className="flex flex-col gap-4 px-4 pb-10">
+      <h1 className="sr-only">{t('explore.h1')}</h1>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          type="search"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          aria-label={t('explore.search')}
+          placeholder={t('explore.searchPlaceholder')}
+          className="h-12 rounded-xl bg-card pl-10 text-base"
+        />
+      </div>
+      <ToggleGroup
+        type="single"
+        value={category}
+        onValueChange={v => v && setCategory(v as ObjectCategory | 'all')}
+        aria-label={t('explore.categories')}
+        className="-mx-4 flex w-auto justify-start gap-2 overflow-x-auto px-4 pb-1"
+      >
+        {(['all', ...categories] as const).map(c => (
+          <ToggleGroupItem
+            key={c}
+            value={c}
+            className="h-10 shrink-0 rounded-full! border bg-card px-4 text-sm data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          >
+            {c === 'all' ? t('explore.all') : t(`cat.${c}`)}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      <div className="flex items-center justify-between gap-3 px-1">
+        <Label htmlFor="with-data" className="text-sm font-normal">{t('explore.withData')}</Label>
+        <Switch id="with-data" checked={withData} onCheckedChange={setWithData} />
+      </div>
+
+      <section aria-labelledby="explore-results" aria-busy={state.loading} className="flex flex-col gap-3">
+        <h2 id="explore-results" className="px-1 text-lg font-bold">
+          {state.loading ? t('explore.loading') : tp('explore.count', state.objects.length)}
+        </h2>
+        <p className="sr-only" role="status">{state.loading ? t('explore.loading') : tp('explore.count', state.objects.length)}</p>
+        {state.loading && !state.objects.length ? (
+          [0, 1, 2].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)
+        ) : state.error ? (
+          <p className="rounded-xl border bg-card p-4 font-medium">{state.error}</p>
+        ) : !state.objects.length ? (
+          <p className="rounded-xl border bg-card p-4 text-muted-foreground">{t('explore.empty')}</p>
+        ) : (
+          <ul className={cn('flex flex-col gap-2', state.loading && 'opacity-60')}>
+            {state.objects.map(o => (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(o.id)}
+                  aria-current={o.id === selectedId ? 'true' : undefined}
+                  className={cn(
+                    'flex w-full flex-col gap-2 rounded-xl border bg-card p-3.5 text-left hover:border-primary/60',
+                    o.id === selectedId ? 'border-primary ring-2 ring-primary/25' : 'border-border',
+                    o.partner?.promoted && 'border-primary/40',
+                  )}
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="min-w-0">
+                      <span className="block font-semibold">{o.name}</span>
+                      <span className="block text-sm text-muted-foreground">
+                        {o.categoryLabel}
+                        {o.distance !== undefined ? `, ${t('explore.distance', { distance: distance(o.distance, locale) })}` : ''}
+                      </span>
+                    </span>
+                    <PartnerBadges partner={o.partner} />
+                  </span>
+                  {o.highlights.length ? (
+                    <span className="flex flex-wrap gap-1.5">
+                      {o.highlights.map(f => <FeatureChip key={`${f.key}-${f.sourceId}`} feature={f} />)}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">{t('explore.noData')}</span>
+                  )}
+                  <span className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    {o.knownCount ? tp('explore.known', o.knownCount) : null}
+                    {o.hasConflict ? (
+                      <span className="inline-flex items-center gap-1 font-semibold text-barrier">
+                        <TriangleAlert className="size-3.5" aria-hidden />
+                        {t('explore.conflict')}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <Button variant="secondary" className="h-11 self-start" onClick={onOwner}>
+        <Store />
+        {t('explore.owner')}
+      </Button>
+    </div>
+  );
+}

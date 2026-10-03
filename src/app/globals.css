@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Każdy Krok palette — Kraków tram blue, crest red for trams, navy ink.
+ * Amber marks barriers, teal marks rest. All text pairs meet WCAG AA.
+ */
+:root {
+  --ink: #14213d;
+  --canvas: #eef1f5;
+  --surface: #ffffff;
+  --tram-blue: #2443b0;
+  --crest-red: #c4122f;
+  --barrier: #a1460a;
+  --barrier-soft: #fdecc8;
+  --rest: #0f766e;
+  --rest-soft: #d5f0ec;
+  --report: #6d28d9;
+  --walk: #14213d;
+  --drive: #0e6c80;
+  --object: #7a3e9d;
+
+  --radius: 0.875rem;
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--tram-blue);
+  --primary-foreground: #ffffff;
+  --secondary: #e2e7f0;
+  --secondary-foreground: var(--ink);
+  --muted: #e6eaf0;
+  --muted-foreground: #4a5672;
+  --accent: #e3e9fb;
+  --accent-foreground: #1b348c;
+  --destructive: #b3122a;
+  --border: #d3d9e3;
+  --input: #a7b1c2;
+  --ring: #2443b0;
+}
+
+@theme inline {
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ink: var(--ink);
+  --color-tram: var(--crest-red);
+  --color-bus: var(--tram-blue);
+  --color-barrier: var(--barrier);
+  --color-barrier-soft: var(--barrier-soft);
+  --color-rest: var(--rest);
+  --color-rest-soft: var(--rest-soft);
+  --color-report: var(--report);
+  --color-drive: var(--drive);
+  --color-object: var(--object);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* MapLibre: keep attribution legible and controls touch-sized. */
+.maplibregl-ctrl-attrib {
+  font-size: 11px;
+}
+.maplibregl-ctrl-group button {
+  width: 40px;
+  height: 40px;
+}
+.map-marker:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+.hide-minor .map-minor {
+  visibility: hidden;
+}
+.maplibregl-ctrl-attrib-button {
+  min-width: 24px;
+  min-height: 24px;
+}

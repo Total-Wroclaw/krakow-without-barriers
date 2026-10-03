@@ -1,0 +1,725 @@
+{
+ "v": 1,
+ "source": {
+  "url": "https://www.krakow.pl/getHtml?dok_id=2848",
+  "title": "Dostępność budynków Urzędu Miasta Krakowa i Miejskich Jednostek Organizacyjnych",
+  "obtainedAt": "2026-10-03T17:11:02.692Z",
+  "sha256": "6c779787fd7a94c70125e0a8937ef54b87c3c6a3a26197169d84e8e55d339c94",
+  "publisher": "Urząd Miasta Krakowa"
+ },
+ "venues": [
+  {
+   "id": "budynek-magistratu",
+   "name": "Budynek Magistratu",
+   "address": "Plac Wszystkich Świętych 3-4",
+   "adaptations": [
+    "platforma zamontowana w klatce schodowej „F\" (wejście od strony dziedzińca urzędu). Urządzenie wyposażone w napęd elektryczny, umożliwia dostęp na I, II i III piętro - odpowiednio do gabinetu Prezydenta i jego Zastępców, Przewodniczącej Rady Miasta, Sali Obrad, a także pokoi klubowych radnych",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym",
+    "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+   ],
+   "features": [
+    {
+     "key": "stair_lift",
+     "value": "yes",
+     "detail": "platforma zamontowana w klatce schodowej „F\" (wejście od strony dziedzińca urzędu). Urządzenie wyposażone w napęd elektryczny, umożliwia dostęp na I, II i III piętro - odpowiednio do gabinetu Prezydenta i jego Zastępców, Przewodniczącej Rady Miasta, Sali Obrad, a także pokoi klubowych radnych"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    },
+    {
+     "key": "staff_assistance",
+     "value": "yes",
+     "detail": "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.05875,
+   "lon": 19.93699,
+   "geocode": {
+    "status": "resolved",
+    "match": "Plac Wszystkich Świętych 3, Stare Miasto, 31-004 Kraków",
+    "osmRef": "osm:n2998640008"
+   }
+  },
+  {
+   "id": "wydzial-kultury-i-dziedzictwa-narodowego",
+   "name": "Wydział Kultury i Dziedzictwa Narodowego",
+   "address": "Plac Wszystkich Świętych 11",
+   "adaptations": [
+    "dostępny schodołaz z Placu Wszystkich Świętych 3-4",
+    "budynek trudny architektonicznie, wiele ciągów schodowych"
+   ],
+   "features": [
+    {
+     "key": "stair_lift",
+     "value": "yes",
+     "detail": "dostępny schodołaz z Placu Wszystkich Świętych 3-4"
+    },
+    {
+     "key": "difficult_building",
+     "value": "yes",
+     "detail": "budynek trudny architektonicznie, wiele ciągów schodowych"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.05924,
+   "lon": 19.93753,
+   "geocode": {
+    "status": "resolved",
+    "match": "Plac Wszystkich Świętych 11, Stare Miasto, Kraków",
+    "osmRef": "osm:n3090818948"
+   }
+  },
+  {
+   "id": "wydzial-geodezji",
+   "name": "Wydział Geodezji",
+   "address": "Ulica Grunwaldzka 8",
+   "adaptations": [
+    "podjazd",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "podjazd"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.0673,
+   "lon": 19.96504,
+   "geocode": {
+    "status": "resolved",
+    "match": "Grunwaldzka 8, Osiedle Oficerskie, 31-526 Kraków",
+    "osmRef": "osm:w72471675"
+   }
+  },
+  {
+   "id": "wydzial-skarbu-miasta",
+   "name": "Wydział Skarbu Miasta",
+   "address": "Ulica Kasprowicza 29",
+   "adaptations": [
+    "schodołaz",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym",
+    "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+   ],
+   "features": [
+    {
+     "key": "stair_lift",
+     "value": "yes",
+     "detail": "schodołaz"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    },
+    {
+     "key": "staff_assistance",
+     "value": "yes",
+     "detail": "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.068,
+   "lon": 19.96786,
+   "geocode": {
+    "status": "resolved",
+    "match": "Jana Kasprowicza 29, Osiedle Oficerskie, Kraków",
+    "osmRef": "osm:w73991369"
+   }
+  },
+  {
+   "id": "krakowskie-centrum-swiadczen",
+   "name": "Krakowskie Centrum Świadczeń",
+   "address": "Ulica Stachowicza 18",
+   "adaptations": [
+    "podjazd dla wózków od strony podwórka",
+    "winda",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "podjazd dla wózków od strony podwórka"
+    },
+    {
+     "key": "lift",
+     "value": "yes",
+     "detail": "winda"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.05502,
+   "lon": 19.92192,
+   "geocode": {
+    "status": "resolved",
+    "match": "Michała Stachowicza 18, Półwsie Zwierzynieckie, 30-103 Kraków",
+    "osmRef": "osm:w233092352"
+   }
+  },
+  {
+   "id": "wydzial-architektury-i-urbanistyki",
+   "name": "Wydział Architektury i Urbanistyki",
+   "address": "Ulica Mogilska 41",
+   "adaptations": [
+    "podjazd",
+    "wideofon",
+    "szeroka winda",
+    "WC przystosowane dla osób niepełnosprawnych na parterze",
+    "obsługa w języku migowym"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "podjazd"
+    },
+    {
+     "key": "staff_assistance",
+     "value": "yes",
+     "detail": "wideofon"
+    },
+    {
+     "key": "lift",
+     "value": "yes",
+     "detail": "szeroka winda"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych na parterze"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.06599,
+   "lon": 19.96689,
+   "geocode": {
+    "status": "resolved",
+    "match": "Mogilska 41, Osiedle Oficerskie, 31-545 Kraków",
+    "osmRef": "osm:w174349663"
+   }
+  },
+  {
+   "id": "wydzial-ksztaltowania-srodowiska",
+   "name": "Wydział Kształtowania Środowiska",
+   "address": "Osiedle Zgody 2",
+   "adaptations": [
+    "podjazd",
+    "winda",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "podjazd"
+    },
+    {
+     "key": "lift",
+     "value": "yes",
+     "detail": "winda"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.07691,
+   "lon": 20.03189,
+   "geocode": {
+    "status": "resolved",
+    "match": "Osiedle Zgody 2, Nowa Huta, Kraków",
+    "osmRef": "osm:n968533021"
+   }
+  },
+  {
+   "id": "wydzial-mieszkalnictwa",
+   "name": "Wydział Mieszkalnictwa",
+   "address": "Rynek Podgórski 1",
+   "adaptations": [
+    "dostępny schodołaz",
+    "obsługa w języku migowym",
+    "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+   ],
+   "features": [
+    {
+     "key": "stair_lift",
+     "value": "yes",
+     "detail": "dostępny schodołaz"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    },
+    {
+     "key": "staff_assistance",
+     "value": "yes",
+     "detail": "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.04474,
+   "lon": 19.94985,
+   "geocode": {
+    "status": "resolved",
+    "match": "Rynek Podgórski 1, Stare Podgórze, Kraków",
+    "osmRef": "osm:n2066046430"
+   }
+  },
+  {
+   "id": "wydzial-spraw-administracyjnych",
+   "name": "Wydział Spraw Administracyjnych",
+   "address": "Aleja Powstania Warszawskiego 10",
+   "adaptations": [
+    "dwa podjazdy",
+    "winda",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "dwa podjazdy"
+    },
+    {
+     "key": "lift",
+     "value": "yes",
+     "detail": "winda"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.06181,
+   "lon": 19.96111,
+   "geocode": {
+    "status": "resolved",
+    "match": "Aleja Powstania Warszawskiego 10, Grzegórzki, 31-542 Kraków",
+    "osmRef": "osm:n4017185294"
+   }
+  },
+  {
+   "id": "wydzial-sportu",
+   "name": "Wydział Sportu",
+   "address": "Aleja Powstania Warszawskiego 10",
+   "adaptations": [
+    "dwa podjazdy",
+    "winda",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "dwa podjazdy"
+    },
+    {
+     "key": "lift",
+     "value": "yes",
+     "detail": "winda"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.06181,
+   "lon": 19.96111,
+   "geocode": {
+    "status": "resolved",
+    "match": "Aleja Powstania Warszawskiego 10, Grzegórzki, 31-542 Kraków",
+    "osmRef": "osm:n4017185294"
+   }
+  },
+  {
+   "id": "urzad-stanu-cywilnego",
+   "name": "Urząd Stanu Cywilnego",
+   "address": "Ulica Lubelska 27",
+   "adaptations": [
+    "dostępny schodołaz",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "obsługa w języku migowym",
+    "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+   ],
+   "features": [
+    {
+     "key": "stair_lift",
+     "value": "yes",
+     "detail": "dostępny schodołaz"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "sign_language",
+     "value": "yes",
+     "detail": "obsługa w języku migowym"
+    },
+    {
+     "key": "staff_assistance",
+     "value": "yes",
+     "detail": "możliwość zejścia urzędnika do osoby niepełnosprawnej"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.07427,
+   "lon": 19.93473,
+   "geocode": {
+    "status": "resolved",
+    "match": "Lubelska 27, Nowy Kleparz, 30-003 Kraków",
+    "osmRef": "osm:w233355309"
+   }
+  },
+  {
+   "id": "miejski-osrodek-pomocy-spolecznej",
+   "name": "Miejski Ośrodek Pomocy Społecznej",
+   "address": "Ulica Józefińska 14",
+   "adaptations": [
+    "podjazd",
+    "winda",
+    "WC przystosowane dla osób niepełnosprawnych"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "podjazd"
+    },
+    {
+     "key": "lift",
+     "value": "yes",
+     "detail": "winda"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.04586,
+   "lon": 19.95054,
+   "geocode": {
+    "status": "resolved",
+    "match": "Józefińska 14, Stare Podgórze, 30-529 Kraków",
+    "osmRef": "osm:n1481012064"
+   }
+  },
+  {
+   "id": "zarzad-budynkow-komunalnych",
+   "name": "Zarząd Budynków Komunalnych",
+   "address": "Ulica Czerwieńskiego 16",
+   "adaptations": [
+    "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach",
+    "WC przystosowane dla osób niepełnosprawnych"
+   ],
+   "features": [
+    {
+     "key": "step_free_entrance",
+     "value": "yes",
+     "detail": "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    }
+   ],
+   "unmapped": [],
+   "lat": null,
+   "lon": null,
+   "geocode": {
+    "status": "unresolved",
+    "reason": "Adresu „Ulica Czerwieńskiego 16” nie ma w lokalnym indeksie adresów OSM"
+   }
+  },
+  {
+   "id": "zarzad-drog-miasta-krakowa",
+   "name": "Zarząd Dróg Miasta Krakowa",
+   "address": "Ulica Centralna 53",
+   "adaptations": [
+    "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach",
+    "WC przystosowane dla osób niepełnosprawnych"
+   ],
+   "features": [
+    {
+     "key": "step_free_entrance",
+     "value": "yes",
+     "detail": "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.06354,
+   "lon": 20.00753,
+   "geocode": {
+    "status": "resolved",
+    "match": "Centralna 53, Czyżyny, 31-586 Kraków",
+    "osmRef": "osm:n1262809162"
+   }
+  },
+  {
+   "id": "zarzad-infrastruktury-sportowej",
+   "name": "Zarząd Infrastruktury Sportowej",
+   "address": "Ulica Walerego Sławka 10",
+   "adaptations": [
+    "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach",
+    "WC przystosowane dla osób niepełnosprawnych",
+    "brak możliwości wjazdu na wyższe piętra"
+   ],
+   "features": [
+    {
+     "key": "step_free_entrance",
+     "value": "yes",
+     "detail": "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    },
+    {
+     "key": "lift",
+     "value": "no",
+     "detail": "brak możliwości wjazdu na wyższe piętra"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.02601,
+   "lon": 19.95823,
+   "geocode": {
+    "status": "resolved",
+    "match": "Walerego Sławka 10, Wola Duchacka, Kraków",
+    "osmRef": "osm:w93949103"
+   }
+  },
+  {
+   "id": "zarzad-cmentarzy-komunalnych",
+   "name": "Zarząd Cmentarzy Komunalnych",
+   "address": "Ulica Rakowicka 26",
+   "adaptations": [
+    "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach",
+    "WC przystosowane dla osób niepełnosprawnych"
+   ],
+   "features": [
+    {
+     "key": "step_free_entrance",
+     "value": "yes",
+     "detail": "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.07386,
+   "lon": 19.95424,
+   "geocode": {
+    "status": "resolved",
+    "match": "Rakowicka 26, Przedmieście Warszawskie, 31-510 Kraków",
+    "osmRef": "osm:w131317666"
+   }
+  },
+  {
+   "id": "zarzad-zieleni-miejskiej",
+   "name": "Zarząd Zieleni Miejskiej",
+   "address": "Ulica Reymonta 20",
+   "adaptations": [
+    "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach",
+    "WC przystosowane dla osób niepełnosprawnych"
+   ],
+   "features": [
+    {
+     "key": "step_free_entrance",
+     "value": "yes",
+     "detail": "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.06351,
+   "lon": 19.91297,
+   "geocode": {
+    "status": "resolved",
+    "match": "Władysława Reymonta 20, Czarna Wieś, 30-059 Kraków",
+    "osmRef": "osm:n4014209137"
+   }
+  },
+  {
+   "id": "grodzki-urzad-pracy",
+   "name": "Grodzki Urząd Pracy",
+   "address": "Ulica Wąwozowa 34",
+   "adaptations": [
+    "budynek niedostosowany"
+   ],
+   "features": [
+    {
+     "key": "step_free_entrance",
+     "value": "no",
+     "detail": "budynek niedostosowany"
+    },
+    {
+     "key": "difficult_building",
+     "value": "yes",
+     "detail": "budynek niedostosowany"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.08642,
+   "lon": 20.05951,
+   "geocode": {
+    "status": "resolved",
+    "match": "Wąwozowa 34, Krzesławice, 31-752 Kraków",
+    "osmRef": "osm:n1420867019"
+   }
+  },
+  {
+   "id": "zarzad-transportu-publicznego",
+   "name": "Zarząd Transportu Publicznego",
+   "address": "Ulica Wielopole 1",
+   "adaptations": [
+    "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach",
+    "WC przystosowane dla osób niepełnosprawnych"
+   ],
+   "features": [
+    {
+     "key": "step_free_entrance",
+     "value": "yes",
+     "detail": "wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC przystosowane dla osób niepełnosprawnych"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.05903,
+   "lon": 19.94318,
+   "geocode": {
+    "status": "resolved",
+    "match": "Wielopole 1, Stare Miasto, Kraków",
+    "osmRef": "osm:n1937519509"
+   }
+  },
+  {
+   "id": "powiatowy-inspektorat-nadzoru-budowlanego",
+   "name": "Powiatowy Inspektorat Nadzoru Budowlanego",
+   "address": "Ulica Wielicka 28 a",
+   "adaptations": [
+    "podjazd",
+    "winda",
+    "WC dostosowane dla osób niepełnosprawnych"
+   ],
+   "features": [
+    {
+     "key": "ramp",
+     "value": "yes",
+     "detail": "podjazd"
+    },
+    {
+     "key": "lift",
+     "value": "yes",
+     "detail": "winda"
+    },
+    {
+     "key": "accessible_toilet",
+     "value": "yes",
+     "detail": "WC dostosowane dla osób niepełnosprawnych"
+    }
+   ],
+   "unmapped": [],
+   "lat": 50.03877,
+   "lon": 19.96637,
+   "geocode": {
+    "status": "resolved",
+    "match": "Wielicka 28a, Podgórze, Kraków",
+    "osmRef": "osm:w69416684"
+   }
+  }
+ ],
+ "unresolved": [
+  "Zarząd Budynków Komunalnych — Ulica Czerwieńskiego 16"
+ ]
+}

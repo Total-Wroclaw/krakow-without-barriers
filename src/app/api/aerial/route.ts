@@ -1,14 +1,14 @@
 import { z } from 'zod';
-import { aerialBbox, inFrame, project, roundPoint } from '@/lib/aerial-geo';
+import { aerialBbox, inFrame, project, roundPoint, unproject } from '@/lib/aerial-geo';
 import {
-  analysisHash, cachedAnalysis, linesForPrompt, needsStepFree, objectForPrompt, overlayAt, pinsForPrompt, preferencesForPrompt, preferencesKey, weatherForPrompt,
+  analysisHash, applyRefinement, cachedAnalysis, linesForPrompt, needsStepFree, objectForPrompt, overlayAt, pinsForPrompt, preferencesForPrompt, preferencesKey, weatherForPrompt,
   reportsDigest, reportsNear, sanitiseAnalysis, storeAnalysis, type AnalysisKey,
 } from '@/lib/aerial';
 import { autoWidth, type AerialAnalysis } from '@/lib/aerial-types';
-import { describeAerial } from '@/lib/ai';
+import { describeAerial, locateOnPatches } from '@/lib/ai';
 import { pointSchema } from '@/lib/city-types';
 import { locales } from '@/lib/i18n/locales';
-import { orthoCrop, withPinRings } from '@/lib/imagery';
+import { orthoCrop, orthoPatch, PATCH, patchBbox, withPinRings } from '@/lib/imagery';
 import { getObject } from '@/lib/objects';
 import { preferencesSchema, type Report } from '@/lib/schemas';
 import { boundedJson, guard, listReports } from '@/lib/server';
@@ -26,7 +26,7 @@ const inflight = new Map<string, Promise<AerialAnalysis>>();
 /**
  * POST /api/aerial {lat, lon, name, locale, objectId?, preferences?} — AI recommendation of how to approach and
  * enter a place (which entrance, from which stop/parking, what to avoid, what to ask), read from the auto-framed
- * orthophoto tied to the numbered overlay pins and grounded in OSM/ZTP facts, the place's listed facts, earlier
+ * orthophoto tied to the numbered overlay pins (observations re-checked on close-ups) and grounded in OSM/ZTP facts, the place's listed facts, earlier
  * user reports nearby, today's needs and the current weather. Readings are cached on disk per
  * (place, frame, language, needs, weather bucket, reports digest); only real model calls count towards the AI limit.
  */
@@ -74,8 +74,17 @@ export async function POST(request: Request) {
         },
         input.locale,
       );
+      const reading = sanitiseAnalysis(raw, bbox, overlay.pins, { stepFree: needsStepFree(preferences) });
+      // Positions read off the whole frame are rough; a sharper close-up of each confirms and pins it down.
+      // Without that second look the observations are left out rather than shown in the wrong place.
+      reading.observations = await (async () => {
+        if (!reading.observations.length) return [];
+        const jpegs = await Promise.all(reading.observations.map(o => orthoPatch(o)));
+        const found = await locateOnPatches(reading.observations.map((o, i) => ({ kind: o.kind, label: o.label, jpeg: jpegs[i] })), PATCH.px, PATCH.widthM);
+        return applyRefinement(reading.observations, found.map((pos, i) => (pos ? unproject(pos, patchBbox(reading.observations[i])) : null)), bbox);
+      })().catch(() => []);
       const analysis: AerialAnalysis = {
-        ...sanitiseAnalysis(raw, bbox, overlay.pins, { stepFree: needsStepFree(preferences) }),
+        ...reading,
         widthM,
         basedOn: { mobility: preferences?.mobility ?? null, weather: weather?.condition ?? null, reports: nearReports.length },
         createdAt: new Date().toISOString(),

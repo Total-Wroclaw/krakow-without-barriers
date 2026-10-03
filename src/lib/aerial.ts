@@ -433,9 +433,25 @@ export function sanitiseAnalysis(
   return { recommendation, today: sentences(raw.today, 2), observations: kept };
 }
 
+/**
+ * Applies the second look: each observation moves to where the close-up found it, or is dropped when the close-up
+ * did not confirm it (null). Results leaving the frame or landing on top of another are dropped; letters are
+ * reassigned so the map and the list stay A, B, C…
+ */
+export function applyRefinement(observations: AerialObservation[], found: (Point | null)[], bbox: Bbox): AerialObservation[] {
+  const kept: AerialObservation[] = [];
+  observations.forEach((o, i) => {
+    const point = found[i];
+    if (!point || !inFrame(project(point, bbox))) return;
+    if (kept.some(k => distance(k, point) < 8)) return;
+    kept.push({ ...o, id: String.fromCharCode(65 + kept.length), lat: Math.round(point.lat * 1e6) / 1e6, lon: Math.round(point.lon * 1e6) / 1e6 });
+  });
+  return kept;
+}
+
 // ---------- Analysis cache ----------
 /** Bump when the prompt or the validation changes, so old readings are not served. */
-const ANALYSIS_VERSION = 7;
+const ANALYSIS_VERSION = 8;
 export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; weather: string; reports: string };
 
 /** File name for a reading: everything that changes the text is part of the hash. */

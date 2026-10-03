@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 process.env.KROK_STORAGE_DIR = mkdtempSync(path.join(os.tmpdir(), 'krok-aerial-test-'));
 const { aerialBbox, AERIAL_WIDTHS, compass, distance, fitWidth, frameCorners, inFrame, project, roundPoint, unproject } = await import('../src/lib/aerial-geo');
-const { analysisHash, buildOverlay, cachedAnalysis, cleanSentence, needsStepFree, preferencesForPrompt, preferencesKey, reportsDigest, reportsNear, sanitiseAnalysis, storeAnalysis } = await import('../src/lib/aerial');
+const { analysisHash, applyRefinement, buildOverlay, cachedAnalysis, cleanSentence, needsStepFree, preferencesForPrompt, preferencesKey, reportsDigest, reportsNear, sanitiseAnalysis, storeAnalysis } = await import('../src/lib/aerial');
 const { aerialQuerySchema, autoWidth, overlaySummary, widthSchema } = await import('../src/lib/aerial-types');
 const { conditionOf, parseOpenMeteo, weatherBucket } = await import('../src/lib/weather');
 const { defaultPreferences } = await import('../src/lib/schemas');
@@ -246,6 +246,24 @@ test('AI observations: inside the frame, known kinds, no duplicates, mapped back
   near(pos.x, 0.5, 0.001);
   near(pos.y, 0.25, 0.001);
   assert.deepEqual(result.today, ['Po deszczu bruk przy przystanku [3] bywa śliski.']);
+});
+
+test('close-up check moves confirmed observations, drops the rest and re-letters them', () => {
+  const bbox = aerialBbox(place, 200);
+  const obs = (id: string, x: number, y: number) => ({ id, kind: 'path' as const, label: id, ...unproject({ x, y }, bbox) });
+  const observations = [obs('A', 0.3, 0.3), obs('B', 0.6, 0.6), obs('C', 0.8, 0.2), obs('D', 0.4, 0.7)];
+  const result = applyRefinement(
+    observations,
+    [
+      unproject({ x: 0.32, y: 0.3 }, bbox), // confirmed, nudged
+      null, // not confirmed
+      unproject({ x: 1.2, y: 0.2 }, bbox), // moved out of the frame
+      unproject({ x: 0.3205, y: 0.3 }, bbox), // lands on top of the first one
+    ],
+    bbox,
+  );
+  assert.deepEqual(result.map(o => `${o.id}:${o.label}`), ['A:A']);
+  near(project(result[0], bbox).x, 0.32, 0.001);
 });
 
 const keyFor = (over: Partial<AnalysisKey> = {}): AnalysisKey => ({ ...place, widthM: 130, name: 'Test', locale: 'pl', objectId: null, preferences: 'none', weather: 'none', reports: 'none', ...over });

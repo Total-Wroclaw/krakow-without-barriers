@@ -194,7 +194,7 @@ function Direction({ from, to }: { from: Point; to: Point }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm font-medium">
       <Navigation2 className="size-4 text-primary" style={{ transform: `rotate(${compassAngle[c] ?? 0}deg)` }} aria-hidden />
-      {formatDistance(d, locale)}
+      <span className="whitespace-nowrap">{formatDistance(d, locale)}</span>
       <span className="font-normal text-muted-foreground">{t(`aerial.dir.${c}` as MessageKey)}</span>
     </span>
   );
@@ -227,7 +227,7 @@ export function PointCard({ point, overlay }: { point: MapPoint; overlay: Aerial
             <p className="font-semibold leading-snug">{o.label}</p>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 border-t pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t pt-2">
           <Direction from={place} to={o} />
           <span className="text-xs text-muted-foreground">{t('tile.seen')}</span>
         </div>

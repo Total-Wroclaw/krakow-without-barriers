@@ -66,7 +66,8 @@ export function AerialSection({ lat, lon, name, objectId }: { lat: number; lon: 
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
+    // First reading plus the close-up check of what it saw: allow up to two model calls.
+    const timer = setTimeout(() => controller.abort(), 100_000);
     setAnalysis({ status: 'loading', data: null });
     const body = { ...place, name, locale, objectId: objectId ?? null, preferences: savedPreferences() };
     fetch('/api/aerial', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal })

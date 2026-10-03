@@ -65,3 +65,33 @@ export async function withPinRings(jpeg: Buffer, positions: { x: number; y: numb
   const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${rings}</svg>`);
   return sharp(jpeg).composite([{ input: svg }]).jpeg({ quality: 80 }).toBuffer();
 }
+
+/** Square close-up for the second look at an observation: sharper than the frame, with a labelled pixel grid. */
+export const PATCH = { widthM: 50, px: 512 } as const;
+
+export function patchBbox(center: Point): Bbox {
+  const b = aerialBbox(center, PATCH.widthM);
+  const cy = (b[1] + b[3]) / 2;
+  const half = (b[2] - b[0]) / 2;
+  return [b[0], cy - half, b[2], cy + half];
+}
+
+export async function orthoPatch(center: Point) {
+  const bbox = patchBbox(center);
+  const { px } = PATCH;
+  for (const service of orthoServices) {
+    const res = await fetch(wmsUrl(service, bbox, px, px), { signal: AbortSignal.timeout(15_000), headers: { 'User-Agent': 'KazdyKrok/0.3' } }).catch(() => null);
+    if (!res?.ok || !res.headers.get('content-type')?.startsWith('image/')) continue;
+    const step = px / 8;
+    const grid: string[] = [];
+    const label = (x: number, y: number, text: number, anchor: string) =>
+      `<text x="${x}" y="${y}" font-size="12" font-family="Arial, Helvetica, sans-serif" font-weight="bold" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke" text-anchor="${anchor}">${text}</text>`;
+    for (let v = step; v < px; v += step) {
+      grid.push(`<line x1="${v}" y1="0" x2="${v}" y2="${px}" stroke="#fff" stroke-opacity="0.3"/><line x1="0" y1="${v}" x2="${px}" y2="${v}" stroke="#fff" stroke-opacity="0.3"/>`);
+      grid.push(label(v, 12, v, 'middle'), label(2, v + 4, v, 'start'));
+    }
+    const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}">${grid.join('')}</svg>`);
+    return sharp(Buffer.from(await res.arrayBuffer()), { limitInputPixels: 4_000_000 }).composite([{ input: svg }]).jpeg({ quality: 85 }).toBuffer();
+  }
+  throw new Error('Ortofotomapa jest niedostępna.');
+}

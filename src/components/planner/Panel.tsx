@@ -17,7 +17,7 @@ export function useRestoreFocus(open: boolean) {
     const el = opener.current;
     if (el instanceof HTMLElement && el.isConnected && el !== document.body) {
       e.preventDefault();
-      el.focus();
+      el.focus({ preventScroll: true });
     }
   };
 }
@@ -52,7 +52,7 @@ export function Panel({ open, onOpenChange, title, description, children }: {
           <DrawerTitle className="text-xl">{title}</DrawerTitle>
           {description ? <DrawerDescription>{description}</DrawerDescription> : null}
         </DrawerHeader>
-        <div className="overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">{children}</div>
+        <div className="relative overflow-y-auto overscroll-contain px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">{children}</div>
       </DrawerContent>
     </Drawer>
   );

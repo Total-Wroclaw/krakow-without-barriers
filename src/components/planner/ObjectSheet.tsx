@@ -176,12 +176,12 @@ function PlaceFrame({ title, description, onClose, children }: { title: string; 
   useEffect(() => {
     if (!wide) return;
     const back = opener.current;
-    heading.current?.focus();
+    heading.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('[role=dialog][data-state=open]') && close.current();
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
-      if (back instanceof HTMLElement && back.isConnected) back.focus();
+      if (back instanceof HTMLElement && back.isConnected) back.focus({ preventScroll: true });
     };
   }, [wide]);
 
@@ -206,7 +206,7 @@ function PlaceFrame({ title, description, onClose, children }: { title: string; 
           <X className="size-5" />
         </button>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">{children}</div>
+      <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-6">{children}</div>
     </section>
   );
 }

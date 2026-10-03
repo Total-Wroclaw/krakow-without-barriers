@@ -237,8 +237,8 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const resultsTitle = useRef<HTMLHeadingElement>(null);
   const wasDetail = useRef(false);
   useEffect(() => {
-    if (detail) detailHeading.current?.focus();
-    else if (wasDetail.current) resultsTitle.current?.focus();
+    if (detail) detailHeading.current?.focus({ preventScroll: true });
+    else if (wasDetail.current) resultsTitle.current?.focus({ preventScroll: true });
     wasDetail.current = detail;
   }, [detail]);
 
@@ -269,13 +269,13 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const exploring = tab === 'explore' && !embed;
 
   return (
-    <div className="flex h-svh flex-col overflow-hidden lg:flex-row">
+    <div className="app-shell relative flex h-svh flex-col overflow-clip lg:flex-row">
       <a href="#planner" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2">
         {t('app.skip')}
       </a>
 
       <main id="planner" className="order-2 flex min-h-0 flex-1 flex-col border-border bg-background lg:order-1 lg:w-[440px] lg:flex-none lg:border-r">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <header className="flex items-center justify-between gap-2 px-4 pb-2 pt-3 lg:pt-5">
             {embed ? (
               <p className="flex items-center gap-2 text-lg font-bold tracking-tight">
@@ -460,7 +460,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
       <div
         className={cn(
           'relative order-1 shrink-0 transition-[height] lg:order-2 lg:h-auto lg:flex-1',
-          searchActive ? 'h-0 overflow-hidden' : showMapOnMobile ? 'h-[68svh]' : detail ? 'h-[30svh]' : 'h-[34svh]',
+          searchActive ? 'h-0 overflow-clip' : showMapOnMobile ? 'h-[68svh]' : detail ? 'h-[30svh]' : 'h-[34svh]',
         )}
       >
         <MapView

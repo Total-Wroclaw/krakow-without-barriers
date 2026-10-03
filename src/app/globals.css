@@ -87,6 +87,13 @@
   html {
     -webkit-text-size-adjust: 100%;
   }
+  /* The planner is a fixed-height shell; on its pages the document itself never scrolls (only panels inside it do). */
+  html:has(.app-shell),
+  html:has(.app-shell) body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "tnum" 1;

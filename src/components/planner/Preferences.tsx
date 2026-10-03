@@ -212,26 +212,29 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
             <Armchair className="size-5 text-rest" aria-hidden />
             {t('prefs.rest')}
           </Label>
-          <Switch id="pref-rest" checked={preferences.preferRest} onCheckedChange={v => onChange({ ...preferences, preferRest: v })} />
+          <Switch id="pref-rest" checked={preferences.preferRest} onCheckedChange={v => onChange({ ...preferences, preferRest: v, ...(v ? {} : { restEvery: 0 }) })} />
         </div>
 
-        <section className="flex flex-col gap-3" aria-labelledby="rest-every-label">
-          <h3 id="rest-every-label" className="font-semibold">{t('prefs.restEvery')}</h3>
-          <ToggleGroup
-            type="single"
-            value={String(preferences.restEvery)}
-            onValueChange={v => v && onChange({ ...preferences, restEvery: Number(v) })}
-            aria-labelledby="rest-every-label"
-            className="flex w-full flex-wrap gap-1.5"
-          >
-            {restOptions.map(n => (
-              <ToggleGroupItem key={n} value={String(n)} className="h-11 min-w-fit flex-1 rounded-lg! border bg-card px-3 text-sm data-[state=on]:border-primary data-[state=on]:bg-accent data-[state=on]:text-accent-foreground">
-                {n ? t('prefs.restMinutes', { n }) : t('prefs.restOff')}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          {preferences.restEvery ? <p className="text-sm text-muted-foreground">{t('prefs.restHint')}</p> : null}
-        </section>
+        {/* Planned breaks only make sense when resting matters at all; switching that off turns them off too. */}
+        {preferences.preferRest ? (
+          <section className="flex flex-col gap-3" aria-labelledby="rest-every-label">
+            <h3 id="rest-every-label" className="font-semibold">{t('prefs.restEvery')}</h3>
+            <ToggleGroup
+              type="single"
+              value={String(preferences.restEvery)}
+              onValueChange={v => v && onChange({ ...preferences, restEvery: Number(v) })}
+              aria-labelledby="rest-every-label"
+              className="flex w-full flex-wrap gap-1.5"
+            >
+              {restOptions.map(n => (
+                <ToggleGroupItem key={n} value={String(n)} className="h-11 min-w-fit flex-1 rounded-lg! border bg-card px-3 text-sm data-[state=on]:border-primary data-[state=on]:bg-accent data-[state=on]:text-accent-foreground">
+                  {n ? t('prefs.restMinutes', { n }) : t('prefs.restOff')}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            {preferences.restEvery ? <p className="text-sm text-muted-foreground">{t('prefs.restHint')}</p> : null}
+          </section>
+        ) : null}
 
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="pref-toilets" className="flex items-center gap-3 text-base font-normal">

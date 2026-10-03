@@ -43,7 +43,7 @@ Stan na 3 października 2026, wieczór. Źródło: `docs/KRYTERIA Kraków Bez Ba
 | Poprawianie błędnych danych | 🟡 | Zgłoszenie zdjęciem przy barierze i miejscu, edycja/usunięcie przez autora, formularz właściciela; brak moderacji |
 | WCAG 2.2 AA: klawiatura, czytnik ekranu, kontrast, tekstowa alternatywa mapy | 🟡 | axe-core: 0 naruszeń w całym scenariuszu (telefon, desktop, widżet); lista jest równoważna mapie. Brak ręcznego testu VoiceOver na iPhonie |
 | Uruchomienie i utrzymanie poza UMK (hosting, aktualizacje, bezpieczeństwo, zgłoszenia, koszty) | ✅ | PROJECT.md, ARCHITECTURE.md |
-| Ochrona danych i bezpieczeństwo, bez informacji o niepełnosprawności | ✅ | Preferencje tylko w przeglądarce; profil „na wózku” to sposób poruszania się, opcjonalny; zdjęcia bez EXIF; e-mail partnera niepubliczny |
+| Ochrona danych i bezpieczeństwo, bez informacji o niepełnosprawności | 🟡 | Opis: [`PRIVACY-SECURITY.md`](PRIVACY-SECURITY.md). Spełnione: bez kont, preferencje tylko w przeglądarce, profil „na wózku” to sposób poruszania się (opcjonalny), zdjęcia bez EXIF, e-mail partnera niepubliczny, panel urzędu za podpisaną sesją. Braki: zgłoszenia może zmienić lub usunąć każdy, kto zna ich `id` (są na publicznej liście), brak HSTS/nagłówków bezpieczeństwa i polityki prywatności |
 | Zależności, licencje, przeniesienie, kolejne miasto | ✅ | DATA-SOURCES.md, ARCHITECTURE.md |
 
 ## Testowanie i walidacja (sekcja 6)

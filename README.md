@@ -1,4 +1,4 @@
-# City of Kraków — Cracow Without Barriers
+# City of Kraków: Cracow Without Barriers
 
 Initial project scaffold for HackYeah 2026, 3–4 October in Kraków.
 
@@ -21,6 +21,12 @@ Help residents and visitors assess the accessibility of places and routes agains
 ## Points to confirm
 
 - The criteria document and competition rules list different judging weights; confirm the applicable weights with mentors.
+
+## Prizes
+
+Prize: **PLN 5,000** (including tax).
+
+[Competition rules](docs/RULES%20Cracow%20Without%20Barriers.pdf)
 
 ## Source documents
 

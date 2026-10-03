@@ -93,7 +93,7 @@ export function PreferencesBar({ preferences, onOpen }: { preferences: Preferenc
     mode === 'any' || wheeled(preferences) ? null : t(chipKey[mode]),
     preferences.preferHandrails && !wheeled(preferences) ? t('chip.rails') : null,
     preferences.preferRest && !preferences.restEvery ? t('chip.rest') : null,
-    preferences.showToilets ? t('cat.toilet') : null,
+    preferences.showToilets ? t('chip.toilets') : null,
   ].filter(Boolean) as string[];
   return (
     <button

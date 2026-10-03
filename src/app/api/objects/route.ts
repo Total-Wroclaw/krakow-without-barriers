@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { guard } from '@/lib/server';
 import { pointSchema } from '@/lib/city-types';
 import { locales } from '@/lib/i18n/locales';
-import { listObjectPage } from '@/lib/objects';
+import { bboxParamSchema, centerParamSchema, listObjectPage } from '@/lib/objects';
 import { apiMessages } from '@/lib/i18n/request-locale';
 export const runtime = 'nodejs';
 const categories = ['museum', 'landmark', 'culture', 'office', 'toilet', 'hotel', 'food', 'health', 'park', 'parking', 'other'] as const;
@@ -15,13 +15,15 @@ const schema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).max(100_000).optional(),
   withData: z.enum(['0', '1', 'true', 'false']).transform(v => v === '1' || v === 'true').optional(),
+  bbox: bboxParamSchema.optional(),
+  center: centerParamSchema.optional(),
 }).refine(v => (v.lat === undefined) === (v.lon === undefined));
 export async function GET(request: Request) {
   const block = guard(request); if (block) return block;
   const parsed = schema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return Response.json({ error: apiMessages(request).objects.badQuery }, { status: 400 });
   try {
-    // ObjectPage: { objects, total, nextOffset } (nextOffset null on the last page).
+    // ObjectPage: { objects, total, nextOffset, outside? } (nextOffset null on the last page; outside only with bbox).
     return Response.json(await listObjectPage(parsed.data), { headers: { 'Cache-Control': 'private, max-age=30' } });
   } catch {
     return Response.json({ error: apiMessages(request).objects.listUnavailable }, { status: 503 });

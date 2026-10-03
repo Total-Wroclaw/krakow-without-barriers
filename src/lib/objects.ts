@@ -344,6 +344,16 @@ function fullOf(r: Rec, locale: Locale): PlaceObject {
   };
 }
 
+/** "west,south,east,north" in degrees: the visible map area. */
+export const bboxParamSchema = z.string().max(120)
+  .transform(v => v.split(',').map(x => (x.trim() ? Number(x) : NaN)))
+  .pipe(z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90), z.number().min(-180).max(180), z.number().min(-90).max(90)]))
+  .refine(([w, s, e, n]) => w < e && s < n);
+/** "lat,lon" in degrees: the map centre that results are ranked around. */
+export const centerParamSchema = z.string().max(60)
+  .transform(v => v.split(',').map(x => (x.trim() ? Number(x) : NaN)))
+  .pipe(z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]))
+  .transform(([lat, lon]) => ({ lat, lon }));
 const knownKeys = (r: Rec) => new Set(r.features.filter(known).map(f => f.key)).size;
 /** Promoted partners are lifted only when within this distance of the user's point (if given). */
 const PROMOTION_RADIUS = 5000;
@@ -356,7 +366,11 @@ export function queryCatalogPage(cat: Catalog, query: ObjectQuery): ObjectPage {
   const limit = Math.min(Math.max(Math.floor(query.limit ?? 30), 1), 100);
   const offset = Math.max(Math.floor(query.offset ?? 0), 0);
   const origin = query.lat !== undefined && query.lon !== undefined ? { lat: query.lat, lon: query.lon } : undefined;
+  // Ranking point: the map centre when given (browsing the visible area), else the user's point.
+  const rank = query.center ?? origin;
   const tokens = words(query.q ?? '');
+  const bbox = query.bbox;
+  let outside = 0;
   const scored: { r: Rec; score: number; d: number }[] = [];
   for (const r of cat.recs) {
     if (query.category && r.category !== query.category) continue;
@@ -372,20 +386,25 @@ export function queryCatalogPage(cat: Catalog, query: ObjectQuery): ObjectPage {
       }
       if (!ok) continue;
     }
-    scored.push({ r, score, d: origin ? metres(origin, r) : 0 });
+    if (bbox && !(r.lon >= bbox[0] && r.lat >= bbox[1] && r.lon <= bbox[2] && r.lat <= bbox[3])) { outside++; continue; }
+    scored.push({ r, score, d: rank ? metres(rank, r) : 0 });
   }
-  const promoted = (x: { r: Rec; d: number }) => !!x.r.partner?.promoted && (!origin || x.d <= PROMOTION_RADIUS);
+  const promoted = (x: { r: Rec; d: number }) => !!x.r.partner?.promoted && (!rank || x.d <= PROMOTION_RADIUS);
   // With a text query: relevance, then distance. Without: objects with more known facts first, then distance,
-  // so "no data" entries do not crowd the top. Promoted partners always lead within the matched set (flagged).
+  // so "no data" entries do not crowd the top. Within a visible map area the area already scopes the list, so
+  // places with facts come first and then simply the nearest to the map centre (as on a map app).
+  // Promoted partners always lead within the matched set (flagged).
   const byData = (a: { r: Rec }, b: { r: Rec }) => knownKeys(b.r) - knownKeys(a.r);
-  const byDistance = (a: { d: number }, b: { d: number }) => (origin ? a.d - b.d : 0);
+  const hasData = (a: { r: Rec }, b: { r: Rec }) => Number(knownKeys(b.r) > 0) - Number(knownKeys(a.r) > 0);
+  const byDistance = (a: { d: number }, b: { d: number }) => (rank ? a.d - b.d : 0);
   scored.sort((a, b) => Number(promoted(b)) - Number(promoted(a))
-    || (tokens.length ? b.score - a.score || byDistance(a, b) || byData(a, b) : byData(a, b) || byDistance(a, b))
+    || (tokens.length ? b.score - a.score || byDistance(a, b) || byData(a, b)
+      : bbox ? hasData(a, b) || byDistance(a, b) || byData(a, b) : byData(a, b) || byDistance(a, b))
     || (a.r.name ?? '').localeCompare(b.r.name ?? '', 'pl')
     || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
   const objects = scored.slice(offset, offset + limit).map(x => { const { conflicts: _c, ...s } = summaryOf(x.r, locale, origin); return s; });
   const next = offset + limit;
-  return { objects, total: scored.length, nextOffset: next < scored.length ? next : null };
+  return { objects, total: scored.length, nextOffset: next < scored.length ? next : null, ...(bbox ? { outside } : {}) };
 }
 
 // ---------- Accessible toilets for the journey planner ----------

@@ -199,3 +199,60 @@ test('without a query, objects with more known facts rank before nearer "no data
   // With a text query relevance and distance lead.
   assert.equal(queryCatalog(cat, { q: 'muzeum', ...near })[0].name, 'Muzeum Puste');
 });
+
+test('a map area (bbox) limits the list to visible objects, pages stay inside it and the rest is counted as "outside"', () => {
+  const osm = { obtainedAt: OBTAINED, sourceDate: null, objects: [
+    osmRec('node:1', { n: 'Muzeum Rynek', la: 50.0617, lo: 19.9373, t: { wheelchair: 'yes' } }),
+    osmRec('node:2', { n: 'Muzeum Kazimierz', la: 50.0513, lo: 19.9449, t: { wheelchair: 'no' } }),
+    osmRec('node:3', { n: 'Muzeum Nowa Huta', la: 50.0717, lo: 20.0371, t: { wheelchair: 'limited' } }),
+    osmRec('node:4', { n: 'Hotel Rynek', c: 'hotel', k: 'tourism=hotel', la: 50.0615, lo: 19.938, t: { wheelchair: 'yes' } }),
+  ] };
+  const cat = buildCatalog({ osm });
+  const centre: [number, number, number, number] = [19.9, 50.04, 19.98, 50.08];
+  const page = objects.queryCatalogPage(cat, { category: 'museum', bbox: centre, lat: 50.06, lon: 19.94 });
+  assert.deepEqual(page.objects.map(o => o.name).sort(), ['Muzeum Kazimierz', 'Muzeum Rynek']);
+  assert.equal(page.total, 2);
+  assert.equal(page.outside, 1, 'Nowa Huta matches the search but lies outside the area');
+  // Zooming out widens the area; zooming in narrows it.
+  assert.equal(objects.queryCatalogPage(cat, { category: 'museum', bbox: [19.8, 50.0, 20.1, 50.1] }).total, 3);
+  assert.deepEqual(objects.queryCatalogPage(cat, { category: 'museum', bbox: [19.935, 50.06, 19.94, 50.063] }).objects.map(o => o.name), ['Muzeum Rynek']);
+  // A text search in an area with no match reports where the matches are.
+  const none = objects.queryCatalogPage(cat, { q: 'huta', bbox: centre });
+  assert.equal(none.total, 0);
+  assert.equal(none.outside, 1);
+  assert.equal(objects.queryCatalogPage(cat, { q: 'huta' }).outside, undefined, 'no bbox: no outside count');
+  // Paging inside an area never overlaps or leaks outside it.
+  const p1 = objects.queryCatalogPage(cat, { bbox: centre, limit: 2 });
+  const p2 = objects.queryCatalogPage(cat, { bbox: centre, limit: 2, offset: p1.nextOffset! });
+  assert.equal(p1.total, 3);
+  assert.equal(p2.nextOffset, null);
+  const ids = [...p1.objects, ...p2.objects].map(o => o.id);
+  assert.equal(new Set(ids).size, 3);
+  assert.ok(!ids.includes('osm-node-3'));
+});
+
+test('the bbox parameter accepts "west,south,east,north" and rejects malformed or inverted areas', () => {
+  const { bboxParamSchema } = objects;
+  assert.deepEqual(bboxParamSchema.parse('19.9,50.04,19.98,50.08'), [19.9, 50.04, 19.98, 50.08]);
+  for (const bad of ['19.98,50.04,19.9,50.08', '19.9,50.08,19.98,50.04', '19.9,50.04,19.98', '19.9,50.04,19.98,50.08,1', 'a,b,c,d', '19.9,,19.98,50.08', '200,50,201,51', '19.9,-91,19.98,50.08', ''])
+    assert.equal(bboxParamSchema.safeParse(bad).success, false, bad);
+});
+
+test('within a map area results are ranked by distance from the map centre; shown distances stay from the user', () => {
+  const osm = { obtainedAt: OBTAINED, sourceDate: null, objects: [
+    osmRec('node:1', { n: 'Muzeum Rynek', la: 50.0617, lo: 19.9373, t: { wheelchair: 'yes', 'toilets:wheelchair': 'yes', ramp: 'yes' } }),
+    osmRec('node:2', { n: 'Muzeum Kazimierz', la: 50.0513, lo: 19.9449, t: { wheelchair: 'limited' } }),
+    osmRec('node:3', { n: 'Muzeum Bez Danych', la: 50.0514, lo: 19.945, t: {} }),
+  ] };
+  const cat = buildCatalog({ osm });
+  const area: [number, number, number, number] = [19.9, 50.04, 19.98, 50.08];
+  const kazimierz = { lat: 50.0512, lon: 19.9448 };
+  const page = objects.queryCatalogPage(cat, { category: 'museum', bbox: area, center: kazimierz, lat: 50.0617, lon: 19.9373 });
+  // Nearest to the centre first, but places with no facts after those with facts.
+  assert.deepEqual(page.objects.map(o => o.name), ['Muzeum Kazimierz', 'Muzeum Rynek', 'Muzeum Bez Danych']);
+  assert.ok(page.objects[1].distance! < 20, 'distance is measured from lat/lon (the user), not the map centre');
+  const { centerParamSchema } = objects;
+  assert.deepEqual(centerParamSchema.parse('50.06,19.94'), { lat: 50.06, lon: 19.94 });
+  for (const bad of ['50.06', '50.06,19.94,1', '91,19.94', 'x,y', ''])
+    assert.equal(centerParamSchema.safeParse(bad).success, false, bad);
+});

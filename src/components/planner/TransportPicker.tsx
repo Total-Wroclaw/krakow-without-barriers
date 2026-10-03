@@ -13,7 +13,9 @@ const modes: { value: TransportMode; icon: typeof TramFront; key: 'transport.wal
 
 export function TransportPicker({ value, onChange }: { value: TransportMode; onChange: (m: TransportMode) => void }) {
   const { t } = useI18n();
+  // Layout follows the picker's own width (the desktop panel is narrow), not the screen width.
   return (
+    <div className="@container">
     <ToggleGroup
       type="single"
       value={value}
@@ -25,12 +27,13 @@ export function TransportPicker({ value, onChange }: { value: TransportMode; onC
         <ToggleGroupItem
           key={mode}
           value={mode}
-          className="h-auto min-h-12 flex-col gap-0.5 rounded-lg! px-1 py-1.5 text-xs leading-tight data-[state=on]:bg-accent data-[state=on]:text-accent-foreground sm:flex-row sm:gap-1.5 sm:text-sm"
+          className="h-auto min-h-12 min-w-0 flex-col gap-0.5 rounded-lg! px-1 py-1.5 text-xs leading-tight data-[state=on]:bg-accent data-[state=on]:text-accent-foreground @xl:flex-row @xl:gap-1.5 @xl:text-sm"
         >
           <Icon aria-hidden />
-          <span className="text-center">{t(key)}</span>
+          <span className="max-w-full text-center break-words">{t(key)}</span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
+    </div>
   );
 }

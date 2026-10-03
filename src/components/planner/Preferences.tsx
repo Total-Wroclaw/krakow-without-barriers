@@ -225,7 +225,7 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
             className="flex w-full flex-wrap gap-1.5"
           >
             {restOptions.map(n => (
-              <ToggleGroupItem key={n} value={String(n)} className="h-11 min-w-[4.25rem] flex-1 rounded-lg! border bg-card px-2 text-sm data-[state=on]:border-primary data-[state=on]:bg-accent data-[state=on]:text-accent-foreground">
+              <ToggleGroupItem key={n} value={String(n)} className="h-11 min-w-fit flex-1 rounded-lg! border bg-card px-3 text-sm data-[state=on]:border-primary data-[state=on]:bg-accent data-[state=on]:text-accent-foreground">
                 {n ? t('prefs.restMinutes', { n }) : t('prefs.restOff')}
               </ToggleGroupItem>
             ))}

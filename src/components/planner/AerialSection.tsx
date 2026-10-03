@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, CloudSun, ExternalLink, Info, MessageCircleQuestion, RotateCcw, TriangleAlert, X } from 'lucide-react';
+import { ChevronDown, CloudSun, ExternalLink, Info, MessageCircleQuestion, RotateCcw, Sparkles, TriangleAlert, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -313,7 +314,13 @@ function WayIn({ analysis, pins, bbox, onRetry }: { analysis: Analysis; pins: Ae
     : '';
   return (
     <section aria-labelledby="way-in-title" className="flex flex-col gap-3 rounded-xl border bg-card p-3">
-      <h4 id="way-in-title" className="text-sm font-semibold">{t('aerial.approach')}</h4>
+      <div className="flex items-center justify-between gap-2">
+        <h4 id="way-in-title" className="text-sm font-semibold">{t('aerial.approach')}</h4>
+        <Badge variant="secondary" className="gap-1 bg-primary/10 text-primary">
+          <Sparkles aria-hidden />
+          {t('aerial.aiBadge')}
+        </Badge>
+      </div>
       {analysis.status === 'loading' ? (
         <div className="flex flex-col gap-2" aria-hidden>
           <Skeleton className="h-3.5 w-full" />

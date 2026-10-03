@@ -426,6 +426,22 @@ export function accessibleToilets(): AccessibleToilet[] {
   if (toiletCache?.cat !== cat) toiletCache = { cat, toilets: accessibleToiletsOf(cat) };
   return toiletCache.toilets;
 }
+/**
+ * Ids of the OSM entrance nodes on or inside the building of the catalogued place at this point, or null when no
+ * catalogued place is there or its building has no mapped entrances (then nearby entrances may belong to anyone).
+ */
+export function ownEntrancesAt(place: { lat: number; lon: number }, within = 20): string[] | null {
+  const osm = loadBase().osm;
+  if (!osm) return null;
+  const metres = (r: OsmRecord) => Math.hypot((r.la - place.lat) * 111_320, (r.lo - place.lon) * 111_320 * Math.cos((place.lat * Math.PI) / 180));
+  let best: { r: OsmRecord; d: number } | null = null;
+  for (const r of osm.objects) {
+    if (Math.abs(r.la - place.lat) > 0.001 || !r.e.some(e => e.d === 0)) continue;
+    const d = metres(r);
+    if (d <= within && (!best || d < best.d)) best = { r, d };
+  }
+  return best ? best.r.e.filter(e => e.d === 0).map(e => e.id.replace(/^node[:/]/, '')) : null;
+}
 export function getFromCatalog(cat: Catalog, id: string, locale: Locale = 'pl'): PlaceObject | null {
   const r = cat.byId.get(id);
   return r ? fullOf(r, locale) : null;

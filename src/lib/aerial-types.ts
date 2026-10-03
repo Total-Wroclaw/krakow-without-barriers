@@ -28,6 +28,8 @@ export type AerialPin = {
   /** Door width in cm as tagged. */
   doorWidth?: number;
   main?: boolean;
+  /** Entrance: true when it is mapped on this place's building, false when it is only nearby (may be a neighbour's). */
+  ofPlace?: boolean;
   /** Stop: tram and/or bus (from the GTFS feeds), platform code, line numbers serving it. */
   modes?: ('tram' | 'bus')[];
   platform?: string;

@@ -83,6 +83,7 @@ export function useDescribe() {
     const parts: string[] = [];
     if (pin.kind === 'entrance') {
       if (pin.main) parts.push(t('aerial.main'));
+      if (pin.ofPlace === false) parts.push(t('aerial.entranceNearby'));
       parts.push(t(`aerial.wheelchair.${pin.wheelchair ?? 'unknown'}`));
       if (pin.steps !== undefined) parts.push(pin.steps === 0 ? t('aerial.noSteps') : tp('aerial.steps', pin.steps));
       if (pin.ramp) parts.push(t('aerial.ramp'));
@@ -164,6 +165,7 @@ function useTiles() {
       if (pin.doorWidth) tiles.push({ icon: DoorOpen, label: t('tile.door'), value: `${pin.doorWidth} cm`, tone: pin.doorWidth >= 90 ? 'good' : pin.doorWidth >= 80 ? 'warn' : 'bad' });
       if (pin.automaticDoor) tiles.push({ icon: DoorOpen, label: t('tile.autoDoor'), value: t('fvalue.yes'), tone: 'good' });
       if (pin.main) chips.push(t('tile.mainEntrance'));
+      if (pin.ofPlace === false) chips.push(t('aerial.entranceNearby'));
     }
     if (pin.kind === 'stop') {
       for (const m of pin.modes ?? []) chips.push(t(`aerial.${m}`));

@@ -168,6 +168,13 @@ const raw = (over: Partial<RawAnalysis['recommendation']> = {}, rest: Partial<Ra
 });
 const pinsOf = (...list: [AerialPin['kind'], AerialPin['wheelchair']?][]) => list.map(([kind, wheelchair]) => ({ kind, wheelchair }));
 
+test("when the place's own entrances are known, a neighbour's door is not a pin", () => {
+  const own = buildOverlay(place, { ...inputs(), ownEntrances: ['node:1'] });
+  assert.deepEqual(own.pins.filter(p => p.kind === 'entrance').map(p => [p.distance, p.ofPlace]), [[30, true]]);
+  const unknown = buildOverlay(place, inputs());
+  assert.ok(unknown.pins.filter(p => p.kind === 'entrance').every(p => p.ofPlace === false));
+});
+
 test('recommendation: entrance and arrival pins must exist and have the right kind', () => {
   const bbox = aerialBbox(place, 200);
   const pins = pinsOf(['entrance', 'yes'], ['entrance', 'no'], ['stop'], ['parking']);

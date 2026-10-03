@@ -1,5 +1,5 @@
 {
-  "obtainedAt": "2026-10-03T17:16:50.312237+00:00",
+  "obtainedAt": "2026-10-03T22:59:37.358167+00:00",
   "sourceDate": "2026-10-02T20:21:34Z",
   "bbox": [
     19.75,
@@ -22,29 +22,29 @@
     "toilet": 284
   },
   "withAccessibilityData": {
-    "culture": 63,
+    "culture": 64,
     "food": 238,
-    "health": 206,
+    "health": 212,
     "hotel": 70,
-    "landmark": 90,
+    "landmark": 91,
     "museum": 23,
     "office": 30,
     "park": 6,
-    "toilet": 160
+    "toilet": 161
   },
   "withEntranceAccessibilityData": {
-    "culture": 21,
-    "food": 12,
-    "health": 58,
+    "culture": 22,
+    "food": 14,
+    "health": 65,
     "hotel": 6,
-    "landmark": 18,
-    "museum": 3,
+    "landmark": 19,
+    "museum": 4,
     "office": 10,
-    "toilet": 17
+    "toilet": 22
   },
   "total": 3080,
-  "totalWithAccessibilityData": 886,
+  "totalWithAccessibilityData": 895,
   "entranceNodesInArea": 14333,
-  "bytes": 190279,
+  "bytes": 194671,
   "note": "withAccessibilityData = object or an assigned entrance has at least one accessibility tag (wheelchair*, toilets:wheelchair, ramp*, step_count, elevator, automatic_door, door/width). Not a count of accessible places."
 }

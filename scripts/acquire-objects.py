@@ -6,7 +6,7 @@ data/krakow-objects.json.gz:
   {v, licence, attribution, obtainedAt, sourceDate, objects:[{
     id: 'node:1'|'way:2'|'relation:3', also: [other OSM ids merged as duplicates],
     c: category, k: 'tourism=museum' (OSM type), n: name|null, la, lo (centroid), ts: element timestamp,
-    t: {kept tags}, e: [{id, d: metres from object point (0 = on/inside outline), ts, t: {entrance tags}}]}]}
+    t: {kept tags}, e: [{id, d: metres from object point (0 = on/inside its building outline), ts, t: {entrance tags}}]}]}
 Missing tags are simply absent: absence is never turned into "accessible".
 """
 import osmium, json, sys, hashlib, os, gzip, math
@@ -62,7 +62,7 @@ def point_in_ring(lat,lon,ring):
  return hit
 
 class Collect(osmium.SimpleHandler):
- def __init__(self):super().__init__();self.objects=[];self.entrances=[]
+ def __init__(self):super().__init__();self.objects=[];self.entrances=[];self.buildings=[]
  def add(self,kind,oid,t,lat,lon,ts,rings=None):
   cls=classify(t)
   if cls is None:return
@@ -82,6 +82,11 @@ class Collect(osmium.SimpleHandler):
   self.add('node',n.id,t,lat,lon,ts)
  def way(self,w):
   t={x.k:x.v for x in w.tags}
+  if t.get('building') and t.get('building')!='roof' and len(w.nodes)>3 and w.nodes[0].ref==w.nodes[-1].ref:
+   # Plain building outlines, so a place mapped as a point inside one gets that building's entrances.
+   try:ring=[(n.location.lat,n.location.lon) for n in w.nodes]
+   except Exception:ring=None
+   if ring and inside(*ring[0]):self.buildings.append(ring)
   if not t or classify(t) is None:return
   coords=[]
   for n in w.nodes:
@@ -108,15 +113,31 @@ class Collect(osmium.SimpleHandler):
 file=Path(sys.argv[1] if len(sys.argv)>1 else '/tmp/krok-malopolskie.osm.pbf');header=osmium.io.Reader(str(file)).header()
 c=Collect();c.apply_file(str(file),locations=True,idx='flex_mem')
 
+# Building grid: each outline is listed in every ~110 m cell its bounding box touches.
+CELL=0.001;bgrid={}
+for i,r in enumerate(c.buildings):
+ la=[p[0] for p in r];lo=[p[1] for p in r]
+ for gy in range(int(min(la)/CELL),int(max(la)/CELL)+1):
+  for gx in range(int(min(lo)/CELL),int(max(lo)/CELL)+1):bgrid.setdefault((gy,gx),[]).append(i)
+def ring_area(r):return abs(sum(r[i][1]*r[i-1][0]-r[i-1][1]*r[i][0] for i in range(len(r))))
+def building_at(lat,lon):
+ """Smallest building outline containing the point (a shop inside a mall gets the mall), or None."""
+ hits=[c.buildings[i] for i in bgrid.get((int(lat/CELL),int(lon/CELL)),()) if point_in_ring(lat,lon,c.buildings[i])]
+ return min(hits,key=ring_area) if hits else None
+
 # Entrance grid (~110 m cells).
 CELL=0.001;egrid={}
 for i,e in enumerate(c.entrances):egrid.setdefault((int(e['la']/CELL),int(e['lo']/CELL)),[]).append(i)
 def entrances_for(o):
- """Entrances on/inside the outline (d=0) or within ENTRANCE_RADIUS of the object point; nearest first, main first."""
+ """Entrances on/inside the outline, or of the building around a point object (d=0) or within ENTRANCE_RADIUS of the object point; nearest first, main first."""
  found={}
  if o['outline']=='area':return []
  lat,lon=o['la'],o['lo']
  rings=o['rings'] or []
+ if not rings:
+  # A point inside a building: that building's entrances are this place's entrances.
+  b=building_at(lat,lon)
+  if b:rings=[b]
  if rings:
   pts=[p for r in rings for p in r];minla=min(p[0] for p in pts);maxla=max(p[0] for p in pts);minlo=min(p[1] for p in pts);maxlo=max(p[1] for p in pts)
   # Skip huge outlines (parks, campuses): their many gates would not describe one entrance.

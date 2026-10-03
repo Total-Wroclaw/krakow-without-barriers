@@ -29,6 +29,8 @@ const SAME_PLATFORM = 15;
 export const REPORT_RADIUS = 150;
 
 export type OverlayInputs = {
+  /** Entrance ids of the place's own building, when known: then only those are shown. */
+  ownEntrances?: string[] | null;
   entrances: { id: string; lat: number; lon: number; tags: Record<string, string>; editedAt: string | null }[];
   stops: (Stop & { lines?: string[] })[];
   parking: { id: string; name: string | null; lat: number; lon: number; disabledSpaces: number | null; editedAt: string | null; fee?: 'yes' | 'no' | 'unknown'; capacity?: number | null }[];
@@ -52,13 +54,16 @@ export function buildOverlay(place: Point, input: OverlayInputs): Omit<AerialOve
   const add = (pin: Omit<AerialPin, 'n' | 'distance' | 'compass'>) =>
     pins.push({ ...pin, n: pins.length + 1, distance: Math.round(distance(place, pin)), compass: compass(place, pin) });
 
-  for (const { item: e } of nearestFirst(place, input.entrances, ENTRANCE_RADIUS, LIMITS.entrance)) {
+  // When the place's building is known, only its entrances are pins: a neighbour's door would only mislead.
+  const own = input.ownEntrances?.length ? new Set(input.ownEntrances.map(id => id.replace(/^node[:/]/, ''))) : null;
+  const entrances = own ? input.entrances.filter(e => own.has(e.id.replace(/^node[:/]/, ''))) : input.entrances;
+  for (const { item: e } of nearestFirst(place, entrances, ENTRANCE_RADIUS, LIMITS.entrance)) {
     const steps = /^\d+$/.test(e.tags.step_count ?? '') ? Number(e.tags.step_count) : undefined;
     const ramp = e.tags['ramp:wheelchair'] === 'yes' || e.tags.ramp === 'yes' ? true : e.tags.ramp === 'no' ? false : undefined;
     const door = widthCm(e.tags['door:width'] ?? e.tags.width);
     add({
       kind: 'entrance', lat: e.lat, lon: e.lon, name: e.tags.name ?? e.tags.ref ?? null, sourceUrl: osmUrl(`node:${e.id.replace(/^node[:/]/, '')}`), editedAt: e.editedAt,
-      wheelchair: yesNo(e.tags.wheelchair), main: e.tags.entrance === 'main',
+      wheelchair: yesNo(e.tags.wheelchair), main: e.tags.entrance === 'main', ofPlace: !!own,
       ...(steps !== undefined ? { steps } : {}), ...(ramp !== undefined ? { ramp } : {}), ...(door ? { doorWidth: door } : {}),
       ...(e.tags.automatic_door && e.tags.automatic_door !== 'no' ? { automaticDoor: true } : {}),
     });
@@ -187,7 +192,7 @@ export async function overlayAt(place: Point): Promise<AerialOverlay> {
   const key = `${place.lat},${place.lon}`;
   const hit = overlays.get(key);
   if (hit) return hit;
-  const [{ cityGraph }, { transitStops }, { parkingsNear }, { accessibleToilets }] = await Promise.all([import('./city-graph'), import('./transit'), import('./parking'), import('./objects')]);
+  const [{ cityGraph }, { transitStops }, { parkingsNear }, { accessibleToilets, ownEntrancesAt }] = await Promise.all([import('./city-graph'), import('./transit'), import('./parking'), import('./objects')]);
   const safe = <T,>(f: () => T[]): T[] => {
     try {
       return f();
@@ -206,6 +211,13 @@ export async function overlayAt(place: Point): Promise<AerialOverlay> {
   const lines = stopLines();
   const overlay: AerialOverlay = {
     ...buildOverlay(place, {
+      ownEntrances: (() => {
+        try {
+          return ownEntrancesAt(place);
+        } catch {
+          return null;
+        }
+      })(),
       entrances: g ? g.entranceGrid.within(place, ENTRANCE_RADIUS).map(i => g.entrances[i]) : [],
       stops: safe(() => near(transitStops()).map(s => ({ ...s, lines: lines?.get(s.id) ?? [] }))),
       parking: safe(() => parkingsNear(place, OVERLAY_RADIUS, { disabledOnly: true })),
@@ -234,7 +246,7 @@ export function pinsForPrompt(overlay: AerialOverlay, bbox: Bbox) {
   return overlay.pins.map(pin => {
     const facts: string[] = [];
     if (pin.kind === 'entrance') {
-      facts.push(`wejście${pin.main ? ' główne' : ''}`, `wheelchair=${pin.wheelchair}`);
+      facts.push(`wejście${pin.main ? ' główne' : ''} ${pin.ofPlace ? 'do budynku tego miejsca' : 'w okolicy (nie wiadomo, czy do tego miejsca; może należeć do sąsiedniego budynku)'}`, `wheelchair=${pin.wheelchair}`);
       if (pin.steps !== undefined) facts.push(`step_count=${pin.steps}`);
       if (pin.ramp !== undefined) facts.push(`ramp=${pin.ramp ? 'yes' : 'no'}`);
       if (pin.doorWidth) facts.push(`door:width=${pin.doorWidth}cm`);
@@ -451,7 +463,7 @@ export function applyRefinement(observations: AerialObservation[], found: (Point
 
 // ---------- Analysis cache ----------
 /** Bump when the prompt or the validation changes, so old readings are not served. */
-const ANALYSIS_VERSION = 8;
+const ANALYSIS_VERSION = 9;
 export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; weather: string; reports: string };
 
 /** File name for a reading: everything that changes the text is part of the hash. */

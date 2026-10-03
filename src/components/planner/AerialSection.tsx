@@ -342,7 +342,7 @@ function WayIn({ analysis, pins, bbox, onRetry }: { analysis: Analysis; pins: Ae
             <>
               {entrance || from ? (
                 <div className="flex flex-col gap-3">
-                  {entrance ? <ChosenPin label={t('aerial.rec.entrance')} pin={entrance} pins={pins} note={rec.why} /> : null}
+                  {entrance ? <ChosenPin label={t(entrance.ofPlace ? 'aerial.rec.entrance' : 'aerial.rec.entranceNearby')} pin={entrance} pins={pins} note={rec.why} /> : null}
                   {from ? <ChosenPin label={t('aerial.rec.from')} pin={from} pins={pins} /> : null}
                 </div>
               ) : null}

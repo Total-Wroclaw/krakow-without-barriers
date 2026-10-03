@@ -97,6 +97,11 @@ const pl = {
     stairsNoHandrail: (n: number) => (n > 1 ? `Schody bez poręczy (${n})` : 'Schody bez poręczy'),
     stairsHandrailUnknown: (n: number) => (n > 1 ? `Schody bez danych o poręczy (${n})` : 'Schody bez danych o poręczy'),
     longStairs: (n: number) => (n > 1 ? `Długie schody, ponad 15 stopni (${n})` : 'Długie schody, ponad 15 stopni'),
+    /** `flights` short flights a pushchair is lifted over; `steps` = step count when there is one flight. */
+    shortSteps: (flights: number, steps: number) =>
+      flights > 1
+        ? `Krótkie schody w ${flights} miejscach — wózek trzeba podnieść`
+        : `Krótkie schody (${steps} ${plural('pl', steps, { one: 'stopień', few: 'stopnie', many: 'stopni', other: 'stopnia' })}) — wózek trzeba podnieść`,
     noBench: (minute: number) => `Brak ławki ok. ${minute}. minuty`,
     overLimit: (d: string) => `Ponad Twój limit ${d}`,
     kerbRaised: (n: number) => (n > 1 ? `Krawężniki bez obniżenia (${n})` : 'Krawężnik bez obniżenia'),
@@ -276,6 +281,10 @@ const en: ServerMessages = {
     stairsNoHandrail: n => (n > 1 ? `Stairs without a handrail (${n})` : 'Stairs without a handrail'),
     stairsHandrailUnknown: n => (n > 1 ? `Stairs, handrail unknown (${n})` : 'Stairs, handrail unknown'),
     longStairs: n => (n > 1 ? `Long flights of stairs, over 15 steps (${n})` : 'Long flight of stairs, over 15 steps'),
+    shortSteps: (flights, steps) =>
+      flights > 1
+        ? `Short steps in ${flights} places — you'll need to lift the pushchair`
+        : `${steps === 1 ? 'Short step' : 'Short steps'} (${steps}) — you'll need to lift the pushchair`,
     noBench: minute => `No bench around minute ${minute}`,
     overLimit: d => `Over your limit of ${d}`,
     kerbRaised: n => (n > 1 ? `Raised kerbs (${n})` : 'Raised kerb'),
@@ -453,6 +462,10 @@ const de: ServerMessages = {
     stairsNoHandrail: n => (n > 1 ? `Treppen ohne Handlauf (${n})` : 'Treppe ohne Handlauf'),
     stairsHandrailUnknown: n => (n > 1 ? `Treppen ohne Angaben zum Handlauf (${n})` : 'Treppe ohne Angaben zum Handlauf'),
     longStairs: n => (n > 1 ? `Lange Treppen, über 15 Stufen (${n})` : 'Lange Treppe, über 15 Stufen'),
+    shortSteps: (flights, steps) =>
+      flights > 1
+        ? `Kurze Stufen an ${flights} Stellen — Kinderwagen muss gehoben werden`
+        : `${steps === 1 ? 'Kurze Stufe' : 'Kurze Stufen'} (${steps}) — Kinderwagen muss gehoben werden`,
     noBench: minute => `Keine Sitzbank um Minute ${minute}`,
     overLimit: d => `Über Ihrem Limit von ${d}`,
     kerbRaised: n => (n > 1 ? `Hohe Bordsteine (${n})` : 'Hoher Bordstein'),

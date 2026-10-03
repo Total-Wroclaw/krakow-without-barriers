@@ -19,9 +19,9 @@ export function About() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" className="h-10 gap-1.5 px-2.5 text-muted-foreground">
+        <Button variant="ghost" className="h-11 gap-1.5 px-2.5 text-muted-foreground" aria-label={t('about.button')}>
           <Info />
-          {t('about.button')}
+          <span className="hidden sm:inline">{t('about.button')}</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-lg">

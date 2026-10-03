@@ -12,9 +12,9 @@ import { errorText, postJson } from '@/lib/client';
 import { useI18n } from '@/lib/i18n/client';
 import type { Report } from '@/lib/schemas';
 import { Panel } from './Panel';
-import { gpsPoint, inKrakow, rememberToken, reportToken, shrink, type CaptureTarget } from './Reports';
+import { LocationPicker, gpsPlace } from './LocationPicker';
+import { rememberToken, reportToken, shrink, type CaptureTarget } from './Reports';
 
-type Where = 'gps' | 'selected' | 'map';
 const MAX_PHOTOS = 4;
 
 /**
@@ -33,7 +33,7 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
 }) {
   const { t, locale } = useI18n();
   const [mode, setMode] = useState<'choose' | 'blocked'>('choose');
-  const [where, setWhere] = useState<Where>('gps');
+  const [place, setPlace] = useState<CityPlace | null>(null);
   const [target, setTarget] = useState('');
   const [comment, setComment] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
@@ -43,7 +43,8 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
   useEffect(() => {
     if (!open) return;
     setMode('choose');
-    setWhere(selected ? 'selected' : 'gps');
+    // Start from what the person is looking at (a place or barrier), else the map centre; they confirm or move it.
+    setPlace((selected ?? mapPoint()).place);
     setTarget(destination ?? '');
     setComment('');
     setPhotos([]);
@@ -67,16 +68,6 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
     setPhotos(next);
   }
 
-  async function locate(): Promise<CaptureTarget> {
-    if (where === 'selected' && selected) return selected;
-    if (where === 'gps') {
-      const gps = await gpsPoint();
-      if (gps && inKrakow(gps)) return { place: { id: `point:${gps.lat}:${gps.lon}`, name: t('report.photoPlace'), lat: gps.lat, lon: gps.lon, source: 'GPS' }, source: 'map' };
-      toast.warning(t('search.geoDenied'));
-    }
-    return mapPoint();
-  }
-
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (comment.trim().length < 3 && !photos.length) {
@@ -87,17 +78,18 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
     setBusy(true);
     const id = toast.loading(t('report.sending'));
     try {
-      const at = await locate();
-      const gpsUsed = where === 'gps' && at.place.source === 'GPS';
+      const at = place ?? mapPoint().place;
+      const gpsUsed = at.source === 'GPS';
+      const fromSelected = !!selected && at.lat === selected.place.lat && at.lon === selected.place.lon;
       const data = await postJson(
         '/api/reports/auto',
         {
           type: 'blocked',
           comment: comment.trim() || undefined,
           destination: target.trim() || undefined,
-          location: at.place,
-          locationSource: gpsUsed ? 'gps' : at.source,
-          ...(at.factId && !gpsUsed ? { factId: at.factId } : {}),
+          location: at,
+          locationSource: gpsUsed ? 'gps' : fromSelected ? 'fact' : 'map',
+          ...(fromSelected && selected?.factId ? { factId: selected.factId } : {}),
           ...(photos[0] ? { photo: photos[0] } : {}),
           locale,
         },
@@ -135,18 +127,17 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
         <form onSubmit={submit} className="flex flex-col gap-4 pt-2">
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 font-semibold">{t('report.where')}</legend>
-            <RadioGroup value={where} onValueChange={v => setWhere(v as Where)} className="gap-2">
-              {([
-                ['gps', t('report.whereGps')],
-                ...(selectedName ? [['selected', t('report.whereSelected', { name: selectedName })] as const] : []),
-                ['map', t('report.whereMap')],
-              ] as const).map(([value, label]) => (
-                <Label key={value} htmlFor={`where-${value}`} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border bg-card px-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent">
-                  <RadioGroupItem id={`where-${value}`} value={value} />
-                  {label}
-                </Label>
-              ))}
-            </RadioGroup>
+            {place ? (
+              <LocationPicker
+                value={place}
+                onChange={setPlace}
+                presets={[
+                  { key: 'gps', label: t('report.whereGps'), place: () => gpsPlace(t('report.photoPlace'), locale).then(p => p ?? (toast.warning(t('search.geoDenied')), null)) },
+                  ...(selected ? [{ key: 'selected', label: t('report.whereSelectedShort'), place: selected.place }] : []),
+                  { key: 'map', label: t('report.whereMap'), place: mapPoint().place },
+                ]}
+              />
+            ) : null}
           </fieldset>
 
           <div className="flex flex-col gap-1.5">

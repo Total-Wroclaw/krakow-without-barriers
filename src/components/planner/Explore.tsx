@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, CircleHelp, Minus, Search, Star, Store, TriangleAlert, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, CircleHelp, Minus, Search, Star, Store, TriangleAlert, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,8 +36,7 @@ export function FeatureChip({ feature }: { feature: AccessFeature }) {
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium', className)}>
       <Icon className="size-3.5" aria-hidden />
-      {t(`feature.${feature.key}`)}
-      <span className="sr-only">: {t(`fvalue.${feature.value}`)}</span>
+      {t(`feature.${feature.key}`)}: {t(`fvalue.${feature.value}`).toLocaleLowerCase()}
     </span>
   );
 }
@@ -73,6 +72,19 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
   const [category, setCategory] = useState<ObjectCategory | 'all'>('museum');
   const [query, setQuery] = useState('');
   const [withData, setWithData] = useState(true);
+  const chipRow = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ start: false, end: true });
+  const updateEdges = useCallback(() => {
+    const el = chipRow.current;
+    if (!el) return;
+    setEdges({ start: el.scrollLeft > 4, end: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  }, []);
+  const scrollChips = (dir: number) => chipRow.current?.scrollBy({ left: dir * 220, behavior: 'smooth' });
+  useEffect(() => {
+    updateEdges();
+    window.addEventListener('resize', updateEdges);
+    return () => window.removeEventListener('resize', updateEdges);
+  }, [updateEdges]);
   type State = { loading: boolean; more: boolean; moreFailed: boolean; error: string; objects: PlaceObjectSummary[]; total: number; next: number | null };
   const [state, setState] = useState<State>({ loading: true, more: false, moreFailed: false, error: '', objects: [], total: 0, next: null });
   const sentinel = useRef<HTMLDivElement>(null);
@@ -157,12 +169,16 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
           className="h-12 rounded-xl bg-card pl-10 text-base"
         />
       </div>
+      {/* Category row: scrolls sideways; fading edges and arrow buttons show there is more. */}
+      <div className="relative -mx-4">
       <ToggleGroup
         type="single"
         value={category}
         onValueChange={v => v && setCategory(v as ObjectCategory | 'all')}
         aria-label={t('explore.categories')}
-        className="-mx-4 flex w-auto justify-start gap-2 overflow-x-auto px-4 pb-1"
+        ref={chipRow}
+        onScroll={updateEdges}
+        className="flex w-auto snap-x justify-start gap-2 overflow-x-auto scroll-smooth px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {(['all', ...categories] as const).map(c => (
           <ToggleGroupItem
@@ -174,6 +190,23 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
+        {edges.start ? (
+          <>
+            <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-background to-transparent" />
+            <button type="button" tabIndex={-1} aria-hidden onClick={() => scrollChips(-1)} className="absolute left-1 top-1/2 hidden size-9 -translate-y-1/2 place-items-center rounded-full border bg-card shadow-sm sm:grid">
+              <ChevronLeft className="size-4" />
+            </button>
+          </>
+        ) : null}
+        {edges.end ? (
+          <>
+            <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
+            <button type="button" tabIndex={-1} aria-hidden onClick={() => scrollChips(1)} className="absolute right-1 top-1/2 hidden size-9 -translate-y-1/2 place-items-center rounded-full border bg-card shadow-sm sm:grid">
+              <ChevronRight className="size-4" />
+            </button>
+          </>
+        ) : null}
+      </div>
 
       <div className="flex items-center justify-between gap-3 px-1">
         <Label htmlFor="with-data" className="text-sm font-normal">{t('explore.withData')}</Label>

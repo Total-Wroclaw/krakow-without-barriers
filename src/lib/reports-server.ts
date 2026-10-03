@@ -199,11 +199,19 @@ export function deleteReport(id: string) {
   db().prepare('DELETE FROM reports WHERE id=?').run(id);
 }
 
-export function updateReport(id: string, observation: unknown): Report | null {
-  const parsed = observationSchema.parse(observation);
+/** Author's corrections: the description and/or the location (e.g. GPS put it on the wrong side of the street). */
+export function updateReport(id: string, observation: unknown, location?: unknown): Report | null {
   const report = readReport(id);
   if (!report) return null;
-  const next: Report = { ...report, observation: parsed, analysis: 'edited', editedAt: new Date().toISOString() };
+  const parsed = observation === undefined ? report.observation : observationSchema.parse(observation);
+  const place = location === undefined ? null : placeSchema.parse(location);
+  const next: Report = {
+    ...report,
+    observation: parsed,
+    ...(observation === undefined ? {} : { analysis: 'edited' as const }),
+    ...(place ? { location: { ...place, id: `point:${place.lat}:${place.lon}` }, locationSource: 'map' as const, locationId: report.locationId.startsWith('point:') ? `point:${place.lat}:${place.lon}` : report.locationId } : {}),
+    editedAt: new Date().toISOString(),
+  };
   writeReport(next);
   return next;
 }

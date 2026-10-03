@@ -82,8 +82,8 @@ export type ParkingInfo = {
 
 export type Leg = WalkLeg | RideLeg | DriveLeg;
 
-/** How the trip may use vehicles. 'transit' = walking plus trams/buses. */
-export type TransportMode = 'transit' | 'taxi' | 'car';
+/** How the trip may use vehicles. 'walk' = on foot only; 'transit' = walking plus trams/buses. */
+export type TransportMode = 'walk' | 'transit' | 'taxi' | 'car';
 
 export type StairCounts = { up: number; down: number; unknown: number };
 

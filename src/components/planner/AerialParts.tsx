@@ -1,6 +1,8 @@
 'use client';
 // Pieces shared by the aerial map and its text equivalent: badges, fact wording and the point card.
-import { ExternalLink, MapPin, Sparkles } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Accessibility, BusFront, Check, ChevronDown, CircleHelp, Coins, DoorOpen, ExternalLink, Footprints, Grip, MapPin, Minus, Navigation2, SquareParking, TramFront, X, type LucideIcon } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { compass, distance } from '@/lib/aerial-geo';
 import { lineMiddle, type AerialLine, type AerialObservation, type AerialOverlay, type AerialPin } from '@/lib/aerial-types';
 import { distance as formatDistance, formatDate } from '@/lib/format';
@@ -23,12 +25,18 @@ export function pinStyle(pin: AerialPin) {
   }
 }
 
+/**
+ * Inline badges sit in running text: 18 px (fits the 20–23 px line boxes of text-sm without pushing lines apart),
+ * no ring or shadow, centred on the x-height of the surrounding text whatever its size.
+ */
+const inlineBadge = 'mx-0.5 size-[18px] align-middle -translate-y-px';
+
 export function PinBadge({ pin, large = false, inline = false }: { pin: AerialPin; large?: boolean; inline?: boolean }) {
   return (
     <span
       className={cn(
-        'inline-grid shrink-0 place-items-center font-bold leading-none text-white tabular-nums ring-2 ring-white',
-        inline ? 'mx-0.5 size-5 align-[-0.3em] text-[11px] shadow-none' : large ? 'size-7 text-sm shadow-md' : 'size-6 text-xs shadow-md',
+        'inline-grid shrink-0 place-items-center font-bold leading-none text-white tabular-nums',
+        inline ? cn(inlineBadge, 'text-[11px]') : large ? 'size-7 text-sm shadow-md ring-2 ring-white' : 'size-6 text-xs shadow-md ring-2 ring-white',
         pinStyle(pin),
       )}
     >
@@ -37,11 +45,12 @@ export function PinBadge({ pin, large = false, inline = false }: { pin: AerialPi
   );
 }
 
+/** Something seen on the photo: a small neutral diamond with a letter (no colour that competes with mapped facts). */
 export function ObservationBadge({ id, large = false, inline = false }: { id: string; large?: boolean; inline?: boolean }) {
   return (
-    <span className={cn('relative inline-grid shrink-0 place-items-center', inline ? 'mx-0.5 size-5 align-[-0.3em]' : large ? 'size-7' : 'size-6')}>
-      <span className="absolute inset-[3px] rotate-45 rounded-[3px] bg-report shadow-md ring-2 ring-white" />
-      <span className={cn('relative font-bold leading-none text-white', inline ? 'text-[10px]' : 'text-xs')}>{id}</span>
+    <span className={cn('relative inline-grid shrink-0 place-items-center', inline ? inlineBadge : large ? 'size-6' : 'size-5')}>
+      <span className={cn('absolute inset-[3px] rotate-45 rounded-[3px] bg-white ring-1 ring-ink/60', !inline && 'shadow-md')} />
+      <span className="relative text-[10px] font-bold leading-none text-ink">{id}</span>
     </span>
   );
 }
@@ -49,7 +58,7 @@ export function ObservationBadge({ id, large = false, inline = false }: { id: st
 /** Stairs marker: amber square with a step glyph. */
 export function StairsBadge({ large = false, inline = false }: { large?: boolean; inline?: boolean }) {
   return (
-    <span className={cn('inline-grid shrink-0 place-items-center rounded-[5px] bg-barrier text-white ring-2 ring-white', inline ? 'mx-0.5 size-5 align-[-0.3em]' : large ? 'size-6 shadow-md' : 'size-5 shadow-md')}>
+    <span className={cn('inline-grid shrink-0 place-items-center rounded-[5px] bg-barrier text-white', inline ? inlineBadge : large ? 'size-6 shadow-md ring-2 ring-white' : 'size-5 shadow-md ring-2 ring-white')}>
       <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M4 20h5v-5h5v-5h6" />
       </svg>
@@ -122,55 +131,213 @@ export function usePointLabel() {
     : `${t('aerial.observation', { id: p.observation.id })}: ${p.observation.label}`;
 }
 
-/** Content of the hover/tap card for a point: what it is, sourced facts, distance, source and date. */
+type Tone = 'good' | 'warn' | 'bad' | 'neutral';
+type Tile = { icon: LucideIcon; label: string; value: string; tone: Tone };
+
+const toneClass: Record<Tone, string> = {
+  good: 'bg-rest-soft text-rest',
+  warn: 'bg-barrier-soft text-barrier',
+  bad: 'bg-barrier-soft text-barrier',
+  neutral: 'bg-muted text-foreground',
+};
+const toneIcon: Record<Tone, LucideIcon | null> = { good: Check, warn: Minus, bad: X, neutral: null };
+const compassAngle: Record<string, number> = { n: 0, ne: 45, e: 90, se: 135, s: 180, sw: 225, w: 270, nw: 315 };
+
+/** Facts of a pin or stairs as tiles; facts nobody has mapped are returned separately as one "no data" line. */
+function useTiles() {
+  const { t, tp } = useI18n();
+  return (point: Extract<MapPoint, { type: 'pin' | 'stairs' }>): { tiles: Tile[]; unknown: string[]; chips: string[] } => {
+    const tiles: Tile[] = [];
+    const unknown: string[] = [];
+    const chips: string[] = [];
+    if (point.type === 'stairs') {
+      const l = point.line;
+      if (l.steps !== undefined) tiles.push({ icon: Footprints, label: t('tile.steps'), value: tp('aerial.steps', l.steps), tone: 'bad' });
+      else unknown.push(t('tile.steps').toLocaleLowerCase());
+      if (l.handrail === 'yes' || l.handrail === 'no') tiles.push({ icon: Grip, label: t('tile.handrail'), value: t(l.handrail === 'yes' ? 'fvalue.yes' : 'fvalue.no'), tone: l.handrail === 'yes' ? 'good' : 'bad' });
+      else unknown.push(t('tile.handrail').toLocaleLowerCase());
+      if (l.ramp) tiles.push({ icon: Accessibility, label: t('tile.ramp'), value: t('fvalue.yes'), tone: 'good' });
+      return { tiles, unknown, chips };
+    }
+    const pin = point.pin;
+    if (pin.kind === 'entrance') {
+      const w = pin.wheelchair ?? 'unknown';
+      if (w === 'unknown') unknown.push(t('tile.wheelchair').toLocaleLowerCase());
+      else tiles.push({ icon: Accessibility, label: t('tile.wheelchair'), value: t(`fvalue.${w}`), tone: w === 'yes' ? 'good' : w === 'limited' ? 'warn' : 'bad' });
+      if (pin.steps === undefined) unknown.push(t('tile.steps').toLocaleLowerCase());
+      else tiles.push({ icon: Footprints, label: t('tile.steps'), value: pin.steps === 0 ? t('tile.none') : tp('aerial.steps', pin.steps), tone: pin.steps === 0 ? 'good' : 'bad' });
+      if (pin.ramp) tiles.push({ icon: Accessibility, label: t('tile.ramp'), value: t('fvalue.yes'), tone: 'good' });
+      if (pin.doorWidth) tiles.push({ icon: DoorOpen, label: t('tile.door'), value: `${pin.doorWidth} cm`, tone: pin.doorWidth >= 90 ? 'good' : pin.doorWidth >= 80 ? 'warn' : 'bad' });
+      if (pin.automaticDoor) tiles.push({ icon: DoorOpen, label: t('tile.autoDoor'), value: t('fvalue.yes'), tone: 'good' });
+      if (pin.main) chips.push(t('tile.mainEntrance'));
+    }
+    if (pin.kind === 'stop') {
+      for (const m of pin.modes ?? []) chips.push(t(`aerial.${m}`));
+      if (pin.platform) chips.push(t('aerial.platform', { code: pin.platform }));
+      if (pin.lines?.length) tiles.push({ icon: pin.modes?.includes('tram') ? TramFront : BusFront, label: t('tile.lines'), value: pin.lines.join(', '), tone: 'neutral' });
+    }
+    if (pin.kind === 'parking') {
+      if (pin.disabledSpaces) tiles.push({ icon: Accessibility, label: t('tile.spaces'), value: String(pin.disabledSpaces), tone: 'good' });
+      else unknown.push(t('tile.spaces').toLocaleLowerCase());
+      if (pin.fee === 'yes' || pin.fee === 'no') tiles.push({ icon: Coins, label: t('tile.fee'), value: t(pin.fee === 'yes' ? 'tile.paid' : 'tile.free'), tone: 'neutral' });
+      else unknown.push(t('tile.fee').toLocaleLowerCase());
+      if (pin.capacity) tiles.push({ icon: SquareParking, label: t('tile.capacity'), value: String(pin.capacity), tone: 'neutral' });
+    }
+    if (pin.kind === 'toilet') {
+      const w = pin.wheelchair ?? 'unknown';
+      if (w === 'unknown') unknown.push(t('tile.wheelchair').toLocaleLowerCase());
+      else tiles.push({ icon: Accessibility, label: t('tile.wheelchair'), value: t(`fvalue.${w}`), tone: w === 'yes' ? 'good' : w === 'limited' ? 'warn' : 'bad' });
+    }
+    return { tiles, unknown, chips };
+  };
+}
+
+/** Distance and direction from the place, with an arrow pointing that way. */
+function Direction({ from, to }: { from: Point; to: Point }) {
+  const { t, locale } = useI18n();
+  const d = Math.round(distance(from, to));
+  const c = compass(from, to);
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+      <Navigation2 className="size-4 text-primary" style={{ transform: `rotate(${compassAngle[c] ?? 0}deg)` }} aria-hidden />
+      {formatDistance(d, locale)}
+      <span className="font-normal text-muted-foreground">{t(`aerial.dir.${c}` as MessageKey)}</span>
+    </span>
+  );
+}
+
+/** Hover/tap card of a point: a header, fact tiles with icons, unknowns in one line, distance and source in a footer. */
 export function PointCard({ point, overlay }: { point: MapPoint; overlay: AerialOverlay }) {
   const { t, locale } = useI18n();
-  const { where, details, stairs, source } = useDescribe();
+  const tilesOf = useTiles();
   const place = overlay.place;
-  const away = (p: Point) => where({ distance: Math.round(distance(place, p)), compass: compass(place, p) });
   if (point.type === 'place') {
     return (
-      <div className="flex flex-col gap-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-tram">{t('aerial.place')}</p>
-        <p className="font-semibold leading-snug">{point.name}</p>
+      <div className="flex items-center gap-2.5">
+        <PlaceBadge />
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-tram">{t('aerial.place')}</p>
+          <p className="font-semibold leading-snug">{point.name}</p>
+        </div>
       </div>
     );
   }
   if (point.type === 'observation') {
     const o = point.observation;
     return (
-      <div className="flex flex-col gap-1">
-        <p className="flex items-center gap-1 text-xs font-semibold text-report">
-          <Sparkles className="size-3.5" aria-hidden />
-          {t('aerial.aiUnverified')}
-        </p>
-        <p className="font-semibold leading-snug">{o.label}</p>
-        <p className="text-muted-foreground">{t(`aerial.obs.${o.kind}`)} · {away(o)}</p>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2.5">
+          <ObservationBadge id={o.id} large />
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">{t(`aerial.obs.${o.kind}`)}</p>
+            <p className="font-semibold leading-snug">{o.label}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t pt-2">
+          <Direction from={place} to={o} />
+          <span className="text-xs text-muted-foreground">{t('tile.seen')}</span>
+        </div>
       </div>
     );
   }
-  const [title, facts, url, src] =
-    point.type === 'pin'
-      ? [`${t(`aerial.kind.${point.pin.kind}`)}${point.pin.name ? `: ${point.pin.name}` : ''}`, details(point.pin), point.pin.sourceUrl, source(point.pin.kind, point.pin.editedAt, overlay)]
-      : [t('aerial.stairs'), stairs(point.line), `https://www.openstreetmap.org/${point.line.id.replace(':', '/')}`, source('stairs', point.line.editedAt, overlay)];
-  const distanceText = point.type === 'pin' ? where(point.pin) : away(lineMiddle(point.line, place));
+  const { tiles, unknown, chips } = tilesOf(point);
+  const isPin = point.type === 'pin';
+  const kindLabel = isPin ? t(`aerial.kind.${point.pin.kind}`) : t('aerial.stairs');
+  const name = isPin ? point.pin.name : undefined;
+  const url = isPin ? point.pin.sourceUrl : `https://www.openstreetmap.org/${point.line.id.replace(':', '/')}`;
+  const sourceName = isPin && point.pin.kind === 'stop' ? 'ZTP GTFS' : 'OpenStreetMap';
+  const sourceDate = isPin && point.pin.kind === 'stop' ? overlay.transitObtainedAt : isPin ? point.pin.editedAt : point.line.editedAt;
+  const target = isPin ? point.pin : lineMiddle(point.line, place);
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="flex items-center gap-2 font-semibold leading-snug">
-        {point.type === 'pin' ? <PinBadge pin={point.pin} inline /> : <StairsBadge inline />}
-        {title}
-      </p>
-      {facts.length ? (
-        <ul className="flex flex-col gap-0.5">
-          {facts.map(f => <li key={f}>{f}</li>)}
+    <div className="flex flex-col gap-2.5">
+      <div className={cn('flex gap-2.5', name || chips.length ? 'items-start' : 'items-center')}>
+        {isPin ? <PinBadge pin={point.pin} large /> : <StairsBadge large />}
+        <div className="min-w-0">
+          {name ? <p className="text-xs font-medium text-muted-foreground">{kindLabel}</p> : null}
+          <p className="font-semibold leading-snug">{name ?? kindLabel}</p>
+          {chips.length ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {chips.map(c => (
+                <span key={c} className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">{c}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {tiles.length ? (
+        <ul className="grid grid-cols-2 gap-1.5">
+          {tiles.map(tile => {
+            const ToneIcon = toneIcon[tile.tone];
+            return (
+              <li key={tile.label} className={cn('flex items-start gap-2 rounded-lg px-2 py-1.5', toneClass[tile.tone])}>
+                <tile.icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span className="min-w-0">
+                  <span className="block text-[11px] leading-tight opacity-80">{tile.label}</span>
+                  <span className="flex items-center gap-1 text-sm font-semibold leading-tight">
+                    {ToneIcon ? <ToneIcon className="size-3.5 shrink-0" strokeWidth={3} aria-hidden /> : null}
+                    <span className="break-words">{tile.value}</span>
+                  </span>
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
-      <p className="text-muted-foreground">{t('aerial.fromPlace', { distance: distanceText })}</p>
-      <a href={url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary underline underline-offset-2">
-        {src}
-        <ExternalLink className="size-3" aria-hidden />
-        <span className="sr-only">{t('fact.newTab')}</span>
-      </a>
+      {unknown.length ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <CircleHelp className="size-3.5 shrink-0" aria-hidden />
+          {t('tile.unknown', { list: unknown.join(', ') })}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t pt-2">
+        <Direction from={place} to={target} />
+        <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline">
+          {sourceName}
+          {sourceDate ? <span className="text-muted-foreground">· {formatDate(sourceDate, locale)}</span> : null}
+          <ExternalLink className="size-3" aria-hidden />
+          <span className="sr-only">{t('fact.newTab')}</span>
+        </a>
+      </div>
     </div>
+  );
+}
+
+/**
+ * A list that shows its first few items and the rest behind "Show all (N)" / "Show less" (Radix Collapsible:
+ * aria-expanded, Enter/Space). Short lists render whole. `items` are <li> elements; `frameClassName` styles the
+ * box around both parts (e.g. a bordered card), `listClassName` each list.
+ */
+export function ShowMore({ items, preview = 3, listClassName, frameClassName, restClassName, labelledBy }: {
+  items: ReactNode[];
+  preview?: number;
+  listClassName?: string;
+  frameClassName?: string;
+  /** Extra classes for the list of hidden items (e.g. a top border to continue a divided list). */
+  restClassName?: string;
+  labelledBy?: string;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  // Hiding a single item saves nothing: show everything.
+  if (items.length <= preview + 1) {
+    return (
+      <div className={frameClassName}>
+        <ul aria-labelledby={labelledBy} className={listClassName}>{items}</ul>
+      </div>
+    );
+  }
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col gap-1">
+      <div className={frameClassName}>
+        <ul aria-labelledby={labelledBy} className={listClassName}>{items.slice(0, preview)}</ul>
+        <CollapsibleContent asChild>
+          <ul aria-labelledby={labelledBy} className={cn(listClassName, restClassName)}>{items.slice(preview)}</ul>
+        </CollapsibleContent>
+      </div>
+      <CollapsibleTrigger className="inline-flex min-h-10 w-fit items-center gap-1 rounded-md text-sm font-semibold text-primary outline-none focus-visible:ring-[3px] focus-visible:ring-ring">
+        {open ? t('card.showLess') : t('card.showAll', { n: items.length })}
+        <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} aria-hidden />
+      </CollapsibleTrigger>
+    </Collapsible>
   );
 }

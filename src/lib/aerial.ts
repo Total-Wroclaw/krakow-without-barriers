@@ -241,6 +241,7 @@ export function pinsForPrompt(overlay: AerialOverlay, bbox: Bbox) {
       if (pin.automaticDoor) facts.push('automatic_door=yes');
     } else if (pin.kind === 'stop') {
       facts.push(`przystanek ${JSON.stringify(pin.name)} (${pin.modes?.map(m => (m === 'tram' ? 'tramwaj' : 'autobus')).join(', ')})`);
+      if (pin.wheelchair && pin.wheelchair !== 'unknown') facts.push(`wheelchair_boarding=${pin.wheelchair}`);
     } else if (pin.kind === 'parking') {
       facts.push(`parking z miejscami dla osób z niepełnosprawnością${pin.disabledSpaces ? ` (${pin.disabledSpaces})` : ''}`);
     } else {
@@ -355,9 +356,12 @@ function namedKind(text: string, at: number) {
   return best?.kind ?? null;
 }
 
+/** Promises the data cannot back ("fully accessible", "no problem"): such a sentence is dropped. */
+const guarantee = /gwarant|na pewno|bez (żadnego |żadnych )?problem|w pełni dostępn|całkowicie dostępn|guarantee|definitely|certainly|no problem|without (any )?problem|fully accessible|garantier|auf jeden fall|ohne (jedes |jegliche )?problem|vollständig barrierefrei|uneingeschränkt barrierefrei/i;
+
 /**
  * A sentence as the model wrote it, or '' when it must not be shown: it claims a measurement, refers to a pin
- * that doesn't exist, calls a pin something it isn't, or quotes raw tags.
+ * that doesn't exist, calls a pin something it isn't, promises accessibility or quotes raw tags.
  */
 export function cleanSentence(text: string, pinKinds: AerialPin['kind'][]) {
   const sentence = text.trim().replace(/\s+/g, ' ');
@@ -368,41 +372,70 @@ export function cleanSentence(text: string, pinKinds: AerialPin['kind'][]) {
     if (named && named !== kind) return '';
   }
   if (measured.test(sentence.replace(reference, ''))) return '';
+  if (guarantee.test(sentence)) return '';
   // Raw OSM tags ("wheelchair=yes") are for the model, not for people.
   if (sentence.includes('=')) return '';
   return sentence;
 }
 
 export type RawAnalysis = {
-  approach: string[];
+  recommendation: { entrance: number | null; approachFrom: number | null; why: string; steps: string[]; avoid: string[]; ask: string[] };
   today: string[];
   observations: { x: number; y: number; kind: string; label: string }[];
-  checks: string[];
 };
 
+/** Needs for which an entrance tagged "not accessible" must never be recommended. */
+export const needsStepFree = (p: Preferences | null) => !!p && (p.mobility === 'wheelchair' || p.mobility === 'stroller');
+
 /**
- * Keep only what the model can honestly say: sentences without measurements or invented pins, and
- * observations inside the frame, with a known kind, not stacked on top of each other.
+ * Keep only what the model can honestly say: a recommended entrance that is a mapped entrance (and not one tagged
+ * inaccessible when the person needs step-free access), arrival from a mapped stop or parking, sentences without
+ * measurements, guarantees or invented pins, and observations inside the frame, with a known kind, not stacked.
  */
-export function sanitiseAnalysis(raw: RawAnalysis, bbox: Bbox, pinKinds: AerialPin['kind'][]): Pick<AerialAnalysis, 'approach' | 'today' | 'observations' | 'checks'> {
-  const sentences = (list: string[], max: number) => [...new Set(list.map(s => cleanSentence(s, pinKinds)).filter(s => s.length >= 8))].slice(0, max);
+export function sanitiseAnalysis(
+  raw: RawAnalysis,
+  bbox: Bbox,
+  pins: Pick<AerialPin, 'kind' | 'wheelchair'>[],
+  options: { stepFree?: boolean } = {},
+): Pick<AerialAnalysis, 'recommendation' | 'today' | 'observations'> {
+  const kinds = pins.map(p => p.kind);
+  const rejected = new Set<number>();
+  const pinOf = (n: number | null, allowed: AerialPin['kind'][]) => {
+    if (n === null || !Number.isInteger(n)) return null;
+    const pin = pins[n - 1];
+    if (!pin || !allowed.includes(pin.kind)) return null;
+    return pin;
+  };
+  // Entrances the person should not be sent to: tagged inaccessible while they need a step-free way in.
+  if (options.stepFree) pins.forEach((p, i) => p.kind === 'entrance' && p.wheelchair === 'no' && rejected.add(i + 1));
+  const usable = (s: string) => ![...s.matchAll(reference)].some(m => rejected.has(Number(m[1])));
+  const sentences = (list: string[], max: number, min = 8) =>
+    [...new Set(list.map(s => cleanSentence(s, kinds)).filter(s => s.length >= min && usable(s)))].slice(0, max);
+
+  const r = raw.recommendation;
+  const entrance = pinOf(r.entrance, ['entrance']) && !rejected.has(r.entrance!) ? r.entrance : null;
+  const approachFrom = pinOf(r.approachFrom, ['stop', 'parking']) ? r.approachFrom : null;
+  const steps = sentences(r.steps, 4);
+  const why = entrance !== null ? (sentences([r.why], 1)[0] ?? '') : '';
+  const recommendation = entrance === null && !steps.length ? null : { entrance, approachFrom, why, steps, avoid: sentences(r.avoid, 3, 4), ask: sentences(r.ask, 3, 4) };
+
   const kept: AerialObservation[] = [];
   for (const o of raw.observations) {
     if (!Number.isFinite(o.x) || !Number.isFinite(o.y) || !inFrame(o)) continue;
     if (!(observationKinds as readonly string[]).includes(o.kind)) continue;
-    const label = cleanSentence(o.label, pinKinds).replace(reference, '').trim().slice(0, 80);
+    const label = cleanSentence(o.label, kinds).replace(reference, '').trim().slice(0, 80);
     if (label.length < 3) continue;
     const point = unproject(o, bbox);
     if (kept.some(k => distance(k, point) < 8)) continue;
     kept.push({ id: String.fromCharCode(65 + kept.length), kind: o.kind as ObservationKind, label, lat: Math.round(point.lat * 1e6) / 1e6, lon: Math.round(point.lon * 1e6) / 1e6 });
     if (kept.length === 6) break;
   }
-  return { approach: sentences(raw.approach, 3), today: sentences(raw.today, 2), observations: kept, checks: sentences(raw.checks, 3) };
+  return { recommendation, today: sentences(raw.today, 2), observations: kept };
 }
 
 // ---------- Analysis cache ----------
 /** Bump when the prompt or the validation changes, so old readings are not served. */
-const ANALYSIS_VERSION = 5;
+const ANALYSIS_VERSION = 7;
 export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; weather: string; reports: string };
 
 /** File name for a reading: everything that changes the text is part of the hash. */

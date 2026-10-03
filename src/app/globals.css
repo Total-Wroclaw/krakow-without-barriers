@@ -98,6 +98,23 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "tnum" 1;
   }
+  /* Every enabled control shows it can be clicked. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab'],
+  [role='option'],
+  [role='menuitemradio'],
+  [role='radio'],
+  [role='switch'],
+  summary,
+  label[for],
+  select,
+  a[href] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
   :focus-visible {
     outline: 3px solid var(--ring);
     outline-offset: 2px;
@@ -118,8 +135,8 @@
   font-size: 11px;
 }
 .maplibregl-ctrl-group button {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
 }
 .map-marker:focus-visible {
   outline: 3px solid var(--ring);

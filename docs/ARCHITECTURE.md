@@ -49,7 +49,7 @@ Dla kół (`routing.ts`, bity `edgeMobility` na krawędziach i `nodeBarrier` na 
 
 | Cecha OSM | Wózek inwalidzki | Wózek dziecięcy |
 | --- | --- | --- |
-| `highway=steps` | zawsze wykluczone (niezależnie od „unikam schodów”), chyba że `ramp:wheelchair=yes` | wykluczone, chyba że `ramp=yes` lub `ramp:wheelchair=yes` |
+| `highway=steps` | zawsze wykluczone (niezależnie od „unikam schodów”), chyba że `ramp:wheelchair=yes`; także 1–2 stopnie | dozwolone z `ramp=yes`/`ramp:wheelchair=yes` albo przy znanym `step_count` ≤ 2 (bit `SHORT_FLIGHT`, liczone na drogę OSM = jeden bieg; wózek się podnosi: +3 × długość + 40 m raz na bieg); `step_count` > 2, brak lub nieliczbowy — wykluczone |
 | węzeł `kerb=raised` (też `normal`) | wykluczony | +40 m kosztu |
 | `barrier=kerb` bez `kerb=*`, `kerb=yes` | +60 m | +20 m |
 | `kerb=rolled` | +30 m | +10 m |
@@ -60,6 +60,8 @@ Dla kół (`routing.ts`, bity `edgeMobility` na krawędziach i `nodeBarrier` na 
 | bruk/żwir (`sett`, `cobblestone`, `gravel`, `pebblestone`, `unpaved`, `rock`), `smoothness=bad` | +2 × długość | +1 × długość |
 | `unhewn_cobblestone`, `ground`, `dirt`, `grass`, `sand`, `mud`, `grass_paver`…, `smoothness=very_bad/horrible/very_horrible` | +5 × długość | +2,5 × długość |
 | liczbowe `incline` > 6 % (%, ° lub `steep`, poza schodami) | +3 × długość | +1 × długość |
+
+**Pierwszeństwo reguł schodów na kołach:** dla `wheelchair` i `stroller` o schodach decyduje wyłącznie reguła profilu z tabeli (`stairsPassable`, `forbiddenFlags` w `routing.ts`); „unikam schodów”, „w górę” i „w dół” nie są dokładane na wierzch (wózek dziecięcy pokona 2 stopnie nawet przy „unikam schodów”, wózek inwalidzki nie pokona żadnych). Te ustawienia działają tylko dla `walk` i `crutches`. Każdy krótki bieg, przez który trzeba podnieść wózek dziecięcy, jest faktem `stairs` (z `step_count`) i uwagą niezmieniającą `fits`: „Krótkie schody (2 stopnie) — wózek trzeba podnieść” albo zbiorczo „Krótkie schody w 3 miejscach — wózek trzeba podnieść” (en „Short steps (2) — you'll need to lift the pushchair”, de „Kurze Stufen (2) — Kinderwagen muss gehoben werden”). Komunikat „każda droga prowadzi przez schody” (`errors.stairsOnly`) na kołach liczy tylko biegi wykluczone regułą profilu (`hasAvoidedStairs` w `journey.ts`), więc nie pojawia się, gdy na trasie są wyłącznie dozwolone krótkie biegi lub schody z rampą.
 
 Pokrycie tagów w grafie pieszym (735 530 węzłów): `kerb` na 5 853 węzłach (4 271 `lowered`, 1 147 `flush`, 367 `raised`, 10 `yes`), `barrier=kerb` 5 369, `barrier=step` 59; na drogach `surface` 107 048, `smoothness` 19 577, `width` 4 708 (w tym 140 ścieżek < 0,9 m), `wheelchair` 1 039, liczbowe `incline` 92 (30 powyżej 6 %). Brak tagu nie jest karany (poza krawężnikiem o nieznanej wysokości) — to niewiadoma, nie bariera. Wysokość krawężnika (`kerb:height`) nie jest pobierana.
 
@@ -75,6 +77,10 @@ Po zbudowaniu wszystkich wariantów `planJourney` wywołuje `applyExtras` (tylko
 - **Toalety (`showToilets`):** z katalogu Odkrywaj (`accessibleToilets()` w `objects.ts`, synchronicznie: pełny katalog z partnerami, jeśli Odkrywaj go już wczytało, inaczej OSM + UMK; ~25 ms za pierwszym razem, potem z pamięci) bierzemy tylko obiekty, którym źródło przypisuje dostępną toaletę: toaleta z `wheelchair=yes|limited` albo dowolny obiekt z `accessible_toilet=yes` (`toilets:wheelchair=yes`, wykaz UMK, partner). Toalety bez informacji nigdy nie są pokazywane jako dostępne; obiekt, dla którego któreś źródło mówi „nie”, jest pomijany. Siatka przestrzenna (komórka ~200 m). Do 3 toalet ≤ 150 m od odcinków pieszych (co najmniej 400 m od siebie wzdłuż trasy) i do 2 ≤ 300 m od celu (na ostatnim odcinku pieszym; gdy wariant kończy się jazdą pod drzwi, tych nie ma). Fakt `kind: 'toilet'`, `id: 'toilet:<objectId>'`, `objectId` = id obiektu Odkrywaj, tytuł „Toaleta dostępna · {nazwa}” / „Toaleta częściowo dostępna · {nazwa}”, `tags.accessible_toilet`, `sourceUrl` i `editedAt` źródła.
 
 Koszt (Dworzec Główny → Rynek, Rynek → Wawel, 4–6 wariantów): +20–40 ms na całe zapytanie.
+
+## Tryb transportu (`transport`)
+
+`'transit'` (domyślny): piesze + komunikacja. `'walk'`: tylko warianty piesze — bez komunikacji, taksówki i samochodu (graf drogowy i rozkład nie są ładowane); długie spacery nie są odrzucane (filtr „za daleko, gdy jest przejazd” działa tylko obok przejazdów), dodatki (przerwy na ławce, toalety, fakty, uwagi) jak zwykle. `'taxi'` / `'car'`: poniżej.
 
 ## Taksówka i samochód (`transport: 'taxi' | 'car'`)
 

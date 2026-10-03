@@ -1,5 +1,5 @@
 'use client';
-import { Accessibility, Armchair, ArrowDown, ArrowUp, BusFront, CarFront, CarTaxiFront, ChevronRight, CircleAlert, Footprints, Info, OctagonAlert, TramFront } from 'lucide-react';
+import { Accessibility, Armchair, ArrowDown, ArrowUp, BusFront, Check, CarFront, CarTaxiFront, ChevronRight, CircleAlert, Footprints, Info, OctagonAlert, TramFront } from 'lucide-react';
 import type { JourneyOption, Leg } from '@/lib/journey-types';
 import { clock, distance, duration } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
@@ -92,7 +92,11 @@ export function useStairsText() {
   };
 }
 
-export function OptionCard({ option, selected, onSelect }: { option: JourneyOption; selected: boolean; onSelect: () => void }) {
+/**
+ * A route option. The card itself opens details (`onOpen`); the separate "Wybierz" button (`onPick`)
+ * only makes it the active route on the map. The two are siblings, never a button inside a button.
+ */
+export function OptionCard({ option, selected, onOpen, onPick }: { option: JourneyOption; selected: boolean; onOpen: () => void; onPick?: () => void }) {
   const { t, tp, locale } = useI18n();
   const stairsText = useStairsText();
   const vehicles = option.legs.filter((l): l is RideLeg | DriveLeg => l.type !== 'walk');
@@ -102,14 +106,18 @@ export function OptionCard({ option, selected, onSelect }: { option: JourneyOpti
   const fare = option.legs.find((l): l is DriveLeg => l.type === 'drive' && !!l.fare)?.fare;
   const title = option.kind === 'walk' ? t('option.walkOnly') : option.kind === 'taxi' ? t('option.taxi') : option.kind === 'car' ? t('option.car') : null;
   return (
+    <div
+      className={cn(
+        'overflow-hidden rounded-xl border bg-card transition-colors',
+        selected ? 'border-primary ring-2 ring-primary/30' : 'border-border hover:border-primary/60',
+      )}
+    >
     <button
       type="button"
-      onClick={onSelect}
+      onClick={onOpen}
       aria-current={selected ? 'true' : undefined}
-      className={cn(
-        'group flex w-full flex-col gap-2 rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary/60',
-        selected ? 'border-primary ring-2 ring-primary/25' : 'border-border',
-      )}
+      aria-describedby={`${option.id}-hint`}
+      className="flex w-full flex-col gap-2 p-4 text-left"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -209,5 +217,28 @@ export function OptionCard({ option, selected, onSelect }: { option: JourneyOpti
         </p>
       ) : null}
     </button>
+      {onPick ? (
+        <div className="flex items-center justify-between gap-3 border-t px-4 py-2">
+          <span id={`${option.id}-hint`} className="flex items-center gap-1 text-sm text-muted-foreground">
+            {t('option.details')}
+            <ChevronRight className="size-4" aria-hidden />
+          </span>
+          <button
+            type="button"
+            onClick={onPick}
+            aria-pressed={selected}
+            className={cn(
+              'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors',
+              selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground hover:border-primary',
+            )}
+          >
+            {selected ? <Check className="size-4" aria-hidden /> : null}
+            {selected ? t('option.picked') : t('option.pick')}
+          </button>
+        </div>
+      ) : (
+        <span id={`${option.id}-hint`} hidden />
+      )}
+    </div>
   );
 }

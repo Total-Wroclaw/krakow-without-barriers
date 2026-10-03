@@ -24,7 +24,7 @@ import { ObjectSheet } from './ObjectSheet';
 import { OptionCard } from './OptionCard';
 import { PartnerForm } from './PartnerForm';
 import { PlaceInput } from './PlaceInput';
-import { PreferencesBar, PreferencesPanel } from './Preferences';
+import { DistanceControl, PreferencesBar, PreferencesPanel } from './Preferences';
 import { ReportChooser } from './ReportChooser';
 import { ReportFab, ReportPanel, useReportCapture, type CaptureTarget } from './Reports';
 import { TimeChooser, type When } from './TimeChooser';
@@ -108,7 +108,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
       if (sharedFrom) setFrom(sharedFrom);
       if (sharedTo) setTo(sharedTo);
       const mode = params.get('mode');
-      if (mode === 'taxi' || mode === 'car' || mode === 'transit') setTransport(mode);
+      if (mode === 'walk' || mode === 'taxi' || mode === 'car' || mode === 'transit') setTransport(mode);
     }
     setHydrated(true);
     fetch('/api/reports')
@@ -283,14 +283,14 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                 {t('embed.title')}
               </p>
             ) : (
-              <a href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+              <a href="/" className="flex min-w-0 items-center gap-2 whitespace-nowrap text-lg font-bold tracking-tight">
                 <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground" aria-hidden>
                   <Footprints className="size-5" />
                 </span>
                 {t('app.name')}
               </a>
             )}
-            <div className="flex items-center">
+            <div className="flex shrink-0 items-center">
               <LanguageMenu />
               {!embed ? <About /> : null}
             </div>
@@ -299,12 +299,12 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           <Tabs value={embed ? 'route' : tab} onValueChange={v => setTab(v as 'route' | 'explore')} className="gap-0">
           {!embed && !detail ? (
             <div className="px-4 pb-3">
-              <TabsList className="grid h-11 w-full grid-cols-2" aria-label={t('tabs.label')}>
-                <TabsTrigger value="route" className="h-9 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
+              <TabsList className="grid h-12! w-full grid-cols-2 gap-1 p-1" aria-label={t('tabs.label')}>
+                <TabsTrigger value="route" className="h-10! min-w-0 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
                   <Navigation aria-hidden />
                   {t('tabs.route')}
                 </TabsTrigger>
-                <TabsTrigger value="explore" className="h-9 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
+                <TabsTrigger value="explore" className="h-10! min-w-0 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
                   <Compass aria-hidden />
                   {t('tabs.explore')}
                 </TabsTrigger>
@@ -343,6 +343,9 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                 </div>
                 <div className="mt-1 border-t px-1 pt-1.5">
                   <TransportPicker value={transport} onChange={setTransport} />
+                </div>
+                <div className="mt-1 border-t">
+                  <DistanceControl preferences={preferences} onChange={setPreferences} />
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1 border-t px-1.5 pt-1">
                   <TimeChooser value={when} onChange={setWhen} />
@@ -383,7 +386,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                       <ul className={cn('flex flex-col gap-3', loading && 'opacity-60')}>
                         {options.map(o => (
                           <li key={o.id}>
-                            <OptionCard option={o} selected={o.id === selectedId} onSelect={() => choose(o.id)} />
+                            <OptionCard option={o} selected={o.id === selectedId} onOpen={() => choose(o.id)} onPick={() => setSelectedId(o.id)} />
                           </li>
                         ))}
                       </ul>
@@ -411,7 +414,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                 </ToggleGroup>
               </div>
               <h1 ref={detailHeading} tabIndex={-1} className="sr-only">{t('results.detailH1')}</h1>
-              <OptionCard option={selected} selected onSelect={() => setMobileView(v => (v === 'map' ? 'list' : 'map'))} />
+              <OptionCard option={selected} selected onOpen={() => setMobileView(v => (v === 'map' ? 'list' : 'map'))} />
               {selected.rideLinks?.length ? (
                 <section className="flex flex-col gap-2" aria-labelledby="ride-apps">
                   <h2 id="ride-apps" className="px-1 text-sm font-semibold">{t('taxi.open')}</h2>
@@ -420,7 +423,6 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                       <Button key={link.provider} variant={link.provider === 'uber' ? 'default' : 'outline'} className="h-11" asChild>
                         <a href={link.url} target="_blank" rel="noreferrer">
                           {({ uber: 'Uber', bolt: 'Bolt', freenow: 'FREENOW' } as const)[link.provider]}
-                          {link.provider !== 'uber' ? <span className="text-xs font-normal opacity-80">({t('taxi.website')})</span> : null}
                           <span className="sr-only"> {t('fact.newTab')}</span>
                         </a>
                       </Button>

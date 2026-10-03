@@ -57,6 +57,32 @@ function Crutches(props: { 'aria-hidden'?: boolean }) {
 
 const chipKey: Record<Exclude<StairMode, 'any'>, MessageKey> = { noDown: 'chip.noDown', noUp: 'chip.noUp', none: 'chip.noStairs' };
 
+/** Today's walking distance, right in the planning card (the most changed setting). */
+export function DistanceControl({ preferences, onChange }: { preferences: Preferences; onChange: (p: Preferences) => void }) {
+  const { t, locale } = useI18n();
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5">
+      <Footprints className="size-5 shrink-0 text-primary" aria-hidden />
+      <span id="main-distance-label" className="shrink-0 text-sm text-muted-foreground">
+        {t('prefs.distanceShort')}
+      </span>
+      <Slider
+        aria-labelledby="main-distance-label"
+        aria-valuetext={distance(preferences.maxDistance, locale)}
+        min={100}
+        max={3000}
+        step={100}
+        value={[preferences.maxDistance]}
+        onValueChange={([v]) => onChange({ ...preferences, maxDistance: v })}
+        className="min-w-0 flex-1"
+      />
+      <span className="w-16 shrink-0 text-right text-sm font-bold tabular-nums text-primary" aria-hidden>
+        {distance(preferences.maxDistance, locale)}
+      </span>
+    </div>
+  );
+}
+
 /** Compact summary of today's needs, opens the editor. */
 export function PreferencesBar({ preferences, onOpen }: { preferences: Preferences; onOpen: () => void }) {
   const { t, locale } = useI18n();
@@ -68,7 +94,6 @@ export function PreferencesBar({ preferences, onOpen }: { preferences: Preferenc
     preferences.preferHandrails && !wheeled(preferences) ? t('chip.rails') : null,
     preferences.preferRest && !preferences.restEvery ? t('chip.rest') : null,
     preferences.showToilets ? t('cat.toilet') : null,
-    t('chip.distance', { distance: distance(preferences.maxDistance, locale) }),
   ].filter(Boolean) as string[];
   return (
     <button
@@ -148,7 +173,7 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          {wheeled(preferences) ? <p className="text-sm text-muted-foreground">{t('prefs.mobilityHint')}</p> : null}
+          {preferences.mobility === 'wheelchair' ? <p className="text-sm text-muted-foreground">{t('prefs.mobilityHint')}</p> : preferences.mobility === 'stroller' ? <p className="text-sm text-muted-foreground">{t('prefs.strollerHint')}</p> : null}
         </section>
 
         {!wheeled(preferences) ? (

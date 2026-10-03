@@ -65,21 +65,38 @@ export type AerialOverlay = {
 export const observationKinds = ['crossing', 'tracks', 'square', 'path', 'parking', 'steps', 'works', 'other'] as const;
 export type ObservationKind = (typeof observationKinds)[number];
 
-/** Something the model saw on the photo, placed by the model. Unverified by definition. */
+/** Something visible on the photo, placed automatically. Unverified by definition. */
 export type AerialObservation = { id: string; kind: ObservationKind; label: string; lat: number; lon: number };
 
 export type WeatherCondition = 'clear' | 'cloudy' | 'fog' | 'rain' | 'ice' | 'snow' | 'storm';
 /** Current weather in Kraków (Open-Meteo, CC BY 4.0). */
 export type Weather = { temperature: number; precipitation: number; wind: number; condition: WeatherCondition; time: string; obtainedAt: string };
 
+/**
+ * How to get in, decided for today's needs. Pins are referenced by number and always exist with the right kind
+ * (validated); sentences may reference pins as [n].
+ */
+export type AerialRecommendation = {
+  /** The entrance to use (an entrance pin), or null when no mapped entrance can be recommended. */
+  entrance: number | null;
+  /** Where to arrive from (a stop or parking pin), or null. */
+  approachFrom: number | null;
+  /** One short sentence: why this entrance (as mapped), e.g. "marked step-free in OSM". */
+  why: string;
+  /** 2–4 short imperative steps from arrival to the door. */
+  steps: string[];
+  /** What to avoid on the way (stairs, setts, tram tracks, a stepped entrance). */
+  avoid: string[];
+  /** What to ask or check on arrival (staff, bell, threshold, lift). */
+  ask: string[];
+};
+
 export type AerialAnalysis = {
-  /** Short way-in description; may reference pins as [n]. */
-  approach: string[];
+  /** Null when the model could not give a grounded recommendation. */
+  recommendation: AerialRecommendation | null;
   /** Notes for today (weather, recent user reports). */
   today: string[];
   observations: AerialObservation[];
-  /** What to check on site; may reference pins as [n]. */
-  checks: string[];
   /** Width of the analysed frame. */
   widthM: number;
   /** What the reading took into account, shown to the user. */

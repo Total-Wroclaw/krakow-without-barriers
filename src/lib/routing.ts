@@ -59,6 +59,9 @@ export const SETT = 256;
 /** Stairs with more than LONG_FLIGHT_STEPS steps (`step_count`): tiring on crutches. */
 export const LONG_FLIGHT = 512;
 export const LONG_FLIGHT_STEPS = 15;
+/** Stairs with a known `step_count` of at most SHORT_FLIGHT_STEPS: a pushchair can be lifted over them. */
+export const SHORT_FLIGHT = 1024;
+export const SHORT_FLIGHT_STEPS = 2;
 
 /** Per-node barriers met when passing through the node. */
 export const KERB_RAISED = 1;
@@ -113,6 +116,7 @@ export function wayMobility(tags: Record<string, string>) {
   if (tags.highway === 'steps') {
     const steps = Number(tags.step_count);
     if (Number.isFinite(steps) && steps > LONG_FLIGHT_STEPS) bits |= LONG_FLIGHT;
+    if (tags.step_count?.trim() && Number.isInteger(steps) && steps >= 1 && steps <= SHORT_FLIGHT_STEPS) bits |= SHORT_FLIGHT;
     if (tags['ramp:wheelchair'] === 'yes') bits |= RAMP_WHEELCHAIR;
     if (tags.ramp === 'yes' || tags['ramp:wheelchair'] === 'yes') bits |= RAMP_ANY;
   }
@@ -135,11 +139,23 @@ export function onWheels(mobility: Mobility | undefined): mobility is 'wheelchai
   return mobility === 'wheelchair' || mobility === 'stroller';
 }
 
-/** Stairs a person can use with today's mobility (wheels need an integrated ramp; on foot or crutches any stairs). */
+/**
+ * Stairs a person can use with today's mobility: on foot or crutches any stairs; a wheelchair only
+ * with `ramp:wheelchair=yes`; a pushchair with any ramp or, lifted, over a short flight
+ * (known `step_count` ≤ SHORT_FLIGHT_STEPS). For wheels this is the whole rule — the stair
+ * preferences (avoidStairs/avoidUp/avoidDown) do not apply on top of it.
+ */
 export function stairsPassable(tags: Record<string, string>, mobility: Mobility) {
   if (!onWheels(mobility)) return true;
   const bits = wayMobility(tags);
-  return mobility === 'wheelchair' ? (bits & RAMP_WHEELCHAIR) !== 0 : (bits & RAMP_ANY) !== 0;
+  return mobility === 'wheelchair' ? (bits & RAMP_WHEELCHAIR) !== 0 : (bits & (RAMP_ANY | SHORT_FLIGHT)) !== 0;
+}
+
+/** Short flight a pushchair has to be lifted over (passable for a pushchair only because it is short, no ramp). */
+export function strollerLift(tags: Record<string, string>, mobility: Mobility) {
+  if (mobility !== 'stroller' || tags.highway !== 'steps') return false;
+  const bits = wayMobility(tags);
+  return (bits & SHORT_FLIGHT) !== 0 && (bits & RAMP_ANY) === 0;
 }
 
 /** Grid spatial index over points stored in parallel lat/lon arrays. */
@@ -420,7 +436,7 @@ export function edgeAt(g: WalkGraph, e: number): Edge {
 function forbiddenFlags(flags: number, p: Preferences, mobility = 0) {
   if (!(flags & STEPS)) return false;
   if (p.mobility === 'wheelchair') return !(mobility & RAMP_WHEELCHAIR);
-  if (p.mobility === 'stroller' && !(mobility & RAMP_ANY)) return true;
+  if (p.mobility === 'stroller') return !(mobility & (RAMP_ANY | SHORT_FLIGHT));
   if (p.avoidStairs) return true;
   if (p.avoidDown && !(flags & UP)) return true; // down or unknown
   if (p.avoidUp && !(flags & DOWN)) return true; // up or unknown
@@ -431,7 +447,7 @@ function forbiddenFlags(flags: number, p: Preferences, mobility = 0) {
 export function forbidden(edge: Edge, p: Preferences) {
   if (edge.way.tags.highway !== 'steps') return false;
   if (!stairsPassable(edge.way.tags, p.mobility)) return true;
-  if (p.mobility === 'wheelchair') return false;
+  if (onWheels(p.mobility)) return false;
   return p.avoidStairs || (p.avoidDown && edge.direction !== 'up') || (p.avoidUp && edge.direction !== 'down');
 }
 
@@ -444,6 +460,16 @@ const wheelCosts = {
   wheelchair: { rough: 2, veryRough: 5, steep: 3, narrow: Infinity, noWheelchair: Infinity, kerbRaised: Infinity, kerbUnknown: 60, kerbRolled: 30, step: Infinity, nodeNo: Infinity },
   stroller: { rough: 1, veryRough: 2.5, steep: 1, narrow: 0.5, noWheelchair: 1, kerbRaised: 40, kerbUnknown: 20, kerbRolled: 10, step: 80, nodeNo: 0 },
 } as const;
+
+/** Pushchair lifted over a short flight without a ramp: +liftFixed m once per flight and +lift × length. */
+export const strollerLiftCosts = { lift: 3, liftFixed: 40 } as const;
+
+/** True when edge e starts at an end node of its way (entering the flight), so fixed costs count once per flight. */
+function entersWay(g: WalkGraph, e: number) {
+  const nodes = g.ways[g.edgeWay[e]].nodes;
+  const from = g.ids[g.edgeFrom[e]];
+  return from === nodes[0] || from === nodes[nodes.length - 1];
+}
 
 function wheelCost(g: WalkGraph, e: number, mobility: 'wheelchair' | 'stroller', length: number) {
   const c = wheelCosts[mobility];
@@ -465,6 +491,10 @@ function wheelCost(g: WalkGraph, e: number, mobility: 'wheelchair' | 'stroller',
     else if (node & KERB_ROLLED) fixed += c.kerbRolled;
     if (node & STEP_BARRIER) fixed += c.step;
     if (node & NODE_NO_WHEELCHAIR) fixed += c.nodeNo;
+  }
+  if (mobility === 'stroller' && (g.edgeFlags[e] & STEPS) && (bits & SHORT_FLIGHT) && !(bits & RAMP_ANY)) {
+    factor += strollerLiftCosts.lift;
+    if (entersWay(g, e)) fixed += strollerLiftCosts.liftFixed;
   }
   if (factor === Infinity || fixed === Infinity) return Infinity;
   return factor * length + fixed;

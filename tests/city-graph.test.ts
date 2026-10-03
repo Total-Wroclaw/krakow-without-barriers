@@ -149,6 +149,13 @@ test('default request (transit, Polish) returns only walking and transit options
   assert.ok(result.options.every(o => o.legs.every(l => l.type !== 'drive')));
 });
 
+test("transport 'walk' on the city graph: only walking options, the 7.6 km walk is kept", () => {
+  const result = planJourney({ from: initialFrom, to: initialTo, preferences: defaultPreferences, date: '2026-10-03', time: '14:00', transport: 'walk' });
+  assert.ok(result.options.length > 0);
+  assert.ok(result.options.every(o => o.kind === 'walk' && o.legs.every(l => l.type === 'walk')));
+  assert.ok(result.options.some(o => o.walkingDistance > 3600), 'long walks are not dropped on foot');
+});
+
 test('car for a wheelchair parks only where disabled spaces are mapped; taxi and car add little time', { skip: !hasRoads }, () => {
   const g = cityGraph();
   const roads = roadGraph()!;

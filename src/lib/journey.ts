@@ -11,11 +11,11 @@ import { applyExtras } from './journey-extras';
 import { accessibleToilets, type AccessibleToilet } from './objects';
 import { serverMessages } from './i18n/server-messages';
 import { defaultLocale, locales, type Locale } from './i18n/locales';
-import type { WalkGraph } from './routing';
+import { onWheels, stairsPassable, type WalkGraph } from './routing';
 import type { CityPlace } from './city-types';
 import type { JourneyOption, JourneyResult, TransportMode } from './journey-types';
 
-export const transportModes = ['transit', 'taxi', 'car'] as const satisfies readonly TransportMode[];
+export const transportModes = ['walk', 'transit', 'taxi', 'car'] as const satisfies readonly TransportMode[];
 
 export const journeyRequestSchema = z.object({
   from: placeSchema,
@@ -23,7 +23,7 @@ export const journeyRequestSchema = z.object({
   preferences: preferencesSchema,
   date: z.iso.date(),
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-  /** 'transit' (default): walking + trams/buses. 'taxi'/'car' add drive options first. */
+  /** 'transit' (default): walking + trams/buses. 'walk': walking options only. 'taxi'/'car' add drive options first. */
   transport: z.enum(transportModes).default('transit'),
   locale: z.enum(locales).default(defaultLocale),
 });
@@ -48,6 +48,15 @@ export function orderOptions(walking: JourneyOption[], transit: JourneyOption[],
   return [...byDeparture, ...extraWalks];
 }
 
+/**
+ * Stairs on the option that today's needs rule out: on wheels only the flights the mobility rule
+ * forbids (a pushchair may use short flights and ramps), otherwise every flight when stairs are avoided.
+ */
+export function hasAvoidedStairs(option: JourneyOption, p: Preferences) {
+  if (!onWheels(p.mobility)) return option.stairs.up + option.stairs.down + option.stairs.unknown > 0;
+  return option.legs.some(leg => leg.type === 'walk' && leg.facts.some(f => f.kind === 'stairs' && !stairsPassable(f.tags, p.mobility)));
+}
+
 export function planJourney(
   input: { from: CityPlace; to: CityPlace; preferences: Preferences; date: string; time: string; transport?: TransportMode; locale?: Locale },
   graph: WalkGraph = cityGraph(),
@@ -65,7 +74,7 @@ export function planJourney(
   };
 
   let drive: JourneyOption[] = [];
-  if (transport !== 'transit') {
+  if (transport === 'taxi' || transport === 'car') {
     try {
       const road = roads();
       if (!road) addError(m.errors.roadsUnavailable);
@@ -84,13 +93,16 @@ export function planJourney(
     addError(message(error, m.errors.walkFailed));
   }
 
+  // On foot only: no rides, so every walking option is kept (orderOptions drops long walks only next to a ride).
   let transit: JourneyOption[] = [];
-  try {
-    const result = transitOptions(graph, from, to, preferences, date, time, locale);
-    transit = result.options;
-    result.errors.forEach(addError);
-  } catch (error) {
-    addError(message(error, m.errors.transitFailed));
+  if (transport !== 'walk') {
+    try {
+      const result = transitOptions(graph, from, to, preferences, date, time, locale);
+      transit = result.options;
+      result.errors.forEach(addError);
+    } catch (error) {
+      addError(message(error, m.errors.transitFailed));
+    }
   }
 
   const all = applyExtras([...drive, ...orderOptions(walking, transit, preferences)], graph, preferences, locale, toilets);
@@ -98,6 +110,6 @@ export function planJourney(
   const options = [...all.filter(o => o.fits), ...all.filter(o => !o.fits)];
   // When stairs cannot be avoided at all, say so instead of leaving people to guess from red labels.
   const avoidsStairs = preferences.avoidStairs || preferences.mobility === 'wheelchair' || preferences.mobility === 'stroller';
-  if (avoidsStairs && options.length && options.every(o => o.stairs.up + o.stairs.down + o.stairs.unknown > 0)) addError(m.errors.stairsOnly);
+  if (avoidsStairs && options.length && options.every(o => hasAvoidedStairs(o, preferences))) addError(m.errors.stairsOnly);
   return { from, to, date, options, errors };
 }

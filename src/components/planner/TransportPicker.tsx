@@ -1,10 +1,11 @@
 'use client';
-import { CarFront, CarTaxiFront, TramFront } from 'lucide-react';
+import { CarFront, CarTaxiFront, Footprints, TramFront } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useI18n } from '@/lib/i18n/client';
 import type { TransportMode } from '@/lib/journey-types';
 
-const modes: { value: TransportMode; icon: typeof TramFront; key: 'transport.transit' | 'transport.taxi' | 'transport.car' }[] = [
+const modes: { value: TransportMode; icon: typeof TramFront; key: 'transport.walk' | 'transport.transit' | 'transport.taxi' | 'transport.car' }[] = [
+  { value: 'walk', icon: Footprints, key: 'transport.walk' },
   { value: 'transit', icon: TramFront, key: 'transport.transit' },
   { value: 'taxi', icon: CarTaxiFront, key: 'transport.taxi' },
   { value: 'car', icon: CarFront, key: 'transport.car' },
@@ -18,7 +19,7 @@ export function TransportPicker({ value, onChange }: { value: TransportMode; onC
       value={value}
       onValueChange={v => v && onChange(v as TransportMode)}
       aria-label={t('transport.label')}
-      className="grid w-full grid-cols-3 gap-1"
+      className="grid w-full grid-cols-4 gap-1"
     >
       {modes.map(({ value: mode, icon: Icon, key }) => (
         <ToggleGroupItem

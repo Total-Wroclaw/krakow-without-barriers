@@ -1,7 +1,7 @@
 // Turns graph paths into user-facing walking legs and walking-only journey options.
 import { handrail, type Way } from './data';
 import {
-  bearing, edgeAt, metres, nearest, nodePoint, onWheels, shortestPath, stairsPassable, type WalkGraph,
+  bearing, edgeAt, metres, nearest, nodePoint, onWheels, shortestPath, stairsPassable, strollerLift, type WalkGraph,
   IMPASSABLE, LONG_FLIGHT_STEPS, KERB_RAISED, KERB_ROLLED, KERB_UNKNOWN, NARROW, NODE_NO_WHEELCHAIR, NO_WHEELCHAIR, ROUGH, SETT, STEEP, STEP_BARRIER, VERY_ROUGH,
 } from './routing';
 import { serverMessages, type ServerMessages } from './i18n/server-messages';
@@ -363,6 +363,7 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
   let noHandrail = 0;
   let handrailUnknown = 0;
   let longStairs = 0;
+  const lifts: number[] = [];
   const kerbs: Partial<Record<BarrierKind, number>> = {};
   const stretches: Partial<Record<BarrierKind, number>> = {};
   for (const leg of legs) {
@@ -372,6 +373,7 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
       if (fact.kind === 'stairs') {
         stairs[fact.direction]++;
         if (!stairsPassable(fact.tags, p.mobility)) blockedStairs++;
+        else if (strollerLift(fact.tags, p.mobility)) lifts.push(stepCount(fact.tags)!);
         const rail = handrail(fact.tags);
         if (rail === 'no') noHandrail++;
         else if (rail === 'unknown') handrailUnknown++;
@@ -388,6 +390,8 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
   if (onWheels(p.mobility)) {
     const wheelchair = p.mobility === 'wheelchair';
     if (blockedStairs) hard.push(m.issues.stairs(blockedStairs));
+    // Short flights a pushchair may use are always disclosed, without changing `fits`.
+    if (lifts.length) soft.push(m.issues.shortSteps(lifts.length, lifts[0]));
     if (kerbs.kerbRaised) (wheelchair ? hard : soft).push(m.issues.kerbRaised(kerbs.kerbRaised));
     if (kerbs.step) (wheelchair ? hard : soft).push(m.issues.step(kerbs.step));
     if (kerbs.nodeNoWheelchair && wheelchair) hard.push(m.issues.noWheelchair);

@@ -5,7 +5,7 @@ import type { Dataset, OsmNode, Way } from '../src/lib/data';
 import { walkingOptions, walkLeg, formatDistance } from '../src/lib/walking';
 import { connectionTable, emptyFootpaths, scan, usableConnections } from '../src/lib/transit-scan';
 import { serverMessages } from '../src/lib/i18n/server-messages';
-import { journeyRequestSchema, planJourney } from '../src/lib/journey';
+import { hasAvoidedStairs, journeyRequestSchema, planJourney } from '../src/lib/journey';
 import { defaultPreferences, type Preferences } from '../src/lib/schemas';
 import type { WalkLeg } from '../src/lib/journey-types';
 
@@ -31,7 +31,7 @@ function pair(direct: Record<string, string>, extraNodes: OsmNode[] = [], direct
   );
 }
 
-test('wheelchair and pushchair never take stairs, even with every stair setting off', () => {
+test('wheelchair and pushchair never take stairs of unknown length, even with every stair setting off', () => {
   const data = pair({ highway: 'steps', incline: 'up' });
   const g = buildGraph(data);
   assert.deepEqual(route(g, free), ['direct']);
@@ -205,4 +205,113 @@ test('journey request defaults to transit in Polish; off-network errors are loca
   assert.ok(pl.errors.includes(serverMessages('pl').errors.offNetwork));
   const en = planJourney({ from: far, to: far, preferences: defaultPreferences, date: '2026-10-03', time: '14:00', locale: 'en' }, g, roads);
   assert.ok(en.errors.includes('This point is too far from the known walking network. Choose a nearby street or stop.'));
+});
+
+// a → b directly (~111 m, way "direct") or via a long footway through c (~770 m, way "detour").
+function longDetour(direct: Record<string, string>) {
+  return dataset(
+    [node('a', 50, 19), node('b', 50.001, 19), node('c', 50.0005, 19.005)],
+    [way('direct', ['a', 'b'], { highway: 'footway', ...direct }), way('detour', ['a', 'c', 'b'], { highway: 'footway', surface: 'asphalt' })],
+  );
+}
+
+test('pushchair may be lifted over a flight with a known step_count ≤ 2; longer or unknown flights stay forbidden', () => {
+  const short = buildGraph(longDetour({ highway: 'steps', step_count: '2', incline: 'up' }));
+  assert.deepEqual(route(short, stroller), ['direct']);
+  // The pushchair rule decides on its own: "avoid stairs" does not forbid the short flight.
+  assert.deepEqual(route(short, { ...stroller, avoidStairs: true, avoidDown: true, avoidUp: true }), ['direct']);
+  assert.deepEqual(route(short, wheelchair), ['detour', 'detour'], 'a wheelchair never takes even 2 steps');
+  const edge = edgeAt(short, shortestPath(short, idx(short, 'a'), idx(short, 'b'), free)![0]);
+  assert.equal(forbidden(edge, stroller), false);
+  assert.equal(forbidden(edge, { ...stroller, avoidStairs: true }), false);
+  assert.equal(forbidden(edge, wheelchair), true);
+  assert.equal(forbidden(edge, { ...free, avoidStairs: true }), true, 'walking keeps its stair preferences');
+
+  for (const step_count of ['3', '15']) assert.deepEqual(route(buildGraph(longDetour({ highway: 'steps', step_count })), stroller), ['detour', 'detour'], step_count);
+  assert.deepEqual(route(buildGraph(longDetour({ highway: 'steps' })), stroller), ['detour', 'detour'], 'unknown step_count');
+  assert.deepEqual(route(buildGraph(longDetour({ highway: 'steps', step_count: 'yes' })), stroller), ['detour', 'detour'], 'non-numeric step_count');
+
+  // Lifting costs: a short detour (~140 m) still beats 2 steps on a 111 m way.
+  assert.deepEqual(route(buildGraph(pair({ highway: 'steps', step_count: '2' })), stroller), ['detour', 'detour']);
+});
+
+test('short flights for a pushchair are disclosed as a fact and a soft issue, and the option still fits', () => {
+  const data = longDetour({ highway: 'steps', step_count: '2', incline: 'up' });
+  const g = buildGraph(data);
+  for (const [locale, text] of [
+    ['pl', 'Krótkie schody (2 stopnie) — wózek trzeba podnieść'],
+    ['en', "Short steps (2) — you'll need to lift the pushchair"],
+    ['de', 'Kurze Stufen (2) — Kinderwagen muss gehoben werden'],
+  ] as const) {
+    const { options, errors } = walkingOptions(g, place(data, 'a'), place(data, 'b'), stroller, 0, locale);
+    assert.deepEqual(errors, []);
+    const preferred = options.find(o => o.id === 'walk-preferred')!;
+    const leg = preferred.legs[0] as WalkLeg;
+    assert.equal(leg.facts.filter(f => f.kind === 'stairs').length, 1);
+    assert.equal(leg.facts.find(f => f.kind === 'stairs')!.tags.step_count, '2');
+    assert.ok(preferred.issues.includes(text), `${locale}: ${preferred.issues.join(' | ')}`);
+    assert.equal(preferred.fits, true);
+    assert.deepEqual(preferred.stairs, { up: 1, down: 0, unknown: 0 });
+  }
+  assert.equal(serverMessages('pl').issues.shortSteps(2, 1), 'Krótkie schody w 2 miejscach — wózek trzeba podnieść');
+  assert.equal(serverMessages('pl').issues.shortSteps(1, 1), 'Krótkie schody (1 stopień) — wózek trzeba podnieść');
+  assert.equal(serverMessages('en').issues.shortSteps(3, 2), "Short steps in 3 places — you'll need to lift the pushchair");
+  assert.equal(serverMessages('de').issues.shortSteps(2, 2), 'Kurze Stufen an 2 Stellen — Kinderwagen muss gehoben werden');
+
+  // The same flight for a wheelchair (only stairs left) is a hard barrier, not a lift note.
+  const only = dataset([node('a', 50, 19), node('b', 50.001, 19)], [way('direct', ['a', 'b'], { highway: 'steps', step_count: '2' })]);
+  const chair = walkingOptions(buildGraph(only), place(only, 'a'), place(only, 'b'), wheelchair, 0).options[0];
+  assert.equal(chair.fits, false);
+  assert.ok(chair.issues.includes('Schody na trasie'));
+  assert.ok(!chair.issues.some(i => i.startsWith('Krótkie schody')));
+  // Ramps need no lifting: no note.
+  const ramp = buildGraph(longDetour({ highway: 'steps', step_count: '2', ramp: 'yes' }));
+  const ramped = walkingOptions(ramp, place(data, 'a'), place(data, 'b'), stroller, 0).options[0];
+  assert.ok(!ramped.issues.some(i => i.startsWith('Krótkie schody')));
+});
+
+test('"stairs only" fires for a pushchair only when a forbidden flight is unavoidable', () => {
+  const at = (d: Dataset, id: string) => place(d, id);
+  const short = dataset([node('a', 50, 19), node('b', 50.001, 19)], [way('direct', ['a', 'b'], { highway: 'steps', step_count: '2' })]);
+  const long = dataset([node('a', 50, 19), node('b', 50.001, 19)], [way('direct', ['a', 'b'], { highway: 'steps', step_count: '3' })]);
+  const plan = (d: Dataset, preferences: Preferences) =>
+    planJourney({ from: at(d, 'a'), to: at(d, 'b'), preferences, date: '2026-10-03', time: '14:00', transport: 'walk' }, buildGraph(d), undefined, () => []);
+  const stairsOnly = serverMessages('pl').errors.stairsOnly;
+
+  const shortStroller = plan(short, stroller);
+  assert.ok(shortStroller.options.length > 0);
+  assert.ok(shortStroller.options.every(o => o.stairs.up + o.stairs.down + o.stairs.unknown > 0));
+  assert.ok(!shortStroller.errors.includes(stairsOnly));
+  assert.ok(shortStroller.options.every(o => !hasAvoidedStairs(o, stroller)));
+  assert.ok(plan(long, stroller).errors.includes(stairsOnly));
+  assert.ok(plan(short, wheelchair).errors.includes(stairsOnly));
+  assert.ok(plan(short, { ...free, avoidStairs: true }).errors.includes(stairsOnly));
+  assert.ok(!plan(short, free).errors.includes(stairsOnly));
+});
+
+test("transport 'walk' returns only walking options, keeps long walks and their extras", () => {
+  const at = { id: 'x', name: 'X', lat: 50.06, lon: 19.94, source: 'test' };
+  const base = { from: at, to: at, preferences: defaultPreferences, date: '2026-10-03', time: '14:00' };
+  assert.equal(journeyRequestSchema.parse({ ...base, transport: 'walk' }).transport, 'walk');
+  assert.equal(journeyRequestSchema.parse(base).transport, 'transit');
+
+  // ~4.4 km straight footway with benches along it: far beyond 3 × the limit.
+  const n = 41;
+  const nodes = Array.from({ length: n }, (_, i) => node(`n${i}`, 50 + i * 0.001, 19));
+  const benches = Array.from({ length: n - 1 }, (_, i) => node(`bench${i}`, 50 + i * 0.001 + 0.0005, 19.0001, { amenity: 'bench', backrest: 'yes' }));
+  const data = { ...dataset(nodes, [way('long', nodes.map(x => x.id), { highway: 'footway', surface: 'asphalt' })]), features: benches };
+  const g = buildGraph(data);
+  const toilet = { objectId: 'osm-node-1', name: 'WC', lat: 50.02, lon: 19.0005, value: 'yes' as const, sourceUrl: 'https://www.openstreetmap.org/node/1', editedAt: null, obtainedAt: '2026-10-03' };
+  const roads = () => {
+    throw new Error('road graph must not load for walking requests');
+  };
+  const preferences: Preferences = { ...defaultPreferences, maxDistance: 1000, restEvery: 10, showToilets: true };
+  const result = planJourney({ ...base, from: place(data, 'n0'), to: place(data, `n${n - 1}`), preferences, transport: 'walk', locale: 'en' }, g, roads, () => [toilet]);
+  assert.ok(result.options.length > 0);
+  assert.ok(result.options.every(o => o.kind === 'walk' && o.legs.every(l => l.type === 'walk')));
+  assert.ok(result.options[0].walkingDistance > 3000, 'long walks are not dropped');
+  assert.ok((result.options[0].restStops ?? 0) > 0, 'rest stops still planned');
+  assert.ok((result.options[0].legs[0] as WalkLeg).facts.some(f => f.kind === 'toilet'), 'toilets still listed');
+  assert.ok(result.options[0].issues.includes('Over your limit of 1 km'));
+  assert.deepEqual(result.errors, []);
 });

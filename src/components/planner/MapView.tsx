@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent, Marker } from 'maplibre-gl';
-import { Map as MapIcon, Satellite } from 'lucide-react';
+import { LoaderCircle, LocateFixed, Map as MapIcon, Minus, Plus, Satellite } from 'lucide-react';
+import { toast } from 'sonner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { CityFact, CityPlace } from '@/lib/city-types';
 import type { PlaceObjectSummary } from '@/lib/explore-types';
@@ -81,6 +82,60 @@ export default function MapView({ options, selectedId, from, to, reports, object
   latest.current = { onSelect, onFact, onReport, onObject, onMove };
   const render = useRef<() => void>(() => {});
   const lastView = useRef('');
+  const userMarker = useRef<Marker | null>(null);
+  const watchId = useRef<number | null>(null);
+  const userPos = useRef<{ lat: number; lon: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+
+  /** Keeps a "you are here" dot up to date. Never moves the camera on its own. */
+  function watchPosition() {
+    if (watchId.current !== null || !navigator.geolocation) return;
+    watchId.current = navigator.geolocation.watchPosition(
+      p => {
+        userPos.current = { lat: p.coords.latitude, lon: p.coords.longitude };
+        const instance = map.current;
+        if (!instance) return;
+        if (!userMarker.current) {
+          const el = document.createElement('div');
+          el.setAttribute('role', 'img');
+          el.setAttribute('aria-label', t('map.you'));
+          el.style.cssText = 'width:18px;height:18px;border-radius:999px;background:#2443b0;border:3px solid #fff;box-shadow:0 0 0 6px rgba(36,67,176,.22),0 1px 4px rgba(0,0,0,.35)';
+          userMarker.current = new maplibregl.Marker({ element: el }).setLngLat([p.coords.longitude, p.coords.latitude]).addTo(instance);
+        } else userMarker.current.setLngLat([p.coords.longitude, p.coords.latitude]);
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 15000 },
+    );
+  }
+
+  /** Explicit "show my location": asks permission if needed, then centres once. */
+  function locate() {
+    if (!navigator.geolocation) {
+      toast.error(t('search.noGeo'));
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      p => {
+        setLocating(false);
+        userPos.current = { lat: p.coords.latitude, lon: p.coords.longitude };
+        watchPosition();
+        map.current?.easeTo({ center: [p.coords.longitude, p.coords.latitude], zoom: Math.max(map.current.getZoom(), 16), duration: 600 });
+      },
+      () => {
+        setLocating(false);
+        toast.error(t('search.geoDenied'));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 },
+    );
+  }
+
+  useEffect(
+    () => () => {
+      if (watchId.current !== null) navigator.geolocation?.clearWatch(watchId.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!container.current) return;
@@ -104,8 +159,11 @@ export default function MapView({ options, selectedId, from, to, reports, object
     instance.once('load', () => {
       if (window.innerWidth < 640) container.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
     });
-    instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-    instance.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true } }), 'top-right');
+    // If location is already allowed, show where the person is (without moving the map).
+    navigator.permissions
+      ?.query({ name: 'geolocation' as PermissionName })
+      .then(status => status.state === 'granted' && watchPosition())
+      .catch(() => {});
     const minor = () => container.current?.classList.toggle('hide-minor', instance.getZoom() < 15);
     instance.on('zoomend', minor);
     instance.on('load', () => {
@@ -216,7 +274,7 @@ export default function MapView({ options, selectedId, from, to, reports, object
 
       // Only move the camera when what is shown changes — not on a base-map or language switch,
       // so a user's own zoom is kept.
-      const viewKey = JSON.stringify([selectedId, from?.lat, from?.lon, to?.lat, to?.lon, selectedObjectId, objects.length, objects[0]?.id, selected ? 1 : 0]);
+      const viewKey = JSON.stringify([selectedId, from?.lat, from?.lon, to?.lat, to?.lon, selectedObjectId, objects[0]?.id ?? null, selected ? 1 : 0]);
       if (viewKey === lastView.current) return;
       lastView.current = viewKey;
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -243,25 +301,41 @@ export default function MapView({ options, selectedId, from, to, reports, object
     render.current();
   }, [options, selectedId, from, to, reports, objects, selectedObjectId, t, tp, reportTitle, base]);
 
+  const control = 'grid size-11 place-items-center text-foreground transition-colors hover:bg-accent disabled:opacity-50';
   return (
     <div className="relative size-full">
       <div ref={container} className="size-full" />
-      <ToggleGroup
-        type="single"
-        value={base}
-        onValueChange={v => v && setBase(v as 'standard' | 'satellite')}
-        aria-label={t('map.style')}
-        className="absolute right-14 top-2.5 z-10 rounded-lg border bg-card p-0.5 shadow-sm"
-      >
-        <ToggleGroupItem value="standard" className="h-9 gap-1 px-2.5 text-sm" aria-label={t('map.standard')}>
-          <MapIcon aria-hidden />
-          <span className="hidden sm:inline">{t('map.standard')}</span>
-        </ToggleGroupItem>
-        <ToggleGroupItem value="satellite" className="h-9 gap-1 px-2.5 text-sm" aria-label={t('map.satellite')}>
-          <Satellite aria-hidden />
-          <span className="hidden sm:inline">{t('map.satellite')}</span>
-        </ToggleGroupItem>
-      </ToggleGroup>
+      {/* Map controls in the app's own style; one column, top-right, 44 px targets. */}
+      <div className="absolute right-2.5 top-2.5 z-10 flex flex-col items-end gap-2">
+        <ToggleGroup
+          type="single"
+          value={base}
+          onValueChange={v => v && setBase(v as 'standard' | 'satellite')}
+          aria-label={t('map.style')}
+          className="rounded-lg border bg-card p-0.5 shadow-sm"
+        >
+          <ToggleGroupItem value="standard" className="h-10 gap-1 px-2.5 text-sm" aria-label={t('map.standard')}>
+            <MapIcon aria-hidden />
+            <span className="hidden sm:inline">{t('map.standard')}</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="satellite" className="h-10 gap-1 px-2.5 text-sm" aria-label={t('map.satellite')}>
+            <Satellite aria-hidden />
+            <span className="hidden sm:inline">{t('map.satellite')}</span>
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <div className="hidden flex-col overflow-hidden rounded-lg border bg-card shadow-sm sm:flex" role="group" aria-label={t('map.zoom')}>
+          <button type="button" className={control} onClick={() => map.current?.zoomIn()} aria-label={t('map.zoomIn')}>
+            <Plus className="size-5" aria-hidden />
+          </button>
+          <span className="h-px bg-border" aria-hidden />
+          <button type="button" className={control} onClick={() => map.current?.zoomOut()} aria-label={t('map.zoomOut')}>
+            <Minus className="size-5" aria-hidden />
+          </button>
+        </div>
+        <button type="button" className={`${control} rounded-lg border bg-card shadow-sm`} onClick={locate} disabled={locating} aria-label={t('map.locate')}>
+          {locating ? <LoaderCircle className="size-5 animate-spin" aria-hidden /> : <LocateFixed className="size-5" aria-hidden />}
+        </button>
+      </div>
     </div>
   );
 }

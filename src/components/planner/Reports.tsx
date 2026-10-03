@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, LoaderCircle, Trash2 } from 'lucide-react';
+import { Camera, LoaderCircle, MapPin, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ import type { MessageKey } from '@/lib/i18n/messages';
 import { observationSchema, type Observation, type Report } from '@/lib/schemas';
 import { Panel } from './Panel';
 import { StatusRow } from './FactSheet';
+import { LocationPicker, gpsPlace } from './LocationPicker';
 
 const kindKeys: Record<Observation['kind'], MessageKey> = { stairs: 'kind.stairs', entrance: 'kind.entrance', bench: 'kind.bench', surface: 'kind.surface', other: 'kind.other' };
 const handrailKeys: Record<Observation['handrail'], MessageKey> = { yes: 'value.yesVisible', no: 'value.no', unknown: 'value.unknown' };
@@ -339,6 +340,7 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
         {mine && (report.photos?.length ?? (report.photoPath ? 1 : 0)) < 4 ? (
           <AddPhoto reportId={report.id} onAdded={onChange} />
         ) : null}
+        {mine && report.location ? <FixLocation report={report} token={token} onSaved={onChange} /> : null}
         {report.cityStatus ? (
           <StatusRow tone="city" label={t('report.cityStatus', { status: t(`city.${report.cityStatus}`) })}>
             {report.cityNote ? (
@@ -363,6 +365,61 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
         ) : null}
       </div>
     </Panel>
+  );
+}
+
+function FixLocation({ report, token, onSaved }: { report: Report; token: string | null; onSaved: (r: Report) => void }) {
+  const { t, locale } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState<CityPlace>(report.location!);
+  const [busy, setBusy] = useState(false);
+  if (!open) {
+    return (
+      <Button variant="outline" className="h-11 self-start" onClick={() => setOpen(true)}>
+        <MapPin />
+        {t('report.fixPlace')}
+      </Button>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border p-3">
+      <LocationPicker
+        value={place}
+        onChange={setPlace}
+        presets={[{ key: 'gps', label: t('report.whereGps'), place: () => gpsPlace(t('report.photoPlace'), locale) }]}
+      />
+      <div className="flex gap-2">
+        <Button
+          className="h-11 flex-1"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const res = await fetch(`/api/reports/${report.id}?locale=${locale}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'x-report-token': token ?? '' },
+                body: JSON.stringify({ location: place, locale }),
+              });
+              const data = await res.json().catch(() => null);
+              if (!res.ok || !data?.report) throw new Error(typeof data?.error === 'string' ? data.error : '');
+              onSaved(data.report);
+              setOpen(false);
+              toast.success(t('report.placeSaved'));
+            } catch (e) {
+              toast.error(errorText(e, t('report.saveFailed')));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? <LoaderCircle className="animate-spin" /> : null}
+          {t('report.savePlace')}
+        </Button>
+        <Button variant="outline" className="h-11" onClick={() => setOpen(false)}>
+          {t('report.cancel')}
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -10,7 +10,7 @@ export function LanguageMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-10 gap-1.5 px-2.5 text-muted-foreground" aria-label={`${t('app.language')}: ${localeNames[locale]}`}>
+        <Button variant="ghost" className="h-11 gap-1.5 px-2.5 text-muted-foreground" aria-label={`${t('app.language')}: ${localeNames[locale]}`}>
           <Languages />
           <span className="uppercase">{locale}</span>
         </Button>

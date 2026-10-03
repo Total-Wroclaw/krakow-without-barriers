@@ -1,11 +1,13 @@
 'use client';
-// Pannable aerial map of a place: GUGiK orthophoto tiles (our cached proxy) as the only layer, the analysed
-// frame as a subtle rectangle, mapped stairs/surfaces/benches/kerbs as map layers and the numbered pins,
-// stairs, AI observations and the place itself as focusable buttons with a hover/tap card.
+// Pannable aerial map of a place: GUGiK orthophoto tiles (our cached proxy) as the only layer, mapped
+// stairs/surfaces/benches/kerbs as map layers and the numbered pins, stairs, observations from the photo and the
+// place itself as focusable buttons with a hover/tap card. The wheel over any part of it (pins and their cards
+// included) zooms the map instead of scrolling the card; on touch screens one finger scrolls the page and two
+// move the map. The view is fitted once; after that only the "back to frame" button moves it.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
-import { Check, LoaderCircle, Locate, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
+import { LoaderCircle, Locate, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { DEFAULT_WIDTH, frameCorners } from '@/lib/aerial-geo';
 import { nearestStairs, type AerialObservation, type AerialOverlay } from '@/lib/aerial-types';
@@ -42,7 +44,9 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
   const root = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
+  /** Set by any pointer, wheel or key interaction with the map; cleared by "back to frame". */
   const userMoved = useRef(false);
+  const fitted = useRef(false);
   const [ready, setReady] = useState(false);
   const [tilesShown, setTilesShown] = useState(false);
   const [, setTick] = useState(0);
@@ -63,6 +67,9 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
   useEffect(() => {
     if (!container.current) return;
     const [sw, ne] = frameCorners(place, DEFAULT_WIDTH);
+    // Phones and tablets: one finger keeps scrolling the card/drawer, two fingers move the photo. The enlarged
+    // dialog has nothing to scroll, so it takes one finger.
+    const touch = !large && window.matchMedia('(pointer: coarse)').matches;
     const instance = new maplibregl.Map({
       container: container.current,
       style: {
@@ -80,6 +87,8 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
       pitchWithRotate: false,
       touchPitch: false,
       renderWorldCopies: false,
+      cooperativeGestures: touch,
+      locale: { 'CooperativeGesturesHandler.MobileHelpText': t('aerial.twoFingers') },
     });
     instance.touchZoomRotate.disableRotation();
     instance.keyboard.disableRotation();
@@ -100,12 +109,11 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
         setTilesShown(true);
       }
     });
+    let lastSize = { w: container.current.clientWidth, h: container.current.clientHeight };
     instance.on('idle', () => setTilesShown(true));
     instance.on('load', () => {
-      instance.addSource('frame', { type: 'geojson', data: collection([]) });
       instance.addSource('lines', { type: 'geojson', data: collection([]) });
       instance.addSource('markers', { type: 'geojson', data: collection([]) });
-      instance.addLayer({ id: 'frame', type: 'line', source: 'frame', paint: { 'line-color': '#ffffff', 'line-width': 1.5, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } });
       instance.addLayer({ id: 'rough-casing', type: 'line', source: 'lines', filter: ['==', ['get', 'kind'], 'rough'], layout: { 'line-join': 'round' }, paint: { 'line-color': 'rgba(20,33,61,0.55)', 'line-width': 4 } });
       instance.addLayer({ id: 'rough', type: 'line', source: 'lines', filter: ['==', ['get', 'kind'], 'rough'], layout: { 'line-join': 'round' }, paint: { 'line-color': '#fcd34d', 'line-width': 2, 'line-dasharray': [2.5, 2] } });
       instance.addLayer({ id: 'stairs-casing', type: 'line', source: 'lines', filter: ['==', ['get', 'kind'], 'stairs'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 7 } });
@@ -117,9 +125,14 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
       } });
       setReady(true);
     });
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver(([entry]) => {
       instance.resize();
-      if (!userMoved.current) fitRef.current(false);
+      // Refit only for a real layout change (first layout, rotation) before the person has touched the map,
+      // not for a scrollbar appearing when the text below grows.
+      const size = { w: entry.contentRect.width, h: entry.contentRect.height };
+      const changed = Math.abs(size.w - lastSize.w) > 40 || Math.abs(size.h - lastSize.h) > 40;
+      lastSize = size;
+      if (changed && !userMoved.current) fitRef.current(false);
     });
     observer.observe(container.current);
     map.current = instance;
@@ -133,19 +146,55 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto frame: zoom to the analysed frame once it is known, unless the user has already moved the map.
+  // Initial fit: zoom to the auto frame once it is known, unless the person has already moved the map.
+  // Never again on its own (new analysis, observations or overlay updates leave the view alone).
   useEffect(() => {
-    if (widthM && !userMoved.current) fit(true);
+    if (!widthM || fitted.current) return;
+    fitted.current = true;
+    if (!userMoved.current) fit(true);
   }, [fit, widthM]);
+
+  // Wheel anywhere over the map (pins, controls, attribution, point cards) zooms the map and never scrolls the
+  // card behind. MapLibre handles plain wheel on its canvas itself; anything layered on top forwards a copy to
+  // the canvas. In cooperative (touch) mode MapLibre would ask for Ctrl + wheel, but a mouse or trackpad on a
+  // touch device should just zoom: the copy says Ctrl is held (MapLibre zooms the same way either way).
+  const forwardWheel = useCallback((e: WheelEvent) => {
+    const m = map.current;
+    if (!m || !e.isTrusted) return;
+    userMoved.current = true;
+    const cooperative = m.cooperativeGestures.isEnabled();
+    if (!cooperative && m.getCanvasContainer().contains(e.target as Node)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    m.getCanvas().dispatchEvent(
+      new WheelEvent('wheel', {
+        bubbles: true, cancelable: true, deltaX: e.deltaX, deltaY: e.deltaY, deltaZ: e.deltaZ, deltaMode: e.deltaMode,
+        clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY,
+        ctrlKey: cooperative || e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey,
+      }),
+    );
+  }, []);
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const touched = () => void (userMoved.current = true);
+    // Capture: runs before MapLibre's own listener on the canvas container.
+    el.addEventListener('wheel', forwardWheel, { passive: false, capture: true });
+    el.addEventListener('pointerdown', touched);
+    el.addEventListener('keydown', touched);
+    return () => {
+      el.removeEventListener('wheel', forwardWheel, { capture: true });
+      el.removeEventListener('pointerdown', touched);
+      el.removeEventListener('keydown', touched);
+    };
+  }, [forwardWheel]);
 
   useEffect(() => {
     const m = map.current;
     if (!ready || !m || !overlay) return;
-    const [sw, ne] = frameCorners(place, widthM ?? DEFAULT_WIDTH);
-    (m.getSource('frame') as GeoJSONSource).setData(collection(widthM ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[sw.lon, sw.lat], [ne.lon, sw.lat], [ne.lon, ne.lat], [sw.lon, ne.lat], [sw.lon, sw.lat]] } }] : []));
     (m.getSource('lines') as GeoJSONSource).setData(collection(overlay.lines.map(l => ({ type: 'Feature', properties: { kind: l.kind }, geometry: { type: 'LineString', coordinates: l.points.map(([lat, lon]) => [lon, lat]) } }))));
     (m.getSource('markers') as GeoJSONSource).setData(collection(overlay.markers.map(mk => ({ type: 'Feature', properties: { kind: mk.kind }, geometry: { type: 'Point', coordinates: [mk.lon, mk.lat] } }))));
-  }, [ready, overlay, place, widthM]);
+  }, [ready, overlay]);
 
   // Beam position for the scanning state, driven per frame so the pins it passes light up in sync.
   const scanning = phase !== 'done';
@@ -188,7 +237,7 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
     { key: 'image', label: t('aerial.step.image'), done: tilesShown || phase === 'ai' || phase === 'done' },
     { key: 'ai', label: t('aerial.step.ai'), done: phase === 'done' },
   ];
-  const current = steps.find(s => !s.done)?.key;
+  const current = steps.find(s => !s.done);
 
   return (
     <div ref={root} className={cn('relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-muted', styles.map)} style={{ ['--scan' as string]: 0 }} data-vaul-no-drag>
@@ -213,20 +262,17 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
       {m && size && ready ? (
         <div className="pointer-events-none absolute inset-0 z-10">
           {placed(points, p => m.project([p.lon, p.lat]), size).map(({ point: p, x, y }) => (
-            <MapButton key={p.key} point={p} overlay={overlay} x={x} y={y} z={p.type === 'place' ? 50 : p.type === 'pin' ? 30 : p.type === 'observation' ? 20 : 10} lit={showScan && !leaving ? y / size.h : null} large={large} />
+            <MapButton key={p.key} point={p} overlay={overlay} x={x} y={y} z={p.type === 'place' ? 50 : p.type === 'pin' ? 30 : p.type === 'observation' ? 20 : 10} lit={showScan && !leaving ? y / size.h : null} large={large} onWheel={forwardWheel} />
           ))}
         </div>
       ) : null}
 
-      {showScan ? (
-        <ol aria-label={t('aerial.progress')} className={cn('absolute left-2 top-2 z-20 flex max-w-[calc(100%-4rem)] flex-wrap gap-1 transition-opacity duration-700', leaving && 'opacity-0')}>
-          {steps.map(s => (
-            <li key={s.key} className={cn('flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold shadow', s.done ? 'bg-card/90 text-foreground' : s.key === current ? 'bg-ink/90 text-white' : 'bg-card/60 text-muted-foreground')} aria-current={s.key === current ? 'step' : undefined}>
-              {s.done ? <Check className="size-3" aria-hidden /> : s.key === current ? <LoaderCircle className="size-3 motion-safe:animate-spin" aria-hidden /> : null}
-              {s.label}
-            </li>
-          ))}
-        </ol>
+      {/* One quiet pill for the current step; the same progress is announced by the status line below the map. */}
+      {showScan && current ? (
+        <p aria-hidden className={cn('absolute left-2 top-2 z-20 flex max-w-[calc(100%-4rem)] items-center gap-1.5 rounded-full bg-card/90 px-2.5 py-1 text-xs font-medium text-foreground shadow transition-opacity duration-700', leaving && 'opacity-0')}>
+          <LoaderCircle className="size-3.5 shrink-0 motion-safe:animate-spin" aria-hidden />
+          <span className="truncate">{current.label}</span>
+        </p>
       ) : null}
 
       <div className="absolute right-2 top-2 z-20 flex flex-col gap-1.5">
@@ -251,10 +297,7 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
           </Control>
         ) : null}
       </div>
-      <p className="pointer-events-none absolute bottom-2 left-2 z-20 flex flex-wrap gap-1.5 text-[11px] font-semibold">
-        {widthM ? <span className="rounded-full bg-card/90 px-2 py-0.5 text-foreground shadow-sm">{t('aerial.frameLabel', { m: widthM })}</span> : null}
-        <span className="rounded-full bg-card/90 px-2 py-0.5 text-foreground shadow-sm">© GUGiK</span>
-      </p>
+      <p className="pointer-events-none absolute bottom-1 left-1 z-20 rounded bg-card/85 px-1.5 py-px text-[10px] font-medium text-foreground">© GUGiK</p>
     </div>
   );
 }
@@ -291,7 +334,7 @@ function Control({ label, onClick, children }: { label: string; onClick: () => v
   );
 }
 
-function MapButton({ point, overlay, x, y, z, lit, large }: { point: MapPoint; overlay: AerialOverlay | null; x: number; y: number; z: number; lit: number | null; large: boolean }) {
+function MapButton({ point, overlay, x, y, z, lit, large, onWheel }: { point: MapPoint; overlay: AerialOverlay | null; x: number; y: number; z: number; lit: number | null; large: boolean; onWheel: (e: WheelEvent) => void }) {
   const label = usePointLabel()(point);
   const [open, setOpen] = useState<null | 'hover' | 'click'>(null);
   // Closing after a short delay lets the pointer move from the pin into its card.
@@ -305,6 +348,15 @@ function MapButton({ point, overlay, x, y, z, lit, large }: { point: MapPoint; o
     timer.current = setTimeout(() => setOpen(o => (o === 'hover' ? null : o)), 150);
   };
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  // The card is portalled out of the map: the wheel over it zooms the map too (React's onWheel is passive).
+  const cardRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el) return;
+      el.addEventListener('wheel', onWheel, { passive: false });
+      return () => el.removeEventListener('wheel', onWheel);
+    },
+    [onWheel],
+  );
   const badge =
     point.type === 'place' ? <PlaceBadge large={large} />
     : point.type === 'pin' ? <PinBadge pin={point.pin} large={large} />
@@ -335,6 +387,7 @@ function MapButton({ point, overlay, x, y, z, lit, large }: { point: MapPoint; o
         </button>
       </PopoverAnchor>
       <PopoverContent
+        ref={cardRef}
         side="top"
         sideOffset={10}
         collisionPadding={8}

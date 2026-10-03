@@ -63,7 +63,7 @@ export function BarrierStrip({ option }: { option: JourneyOption }) {
         ))}
       </div>
       {marks.slice(0, 8).map(({ fact, at }) => {
-        const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'kerb' ? OctagonAlert : fact.direction === 'up' ? ArrowUp : ArrowDown;
+        const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Armchair : fact.kind === 'kerb' ? OctagonAlert : fact.direction === 'up' ? ArrowUp : ArrowDown;
         return (
           <span
             key={fact.id}
@@ -99,6 +99,7 @@ export function OptionCard({ option, selected, onSelect }: { option: JourneyOpti
   const stairsTotal = option.stairs.up + option.stairs.down + option.stairs.unknown;
   const firstWalk = option.legs[0]?.type === 'walk' ? option.legs[0] : null;
   const parking = option.legs.find((l): l is DriveLeg => l.type === 'drive' && !!l.parking)?.parking;
+  const fare = option.legs.find((l): l is DriveLeg => l.type === 'drive' && !!l.fare)?.fare;
   const title = option.kind === 'walk' ? t('option.walkOnly') : option.kind === 'taxi' ? t('option.taxi') : option.kind === 'car' ? t('option.car') : null;
   return (
     <button
@@ -170,6 +171,18 @@ export function OptionCard({ option, selected, onSelect }: { option: JourneyOpti
         ) : (
           <span className="font-medium text-rest">{t('option.noStairs')}</span>
         )}
+        {fare ? (
+          <span className="font-semibold">
+            {t('taxi.fare', { min: Math.round(fare.min), max: Math.round(fare.max) })}
+            <span className="sr-only"> ({t('taxi.estimate')})</span>
+          </span>
+        ) : null}
+        {option.restStops ? (
+          <span className="inline-flex items-center gap-1 font-medium text-rest">
+            <Armchair className="size-4" aria-hidden />
+            {tp('option.restStops', option.restStops)}
+          </span>
+        ) : null}
         {option.rests ? (
           <span className="inline-flex items-center gap-1 text-rest">
             <Armchair className="size-4" aria-hidden />

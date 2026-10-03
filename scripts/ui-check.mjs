@@ -54,8 +54,11 @@ for (const run of runs) {
 
   // One-tap photo report: AI analyses and saves, then we delete it again.
   if (process.env.REPORT !== '0') {
-    const chooser = page.waitForEvent('filechooser');
     await page.getByRole('button', { name: 'Zgłoś przeszkodę zdjęciem' }).click();
+    await page.getByText('Nie udało mi się dotrzeć').waitFor();
+    await shot('6a-report-chooser');
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByText('Zrób zdjęcie przeszkody').click();
     await (await chooser).setFiles({ name: 'schody.jpg', mimeType: 'image/jpeg', buffer: photo });
     await page.getByText(/^Dodano:|Zdjęcie zapisane/).waitFor({ timeout: 60000 });
     await shot('6-report-toast');
@@ -92,7 +95,7 @@ for (const run of runs) {
   await page.getByRole('heading', { name: 'Bariery i udogodnienia' }).waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
   await shot('11-place');
-  await page.getByRole('button', { name: 'Jesteś właścicielem? Uzupełnij dane' }).click();
+  await page.getByRole('button', { name: 'Jesteś właścicielem? Uzupełnij dane' }).last().click();
   await page.getByRole('button', { name: 'Wyślij dane' }).waitFor();
   await page.waitForTimeout(600);
   await shot('12-partner');

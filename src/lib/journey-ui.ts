@@ -54,7 +54,7 @@ export function strip(option: JourneyOption) {
     segments.push({ leg, start: start / total, length: length / total });
     if (leg.type === 'walk') {
       for (const fact of leg.facts) {
-        if (fact.kind === 'entrance' || fact.kind === 'surface') continue;
+        if (fact.kind === 'entrance' || fact.kind === 'surface' || fact.kind === 'toilet') continue;
         marks.push({ fact, at: (start + fractionAlong(leg.geometry, fact.lat, fact.lon) * length) / total });
       }
     }
@@ -74,7 +74,11 @@ export function stairLabel(fact: CityFact, t: T) {
 
 export function factTitle(fact: CityFact, t: T) {
   if (fact.kind === 'stairs') return stairLabel(fact, t);
-  if (fact.kind === 'bench') return t(fact.tags.backrest === 'yes' ? 'fact.benchBack' : 'fact.bench');
+  if (fact.kind === 'bench') {
+    const bench = t(fact.tags.backrest === 'yes' ? 'fact.benchBack' : 'fact.bench');
+    return fact.restAfterMinutes ? `${t('fact.restAfter', { n: fact.restAfterMinutes })}: ${bench.toLocaleLowerCase()}` : bench;
+  }
+  if (fact.kind === 'toilet') return fact.title || t('fact.toilet');
   if (fact.kind === 'entrance') return t(fact.tags.wheelchair === 'yes' ? 'fact.entranceFree' : 'fact.entrance');
   // Kerbs and surfaces arrive already localised from the server.
   return fact.title;

@@ -7,6 +7,8 @@ import { transitOptions } from './transit';
 import { OffNetworkError, walkingOptions } from './walking';
 import { DriveError, driveOptions } from './drive';
 import { roadGraph, type RoadGraph } from './roads';
+import { applyExtras } from './journey-extras';
+import { accessibleToilets, type AccessibleToilet } from './objects';
 import { serverMessages } from './i18n/server-messages';
 import { defaultLocale, locales, type Locale } from './i18n/locales';
 import type { WalkGraph } from './routing';
@@ -50,6 +52,7 @@ export function planJourney(
   input: { from: CityPlace; to: CityPlace; preferences: Preferences; date: string; time: string; transport?: TransportMode; locale?: Locale },
   graph: WalkGraph = cityGraph(),
   roads: () => RoadGraph | null = roadGraph,
+  toilets: () => AccessibleToilet[] = accessibleToilets,
 ): JourneyResult {
   const { from, to, preferences, date, time } = input;
   const transport = input.transport ?? 'transit';
@@ -90,5 +93,6 @@ export function planJourney(
     addError(message(error, m.errors.transitFailed));
   }
 
-  return { from, to, date, options: [...drive, ...orderOptions(walking, transit, preferences)], errors };
+  const options = applyExtras([...drive, ...orderOptions(walking, transit, preferences)], graph, preferences, locale, toilets);
+  return { from, to, date, options, errors };
 }

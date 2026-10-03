@@ -187,13 +187,13 @@ test('car for a wheelchair parks only where disabled spaces are mapped; taxi and
 });
 
 test('wheelchair transit options flag trips without accessibility information', { skip: !hasTransit }, () => {
-  const result = planJourney({ from: initialFrom, to: initialTo, preferences: { ...defaultPreferences, mobility: 'wheelchair' }, date: '2026-10-03', time: '14:00', locale: 'uk' });
+  const result = planJourney({ from: initialFrom, to: initialTo, preferences: { ...defaultPreferences, mobility: 'wheelchair' }, date: '2026-10-03', time: '14:00', locale: 'de' });
   const transit = result.options.filter(o => o.kind === 'transit');
   assert.ok(transit.length > 0);
   for (const option of transit) {
     const rides = option.legs.filter((l): l is RideLeg => l.type === 'ride');
     assert.ok(rides.every(r => r.wheelchair !== '2'));
-    if (rides.some(r => r.wheelchair !== '1')) assert.ok(option.issues.includes('Немає інформації про пристосованість рейсу'));
-    assert.ok(option.label.startsWith('Трамвай') || option.label.startsWith('Автобус'));
+    if (rides.some(r => r.wheelchair !== '1')) assert.ok(option.issues.includes('Keine Angaben zur Barrierefreiheit dieser Fahrt'));
+    assert.ok(option.label.startsWith('Straßenbahn') || option.label.startsWith('Bus'));
   }
 });

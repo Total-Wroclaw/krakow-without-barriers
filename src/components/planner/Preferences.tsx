@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Accessibility, Armchair, ArrowDown, ArrowUp, Baby, Ban, Footprints, Grip, LoaderCircle, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Accessibility, Armchair, ArrowDown, ArrowUp, Baby, Ban, Footprints, Grip, LoaderCircle, SlidersHorizontal, Sparkles, Toilet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ type StairMode = 'any' | 'noDown' | 'noUp' | 'none';
 type Mobility = Preferences['mobility'];
 
 /** Wheelchairs and pushchairs cannot use stairs at all; routing enforces this too. */
-const wheeled = (p: Preferences) => p.mobility !== 'walk';
+const wheeled = (p: Preferences) => p.mobility === 'wheelchair' || p.mobility === 'stroller';
 
 function stairMode(p: Preferences): StairMode {
   if (wheeled(p) || p.avoidStairs || (p.avoidDown && p.avoidUp)) return 'none';
@@ -36,11 +36,24 @@ const stairOptions: { value: StairMode; key: MessageKey; icon: typeof ArrowDown 
   { value: 'none', key: 'prefs.stairs.none', icon: Ban },
 ];
 
-const mobilityOptions: { value: Mobility; key: MessageKey; icon: typeof Footprints }[] = [
+const mobilityOptions: { value: Mobility; key: MessageKey; icon: React.ComponentType<{ 'aria-hidden'?: boolean }> }[] = [
   { value: 'walk', key: 'prefs.mobility.walk', icon: Footprints },
+  { value: 'crutches', key: 'prefs.mobility.crutches', icon: Crutches },
   { value: 'wheelchair', key: 'prefs.mobility.wheelchair', icon: Accessibility },
   { value: 'stroller', key: 'prefs.mobility.stroller', icon: Baby },
 ];
+
+const restOptions = [0, 5, 10, 15, 20];
+
+/** Lucide has no crutch icon; a simple drawn one keeps the same stroke style. */
+function Crutches(props: { 'aria-hidden'?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="size-4" {...props}>
+      <path d="M7 3h4M9 3l-2 18M6 11h4" />
+      <path d="M14 3h4M16 3l2 18M15 11h4" />
+    </svg>
+  );
+}
 
 const chipKey: Record<Exclude<StairMode, 'any'>, MessageKey> = { noDown: 'chip.noDown', noUp: 'chip.noUp', none: 'chip.noStairs' };
 
@@ -50,9 +63,11 @@ export function PreferencesBar({ preferences, onOpen }: { preferences: Preferenc
   const mode = stairMode(preferences);
   const chips = [
     preferences.mobility !== 'walk' ? t(`prefs.mobility.${preferences.mobility}`) : null,
+    preferences.restEvery ? `${t('prefs.restEvery')} ${t('prefs.restMinutes', { n: preferences.restEvery })}` : null,
     mode === 'any' || wheeled(preferences) ? null : t(chipKey[mode]),
     preferences.preferHandrails && !wheeled(preferences) ? t('chip.rails') : null,
-    preferences.preferRest ? t('chip.rest') : null,
+    preferences.preferRest && !preferences.restEvery ? t('chip.rest') : null,
+    preferences.showToilets ? t('cat.toilet') : null,
     t('chip.distance', { distance: distance(preferences.maxDistance, locale) }),
   ].filter(Boolean) as string[];
   return (
@@ -117,8 +132,13 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
           <ToggleGroup
             type="single"
             value={preferences.mobility}
-            onValueChange={v => v && onChange({ ...preferences, mobility: v as Mobility })}
-            className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3"
+            onValueChange={v => {
+              if (!v) return;
+              const mobility = v as Mobility;
+              // Accessible toilets matter most on wheels; switch them on, but keep the user's later choice.
+              onChange({ ...preferences, mobility, showToilets: mobility === 'wheelchair' ? true : preferences.showToilets });
+            }}
+            className="grid w-full grid-cols-2 gap-2"
             aria-labelledby="mobility-label"
           >
             {mobilityOptions.map(({ value, key, icon: Icon }) => (
@@ -168,6 +188,32 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
             {t('prefs.rest')}
           </Label>
           <Switch id="pref-rest" checked={preferences.preferRest} onCheckedChange={v => onChange({ ...preferences, preferRest: v })} />
+        </div>
+
+        <section className="flex flex-col gap-3" aria-labelledby="rest-every-label">
+          <h3 id="rest-every-label" className="font-semibold">{t('prefs.restEvery')}</h3>
+          <ToggleGroup
+            type="single"
+            value={String(preferences.restEvery)}
+            onValueChange={v => v && onChange({ ...preferences, restEvery: Number(v) })}
+            aria-labelledby="rest-every-label"
+            className="flex w-full flex-wrap gap-1.5"
+          >
+            {restOptions.map(n => (
+              <ToggleGroupItem key={n} value={String(n)} className="h-11 min-w-[4.25rem] flex-1 rounded-lg! border bg-card px-2 text-sm data-[state=on]:border-primary data-[state=on]:bg-accent data-[state=on]:text-accent-foreground">
+                {n ? t('prefs.restMinutes', { n }) : t('prefs.restOff')}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          {preferences.restEvery ? <p className="text-sm text-muted-foreground">{t('prefs.restHint')}</p> : null}
+        </section>
+
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="pref-toilets" className="flex items-center gap-3 text-base font-normal">
+            <Toilet className="size-5 text-primary" aria-hidden />
+            {t('prefs.toilets')}
+          </Label>
+          <Switch id="pref-toilets" checked={preferences.showToilets} onCheckedChange={v => onChange({ ...preferences, showToilets: v })} />
         </div>
 
         <Separator />

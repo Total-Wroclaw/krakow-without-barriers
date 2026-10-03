@@ -1,11 +1,11 @@
 // Display helpers shared by the UI. Europe/Warsaw time, locale-aware numbers.
 import type { Locale } from './i18n/locales';
 
-const intlLocale: Record<Locale, string> = { pl: 'pl-PL', en: 'en-GB', uk: 'uk-UA' };
+const intlLocale: Record<Locale, string> = { pl: 'pl-PL', en: 'en-GB', de: 'de-DE' };
 const units: Record<Locale, { min: string; h: string; m: string; km: string }> = {
   pl: { min: 'min', h: 'h', m: 'm', km: 'km' },
   en: { min: 'min', h: 'h', m: 'm', km: 'km' },
-  uk: { min: 'хв', h: 'год', m: 'м', km: 'км' },
+  de: { min: 'Min.', h: 'Std.', m: 'm', km: 'km' },
 };
 
 export function clock(seconds: number) {

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { AccessFeature, FeatureKey, FeatureValue, ObjectCategory, ObjectQuery, ObjectSource, PartnerInfo, PlaceObject, PlaceObjectSummary } from './explore-types';
+import type { AccessFeature, FeatureKey, FeatureValue, ObjectCategory, ObjectPage, ObjectQuery, ObjectSource, PartnerInfo, PlaceObject, PlaceObjectSummary } from './explore-types';
 import type { CityVenuesFile } from './city-venues';
 import type { Locale } from './i18n/locales';
 import type { Report } from './schemas';
@@ -28,31 +28,31 @@ export type CatalogInput = { osm?: OsmFile | null; city?: CityVenuesFile | null;
 
 // ---------- Labels ----------
 const CATEGORY_LABELS: Record<ObjectCategory, Record<Locale, string>> = {
-  museum: { pl: 'Muzeum', en: 'Museum', uk: 'Музей' },
-  landmark: { pl: 'Zabytek i atrakcja', en: 'Landmark', uk: 'Пам’ятка' },
-  culture: { pl: 'Kultura', en: 'Culture', uk: 'Культура' },
-  office: { pl: 'Urząd', en: 'Public office', uk: 'Установа' },
-  toilet: { pl: 'Toaleta', en: 'Toilet', uk: 'Туалет' },
-  hotel: { pl: 'Nocleg', en: 'Accommodation', uk: 'Житло' },
-  food: { pl: 'Gastronomia', en: 'Food and drink', uk: 'Їжа та напої' },
-  health: { pl: 'Zdrowie', en: 'Health', uk: 'Здоров’я' },
-  park: { pl: 'Park', en: 'Park', uk: 'Парк' },
-  parking: { pl: 'Parking', en: 'Parking', uk: 'Паркінг' },
-  other: { pl: 'Inne', en: 'Other', uk: 'Інше' },
+  museum: { pl: 'Muzeum', en: 'Museum', de: 'Museum' },
+  landmark: { pl: 'Zabytek i atrakcja', en: 'Landmark', de: 'Sehenswürdigkeit' },
+  culture: { pl: 'Kultura', en: 'Culture', de: 'Kultur' },
+  office: { pl: 'Urząd', en: 'Public office', de: 'Behörde' },
+  toilet: { pl: 'Toaleta', en: 'Toilet', de: 'Toilette' },
+  hotel: { pl: 'Nocleg', en: 'Accommodation', de: 'Unterkunft' },
+  food: { pl: 'Gastronomia', en: 'Food and drink', de: 'Essen und Trinken' },
+  health: { pl: 'Zdrowie', en: 'Health', de: 'Gesundheit' },
+  park: { pl: 'Park', en: 'Park', de: 'Park' },
+  parking: { pl: 'Parking', en: 'Parking', de: 'Parkplatz' },
+  other: { pl: 'Inne', en: 'Other', de: 'Sonstiges' },
 };
 export const categoryLabel = (category: ObjectCategory, locale: Locale = 'pl') => CATEGORY_LABELS[category]?.[locale] ?? CATEGORY_LABELS.other[locale];
-const UNNAMED_TOILET: Record<Locale, string> = { pl: 'Toaleta publiczna', en: 'Public toilet', uk: 'Громадський туалет' };
+const UNNAMED_TOILET: Record<Locale, string> = { pl: 'Toaleta publiczna', en: 'Public toilet', de: 'Öffentliche Toilette' };
 const LABELS = {
-  osm: { pl: 'OpenStreetMap', en: 'OpenStreetMap', uk: 'OpenStreetMap' },
-  osmEntrance: { pl: 'OpenStreetMap — wejście', en: 'OpenStreetMap — entrance', uk: 'OpenStreetMap — вхід' },
-  city: { pl: 'Urząd Miasta Krakowa — wykaz dostępności budynków', en: 'Kraków City Hall — building accessibility list', uk: 'Мерія Кракова — перелік доступності будівель' },
-  partner: { pl: 'Dane właściciela obiektu (niezweryfikowane w terenie)', en: 'Venue owner data (not verified on site)', uk: 'Дані власника об’єкта (не перевірено на місці)' },
-  example: { pl: 'Dane demonstracyjne — nie dotyczą prawdziwego miejsca', en: 'Demo data — not a real venue', uk: 'Демонстраційні дані — не реальне місце' },
-  user: { pl: 'Zgłoszenie użytkownika (niezweryfikowane)', en: 'User report (unverified)', uk: 'Повідомлення користувача (не перевірено)' },
+  osm: { pl: 'OpenStreetMap', en: 'OpenStreetMap', de: 'OpenStreetMap' },
+  osmEntrance: { pl: 'OpenStreetMap — wejście', en: 'OpenStreetMap — entrance', de: 'OpenStreetMap — Eingang' },
+  city: { pl: 'Urząd Miasta Krakowa — wykaz dostępności budynków', en: 'Kraków City Hall — building accessibility list', de: 'Stadtverwaltung Krakau — Verzeichnis barrierefreier Gebäude' },
+  partner: { pl: 'Dane właściciela obiektu (niezweryfikowane w terenie)', en: 'Venue owner data (not verified on site)', de: 'Angaben des Betreibers (nicht vor Ort geprüft)' },
+  example: { pl: 'Dane demonstracyjne — nie dotyczą prawdziwego miejsca', en: 'Demo data — not a real venue', de: 'Demodaten — kein echter Ort' },
+  user: { pl: 'Zgłoszenie użytkownika (niezweryfikowane)', en: 'User report (unverified)', de: 'Nutzermeldung (nicht geprüft)' },
 };
 const OBSERVATION_LABELS: Record<Report['observation']['kind'], Record<Locale, string>> = {
-  stairs: { pl: 'schody', en: 'stairs', uk: 'сходи' }, entrance: { pl: 'wejście', en: 'entrance', uk: 'вхід' }, bench: { pl: 'ławka', en: 'bench', uk: 'лавка' },
-  surface: { pl: 'nawierzchnia', en: 'surface', uk: 'покриття' }, other: { pl: 'inne', en: 'other', uk: 'інше' },
+  stairs: { pl: 'schody', en: 'stairs', de: 'Treppe' }, entrance: { pl: 'wejście', en: 'entrance', de: 'Eingang' }, bench: { pl: 'ławka', en: 'bench', de: 'Sitzbank' },
+  surface: { pl: 'nawierzchnia', en: 'surface', de: 'Belag' }, other: { pl: 'inne', en: 'other', de: 'Sonstiges' },
 };
 const ENTRANCE_KIND: Record<string, string> = { main: 'główne', service: 'służbowe', secondary: 'boczne', emergency: 'awaryjne', exit: 'wyjście', staircase: 'klatka schodowa', yes: '' };
 
@@ -144,7 +144,7 @@ function osmAddress(t: Record<string, string>) {
 function fromOsm(o: OsmRecord, obtainedAt: string): Rec {
   const sid = `osm:${o.id}`;
   const rec: Rec = {
-    id: objectId(o.id), name: o.n, names: { ...(o.t['name:en'] ? { en: o.t['name:en'] } : {}), ...(o.t['name:uk'] ? { uk: o.t['name:uk'] } : {}) }, aliases: [],
+    id: objectId(o.id), name: o.n, names: { ...(o.t['name:en'] ? { en: o.t['name:en'] } : {}), ...(o.t['name:de'] ? { de: o.t['name:de'] } : {}) }, aliases: [],
     category: o.c, lat: o.la, lon: o.lo, address: osmAddress(o.t), website: o.t.website ?? o.t['contact:website'], openingHours: o.t.opening_hours,
     osmIds: [o.id, ...(o.also ?? [])],
     sources: [{ id: sid, kind: 'osm', label: LABELS.osm.pl, labelKey: 'osm', url: osmUrl(o.id), obtainedAt, editedAt: o.ts, confirmedAt: o.t['check_date:wheelchair'] ?? o.t.check_date ?? null, status: 'map' }],
@@ -347,8 +347,13 @@ const knownKeys = (r: Rec) => new Set(r.features.filter(known).map(f => f.key)).
 /** Promoted partners are lifted only when within this distance of the user's point (if given). */
 const PROMOTION_RADIUS = 5000;
 export function queryCatalog(cat: Catalog, query: ObjectQuery): PlaceObjectSummary[] {
+  return queryCatalogPage(cat, query).objects;
+}
+/** One page of results; the order is total (ties broken by id), so pages never overlap or skip. */
+export function queryCatalogPage(cat: Catalog, query: ObjectQuery): ObjectPage {
   const locale = query.locale ?? 'pl';
-  const limit = Math.min(Math.max(query.limit ?? 30, 1), 100);
+  const limit = Math.min(Math.max(Math.floor(query.limit ?? 30), 1), 100);
+  const offset = Math.max(Math.floor(query.offset ?? 0), 0);
   const origin = query.lat !== undefined && query.lon !== undefined ? { lat: query.lat, lon: query.lon } : undefined;
   const tokens = words(query.q ?? '');
   const scored: { r: Rec; score: number; d: number }[] = [];
@@ -375,8 +380,50 @@ export function queryCatalog(cat: Catalog, query: ObjectQuery): PlaceObjectSumma
   const byDistance = (a: { d: number }, b: { d: number }) => (origin ? a.d - b.d : 0);
   scored.sort((a, b) => Number(promoted(b)) - Number(promoted(a))
     || (tokens.length ? b.score - a.score || byDistance(a, b) || byData(a, b) : byData(a, b) || byDistance(a, b))
-    || (a.r.name ?? '').localeCompare(b.r.name ?? '', 'pl'));
-  return scored.slice(0, limit).map(x => { const { conflicts: _c, ...s } = summaryOf(x.r, locale, origin); return s; });
+    || (a.r.name ?? '').localeCompare(b.r.name ?? '', 'pl')
+    || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
+  const objects = scored.slice(offset, offset + limit).map(x => { const { conflicts: _c, ...s } = summaryOf(x.r, locale, origin); return s; });
+  const next = offset + limit;
+  return { objects, total: scored.length, nextOffset: next < scored.length ? next : null };
+}
+
+// ---------- Accessible toilets for the journey planner ----------
+export type AccessibleToilet = {
+  objectId: string; name: string | null; lat: number; lon: number;
+  /** 'yes' = accessible, 'limited' = partly accessible (as stated by the source). */
+  value: 'yes' | 'limited'; sourceUrl: string; editedAt: string | null; obtainedAt: string;
+};
+/**
+ * Toilets a wheelchair user can rely on: a toilet with wheelchair=yes|limited, or any place whose source states
+ * an accessible toilet (toilets:wheelchair=yes, city list, partner). Unknown toilets are never included, and a
+ * place where any source says "no" is left out.
+ */
+export function accessibleToiletsOf(cat: Catalog): AccessibleToilet[] {
+  const out: AccessibleToilet[] = [];
+  for (const r of cat.recs) {
+    const facts = r.features.filter(f => f.key === 'accessible_toilet');
+    if (!facts.length || facts.some(f => f.value === 'no')) continue;
+    const isToilet = r.category === 'toilet';
+    const best = facts.find(f => f.value === 'yes') ?? (isToilet ? facts.find(f => f.value === 'limited') : undefined);
+    if (!best) continue;
+    const source = r.sources.find(s => s.id === best.sourceId) ?? r.sources[0];
+    out.push({
+      objectId: r.id, name: r.name, lat: r.lat, lon: r.lon, value: best.value === 'yes' ? 'yes' : 'limited',
+      sourceUrl: source?.url ?? (r.osmIds[0] ? osmUrl(r.osmIds[0]) : ''), editedAt: source?.editedAt ?? null, obtainedAt: source?.obtainedAt ?? '',
+    });
+  }
+  return out;
+}
+let toiletCache: { cat: Catalog; toilets: AccessibleToilet[] } | undefined;
+let baseCatalog: Catalog | undefined;
+/**
+ * Synchronous access for the planner: the latest full catalogue if Explore has loaded it (with partners),
+ * otherwise OSM + city data only. Recomputed only when the catalogue changes.
+ */
+export function accessibleToilets(): AccessibleToilet[] {
+  const cat = cached?.cat ?? (baseCatalog ??= buildCatalog(loadBase()));
+  if (toiletCache?.cat !== cat) toiletCache = { cat, toilets: accessibleToiletsOf(cat) };
+  return toiletCache.toilets;
 }
 export function getFromCatalog(cat: Catalog, id: string, locale: Locale = 'pl'): PlaceObject | null {
   const r = cat.byId.get(id);
@@ -436,6 +483,7 @@ async function catalog(): Promise<Catalog> {
   return cat;
 }
 export async function listObjects(query: ObjectQuery): Promise<PlaceObjectSummary[]> { return queryCatalog(await catalog(), query); }
+export async function listObjectPage(query: ObjectQuery): Promise<ObjectPage> { return queryCatalogPage(await catalog(), query); }
 export async function getObject(id: string, locale: Locale = 'pl'): Promise<PlaceObject | null> { return getFromCatalog(await catalog(), id, locale); }
 /** Validate and store a partner submission; returns the public object (contact e-mail is never included). */
 export async function savePartnerObject(input: unknown, locale: Locale = 'pl'): Promise<PlaceObject> {

@@ -1,11 +1,13 @@
 // Taxi (door to door) and car (drive, park, walk) options over the OSM road graph.
 // Driving times are estimates (speed limits × urban factor + junction delays); no live traffic,
-// no waiting for a taxi, no time to find a free space. No fares: we have no official tariff source.
+// no waiting for a taxi, no time to find a free space. Taxi fares are a range from the official
+// Kraków maximum taxi prices (taxi.ts), not a quote.
 import { metres, nearest, reach, type WalkGraph } from './routing';
 import { drivesTo, driveGeometry, fastestDrive, roadName, roadNearest, roadPoint, type Drive, type RoadGraph } from './roads';
 import { parkingInfo, parkingsNear, type Parking } from './parking';
 import { makeOption, snap, straightWalk, walkBetween, walkLeg } from './walking';
 import { serverMessages } from './i18n/server-messages';
+import { rideLinks, taxiFare } from './taxi';
 import type { Locale } from './i18n/locales';
 import type { Preferences } from './schemas';
 import type { CityPlace } from './city-types';
@@ -133,9 +135,13 @@ export function taxiOption(c: Context, from: CityPlace, to: CityPlace, departure
   const before = kerbWalk(c, origin, pickup, departure, false);
   const after = kerbWalk(c, dropOff, destination, departure, true);
   const ride = driveLeg(c, 'taxi', drive, startNode, before ? pickup : origin, after ? dropOff : destination, departure);
+  ride.fare = taxiFare(ride.distance, c.locale);
   const { legs, arrival } = timed([before, ride, after], departure);
   const soft = c.p.mobility === 'wheelchair' ? [m.issues.accessibleTaxi] : [];
-  return makeOption('taxi', 'taxi', m.labels.taxi, legs, departure, arrival, c.p, c.locale, { soft });
+  const option = makeOption('taxi', 'taxi', m.labels.taxi, legs, departure, arrival, c.p, c.locale, { soft });
+  // Pickup and drop-off at the kerbs the walking legs lead to; destination named as the user chose it.
+  option.rideLinks = rideLinks({ ...ride.from, name: from.name }, { ...ride.to, name: to.name }, c.locale);
+  return option;
 }
 
 type ParkingChoice = { parking: Parking; walkNode: number; roadNode: number; walked: number; path: number[] };

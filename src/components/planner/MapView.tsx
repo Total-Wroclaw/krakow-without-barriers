@@ -15,9 +15,8 @@ import { useReportTitle } from './Reports';
 maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
 const STYLE = 'https://tiles.openfreemap.org/styles/positron';
-// Official Polish orthophoto (GUGiK), free reuse with attribution.
-const ORTHO_TILES =
-  'https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=Raster&STYLES=&SRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg';
+// Official Polish orthophoto (GUGiK), free reuse with attribution, served through our disk-cached tile proxy.
+const orthoTiles = () => `${window.location.origin}/api/tiles/ortho/{z}/{x}/{y}`;
 const KRAKOW: [number, number] = [19.945, 50.061];
 const colors = { walk: '#14213d', tram: '#c4122f', bus: '#2443b0', drive: '#0e6c80' };
 
@@ -28,6 +27,7 @@ const icons = {
   bench: '<path d="M4 12h16M6 12v6M18 12v6M6 8h12"/>',
   entrance: '<path d="M13 4h5v16h-5M3 12h10M9 8l4 4-4 4"/>',
   report: '<path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  toilet: '<path d="M7 4h2v4H7zM15 4h2v4h-2zM6 10h5v10H6zM14 10h4l-1 10h-2z"/>',
   kerb: '<path d="M4 18h6v-6h10"/>',
   surface: '<path d="M4 4h16v16H4zM4 12h16M12 4v16"/>',
 };
@@ -98,7 +98,7 @@ export default function MapView({ options, selectedId, from, to, reports, object
       minor();
       // Satellite sits under the labels of the base style so street names stay readable.
       const firstSymbol = instance.getStyle().layers.find(l => l.type === 'symbol')?.id;
-      instance.addSource('ortho', { type: 'raster', tiles: [ORTHO_TILES], tileSize: 256, attribution: '© <a href="https://www.geoportal.gov.pl">GUGiK</a>' });
+      instance.addSource('ortho', { type: 'raster', tiles: [orthoTiles()], tileSize: 256, minzoom: 8, maxzoom: 19, attribution: '© <a href="https://www.geoportal.gov.pl">GUGiK</a>' });
       instance.addLayer({ id: 'ortho', type: 'raster', source: 'ortho', layout: { visibility: 'none' } }, firstSymbol);
       instance.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       instance.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['==', ['get', 'selected'], false], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7d879c', 'line-width': 5, 'line-opacity': 0.6 } });
@@ -168,11 +168,11 @@ export default function MapView({ options, selectedId, from, to, reports, object
       const selected = options.find(o => o.id === selectedId);
       if (selected) {
         for (const fact of allFacts(selected)) {
-          const icon = fact.kind === 'bench' ? icons.bench : fact.kind === 'entrance' ? icons.entrance : fact.kind === 'kerb' ? icons.kerb : fact.kind === 'surface' ? icons.surface : icons[fact.direction];
-          const bg = fact.kind === 'bench' ? '#0f766e' : fact.kind === 'entrance' ? '#2443b0' : '#a1460a';
+          const icon = fact.kind === 'toilet' ? icons.toilet : fact.kind === 'bench' ? icons.bench : fact.kind === 'entrance' ? icons.entrance : fact.kind === 'kerb' ? icons.kerb : fact.kind === 'surface' ? icons.surface : icons[fact.direction];
+          const bg = fact.kind === 'toilet' ? '#2443b0' : fact.kind === 'bench' ? '#0f766e' : fact.kind === 'entrance' ? '#2443b0' : '#a1460a';
           const el = markerElement(factTitle(fact, t), icon, bg, fact.kind === 'stairs' ? 34 : 30);
           // Stairs always show; benches and entrances only once zoomed in, to avoid clutter.
-          if (fact.kind !== 'stairs' && fact.kind !== 'kerb') el.classList.add('map-minor');
+          if (fact.kind !== 'stairs' && fact.kind !== 'kerb' && fact.kind !== 'toilet' && !fact.restAfterMinutes) el.classList.add('map-minor');
           el.addEventListener('click', () => latest.current.onFact(fact));
           add(el, fact.lat, fact.lon);
         }

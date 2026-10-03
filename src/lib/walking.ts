@@ -1,8 +1,8 @@
 // Turns graph paths into user-facing walking legs and walking-only journey options.
 import { handrail, type Way } from './data';
 import {
-  bearing, edgeAt, metres, nearest, nodePoint, shortestPath, stairsPassable, type WalkGraph,
-  IMPASSABLE, KERB_RAISED, KERB_ROLLED, KERB_UNKNOWN, NARROW, NODE_NO_WHEELCHAIR, NO_WHEELCHAIR, ROUGH, SETT, STEEP, STEP_BARRIER, VERY_ROUGH,
+  bearing, edgeAt, metres, nearest, nodePoint, onWheels, shortestPath, stairsPassable, type WalkGraph,
+  IMPASSABLE, LONG_FLIGHT_STEPS, KERB_RAISED, KERB_ROLLED, KERB_UNKNOWN, NARROW, NODE_NO_WHEELCHAIR, NO_WHEELCHAIR, ROUGH, SETT, STEEP, STEP_BARRIER, VERY_ROUGH,
 } from './routing';
 import { serverMessages, type ServerMessages } from './i18n/server-messages';
 import type { Locale } from './i18n/locales';
@@ -202,6 +202,21 @@ function surfaceKind(bits: number): BarrierKind | null {
   return null;
 }
 
+/** On crutches only what changes the effort matters: raised kerbs, steps, rough or steep stretches. */
+function crutchNodeKind(bits: number): NodeBarrierKind | null {
+  if (bits & KERB_RAISED) return 'kerbRaised';
+  if (bits & STEP_BARRIER) return 'step';
+  return null;
+}
+
+function crutchSurfaceKind(bits: number): BarrierKind | null {
+  if (!bits) return null;
+  if (bits & IMPASSABLE) return 'impassable';
+  if (bits & (ROUGH | VERY_ROUGH)) return bits & SETT ? 'sett' : 'rough';
+  if (bits & STEEP) return 'steep';
+  return null;
+}
+
 /** Stretches shorter than this are not shown unless they block a wheelchair. */
 const MIN_SURFACE = 10;
 
@@ -271,12 +286,14 @@ export function walkLeg(g: WalkGraph, edges: number[], from: LegPoint, to: LegPo
     }
   }
 
-  // Kerbs, steps and surfaces only matter on wheels; listed once each, in route order.
+  // Kerbs, steps and surfaces matter on wheels and on crutches; listed once each, in route order.
   if (p.mobility !== 'walk') {
+    const nodeKind = p.mobility === 'crutches' ? crutchNodeKind : nodeBarrierKind;
+    const wayKind = p.mobility === 'crutches' ? crutchSurfaceKind : surfaceKind;
     const seenNodes = new Set<number>();
     edges.forEach((e, i) => {
       const node = g.edgeTo[e];
-      const kind = nodeBarrierKind(g.nodeBarrier[node]);
+      const kind = nodeKind(g.nodeBarrier[node]);
       const source = g.barrierNodes.get(node);
       if (!kind || !source || seenNodes.has(node)) return;
       seenNodes.add(node);
@@ -285,10 +302,10 @@ export function walkLeg(g: WalkGraph, edges: number[], from: LegPoint, to: LegPo
     const surfaces = new Map<string, Placed>();
     let i = 0;
     while (i < edges.length) {
-      const kind = g.ways[g.edgeWay[edges[i]]].tags.highway === 'steps' ? null : surfaceKind(g.edgeMobility[edges[i]]);
+      const kind = g.ways[g.edgeWay[edges[i]]].tags.highway === 'steps' ? null : wayKind(g.edgeMobility[edges[i]]);
       let j = i;
       let length = 0;
-      while (j < edges.length && (g.ways[g.edgeWay[edges[j]]].tags.highway === 'steps' ? null : surfaceKind(g.edgeMobility[edges[j]])) === kind) length += g.edgeLength[edges[j++]];
+      while (j < edges.length && (g.ways[g.edgeWay[edges[j]]].tags.highway === 'steps' ? null : wayKind(g.edgeMobility[edges[j]])) === kind) length += g.edgeLength[edges[j++]];
       const blocking = kind === 'impassable' || kind === 'narrow' || kind === 'noWheelchair';
       if (kind && (length >= MIN_SURFACE || blocking)) {
         const way = g.ways[g.edgeWay[edges[i]]];
@@ -343,6 +360,9 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
   let rests = 0;
   let walkingDistance = 0;
   let blockedStairs = 0;
+  let noHandrail = 0;
+  let handrailUnknown = 0;
+  let longStairs = 0;
   const kerbs: Partial<Record<BarrierKind, number>> = {};
   const stretches: Partial<Record<BarrierKind, number>> = {};
   for (const leg of legs) {
@@ -352,6 +372,10 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
       if (fact.kind === 'stairs') {
         stairs[fact.direction]++;
         if (!stairsPassable(fact.tags, p.mobility)) blockedStairs++;
+        const rail = handrail(fact.tags);
+        if (rail === 'no') noHandrail++;
+        else if (rail === 'unknown') handrailUnknown++;
+        if ((stepCount(fact.tags) ?? 0) > LONG_FLIGHT_STEPS) longStairs++;
       }
       if (fact.kind === 'bench') rests++;
       if (fact.kind === 'kerb' && fact.barrier) kerbs[fact.barrier] = (kerbs[fact.barrier] ?? 0) + 1;
@@ -361,7 +385,7 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
   const hard: string[] = [];
   const soft: string[] = [];
   const total = stairs.up + stairs.down + stairs.unknown;
-  if (p.mobility !== 'walk') {
+  if (onWheels(p.mobility)) {
     const wheelchair = p.mobility === 'wheelchair';
     if (blockedStairs) hard.push(m.issues.stairs(blockedStairs));
     if (kerbs.kerbRaised) (wheelchair ? hard : soft).push(m.issues.kerbRaised(kerbs.kerbRaised));
@@ -374,11 +398,25 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
     if ((stretches.rough ?? 0) >= 20) soft.push(m.issues.rough(m.distance(stretches.rough!)));
     if ((stretches.steep ?? 0) >= 10) soft.push(m.issues.steep(m.distance(stretches.steep!)));
     if (kerbs.kerbUnknown) soft.push(m.issues.kerbUnknown(kerbs.kerbUnknown));
-  } else if (p.avoidStairs && total > 0) hard.push(m.issues.stairs(total));
-  else {
-    if (p.avoidUp && stairs.up) hard.push(m.issues.stairsUp);
-    if (p.avoidDown && stairs.down) hard.push(m.issues.stairsDown);
-    if ((p.avoidUp || p.avoidDown) && stairs.unknown) hard.push(m.issues.stairsUnknown);
+  } else {
+    if (p.avoidStairs && total > 0) hard.push(m.issues.stairs(total));
+    else {
+      if (p.avoidUp && stairs.up) hard.push(m.issues.stairsUp);
+      if (p.avoidDown && stairs.down) hard.push(m.issues.stairsDown);
+      if ((p.avoidUp || p.avoidDown) && stairs.unknown) hard.push(m.issues.stairsUnknown);
+    }
+    // On crutches: what makes the stairs and the way harder, listed without changing `fits`.
+    if (p.mobility === 'crutches') {
+      if (noHandrail) soft.push(m.issues.stairsNoHandrail(noHandrail));
+      if (handrailUnknown) soft.push(m.issues.stairsHandrailUnknown(handrailUnknown));
+      if (longStairs) soft.push(m.issues.longStairs(longStairs));
+      if (kerbs.kerbRaised) soft.push(m.issues.kerbRaised(kerbs.kerbRaised));
+      if (kerbs.step) soft.push(m.issues.step(kerbs.step));
+      if (stretches.impassable) soft.push(m.issues.impassable);
+      if ((stretches.sett ?? 0) >= 20) soft.push(m.issues.sett(m.distance(stretches.sett!)));
+      if ((stretches.rough ?? 0) >= 20) soft.push(m.issues.rough(m.distance(stretches.rough!)));
+      if ((stretches.steep ?? 0) >= 10) soft.push(m.issues.steep(m.distance(stretches.steep!)));
+    }
   }
   if (walkingDistance > p.maxDistance) hard.push(m.issues.overLimit(m.distance(p.maxDistance)));
   hard.push(...(extra.hard ?? []));

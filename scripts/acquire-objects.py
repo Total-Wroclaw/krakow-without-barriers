@@ -47,7 +47,7 @@ def classify(t):
  if leisure=='park':return 'park','leisure=park'
  return None
 
-KEEP_EXACT={'wheelchair','toilets:wheelchair','toilets','step_count','elevator','door','width','door:width','automatic_door','hearing_loop','opening_hours','website','contact:website','name:en','name:uk','check_date','fee','access','changing_table','entrance','handrail','capacity:disabled','tactile_paving','level','unisex','centralkey','kerb','surface','smoking','stars'}
+KEEP_EXACT={'wheelchair','toilets:wheelchair','toilets','step_count','elevator','door','width','door:width','automatic_door','hearing_loop','opening_hours','website','contact:website','name:en','name:de','check_date','fee','access','changing_table','entrance','handrail','capacity:disabled','tactile_paving','level','unisex','centralkey','kerb','surface','smoking','stars'}
 KEEP_PREFIX=('wheelchair:','ramp','addr:','check_date:','toilets:wheelchair:','entrance:')
 def keep(t):return {k:v[:600] for k,v in t.items() if k in KEEP_EXACT or k.startswith(KEEP_PREFIX)}
 ENTRANCE_KEYS={'entrance','wheelchair','wheelchair:description','step_count','width','door','door:width','automatic_door','ramp','ramp:wheelchair','kerb','level','access','handrail','check_date','name','ref','description'}

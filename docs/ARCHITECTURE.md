@@ -21,7 +21,7 @@ Kierunek schodów: `incline=up/down` odnosi się do kolejności węzłów drogi 
 Wyszukiwanie: A* z jawnymi kosztami (`edgeCost`):
 - wykluczone schody (`forbidden`) — twarde wykluczenie,
 - schody bez oznaczonej poręczy przy „wolę poręcze”: +5 × długość,
-- odcinek bez ławki w promieniu 25 m przy „odpoczynek”: +0,25 × długość,
+- odcinek bez ławki w promieniu 25 m przy „odpoczynek” lub zaplanowanych przerwach (`restEvery > 0`): +0,25 × długość,
 - oś ulicy zamiast ścieżki pieszej: +0,3 × długość,
 - wariant alternatywny: użyte drogi +3 × długość.
 
@@ -41,7 +41,11 @@ Kursy z GTFS po północy i doba poprzednia/następna są obsługiwane przesuni�
 
 ## Profil poruszania się (`preferences.mobility`)
 
-To sposób poruszania się w danym dniu (`walk`, `wheelchair`, `stroller` — wózek dziecięcy), nie diagnoza. Dla `walk` routing działa dokładnie jak wcześniej. Dla kół (`routing.ts`, bity `edgeMobility` na krawędziach i `nodeBarrier` na węzłach):
+To sposób poruszania się w danym dniu (`walk`, `crutches` — o kulach, `wheelchair`, `stroller` — wózek dziecięcy), nie diagnoza. Dla `walk` routing działa dokładnie jak wcześniej.
+
+**O kulach (`crutches`, `crutchCosts` w `routing.ts`):** schody dozwolone zgodnie z ustawieniami schodów, ale droższe: każde schody +1 × długość, bez oznaczonej poręczy (`handrail*=yes`) +6 × długość + 20 m, długi bieg (`step_count` > 15, bit `LONG_FLIGHT`) +4 × długość + 30 m (do tego ewentualne +5 × z „wolę poręcze”); bruk/żwir (`ROUGH`) +1 ×, nawierzchnia bardzo nierówna +2 ×, nachylenie > 6 % +1 ×, `smoothness=impassable` wykluczone; krawężnik `raised` +15 m, próg +25 m; oś ulicy zamiast ścieżki tylko +0,1 × (krótsza droga ważniejsza niż spokojniejsza). Fakty: krawężniki bez obniżenia, progi i odcinki (bruk, nierówna, stroma, nieprzejezdna). Uwagi (nie zmieniają `fits`): „Schody bez poręczy”, „Schody bez danych o poręczy”, „Długie schody, ponad 15 stopni”, „Krawężnik bez obniżenia”, „Bruk na 120 m”, „Nierówna nawierzchnia na…”, „Strome nachylenie na…”. Komunikacja jak dla `walk` (bez uwag o przystosowaniu kursów).
+
+Dla kół (`routing.ts`, bity `edgeMobility` na krawędziach i `nodeBarrier` na węzłach):
 
 | Cecha OSM | Wózek inwalidzki | Wózek dziecięcy |
 | --- | --- | --- |
@@ -63,11 +67,20 @@ Fakty na kołach (tylko gdy `mobility ≠ walk`): krawężniki/progi jako `kind:
 
 Komunikacja na kołach: dla wózka inwalidzkiego kursy z `wheelchair_accessible=2` są usuwane przed scanem (`usableConnections`), a przystanki z `wheelchair_boarding=2` nie są brane jako dojście; warianty z kursami oznaczonymi `1` są wyżej niż nieznane. Wózek dziecięcy: bez wykluczeń, kursy `2` niżej. Każdy kurs bez informacji dostaje uwagę „Kurs bez informacji o przystosowaniu” (nie zmienia `fits`). **Ograniczenie danych:** w obecnym GTFS ZTP wszystkie 124 239 kursów mają `wheelchair_accessible=0` (brak informacji), a wszystkie 3 751 słupków `wheelchair_boarding=0` — mechanizm działa, ale dziś nic nie wyklucza ani nie różnicuje; uwaga pojawia się przy każdym wariancie.
 
+## Przerwy na ławce i toalety (`journey-extras.ts`)
+
+Po zbudowaniu wszystkich wariantów `planJourney` wywołuje `applyExtras` (tylko gdy włączone).
+
+- **Przerwy (`restEvery` = N min, 0 = wył.):** licznik marszu jest wspólny dla wszystkich odcinków pieszych wariantu (jazda go nie zwiększa), N min = N × 60 m przy 1 m/s. Przy każdym znaczniku szukamy ławki ≤ 60 m od trasy w oknie ±25 % N wzdłuż trasy (próbki co ~20 m); wynik = 0,5 × odchylenie od znacznika + 1,5 × odległość od trasy − 60 za `backrest=yes`. Następny znacznik liczy się od wybranej ławki. Znaczniki w ostatnich 25 % N przed końcem marszu są pomijane. Wybrana ławka jest faktem `kind: 'bench'` z `restAfterMinutes` (minuta marszu) — także gdy przy „odpoczynku” byłaby odfiltrowana; jeśli już jest na liście, dostaje tylko `restAfterMinutes` (bez duplikatu). Tytuł „Ławka z oparciem” lub „Ławka”. Każda przerwa to +2 min do `seconds` odcinka pieszego i do `duration`: przed pierwszym kursem wyjście jest wcześniej (ten sam tramwaj), po ostatnim (i bez kursów) przyjazd później; na przesiadce przerwa tylko w ramach zapasu do odjazdu. `JourneyOption.restStops`, `restMinutes` (= 2 × liczba), `rests` przeliczone. Brak ławki przy znaczniku → uwaga „Brak ławki ok. 10. minuty” (maks. 3, nie zmienia `fits`). Routing przy `restEvery > 0` traktuje ławki jak przy „odpoczynku”.
+- **Toalety (`showToilets`):** z katalogu Odkrywaj (`accessibleToilets()` w `objects.ts`, synchronicznie: pełny katalog z partnerami, jeśli Odkrywaj go już wczytało, inaczej OSM + UMK; ~25 ms za pierwszym razem, potem z pamięci) bierzemy tylko obiekty, którym źródło przypisuje dostępną toaletę: toaleta z `wheelchair=yes|limited` albo dowolny obiekt z `accessible_toilet=yes` (`toilets:wheelchair=yes`, wykaz UMK, partner). Toalety bez informacji nigdy nie są pokazywane jako dostępne; obiekt, dla którego któreś źródło mówi „nie”, jest pomijany. Siatka przestrzenna (komórka ~200 m). Do 3 toalet ≤ 150 m od odcinków pieszych (co najmniej 400 m od siebie wzdłuż trasy) i do 2 ≤ 300 m od celu (na ostatnim odcinku pieszym; gdy wariant kończy się jazdą pod drzwi, tych nie ma). Fakt `kind: 'toilet'`, `id: 'toilet:<objectId>'`, `objectId` = id obiektu Odkrywaj, tytuł „Toaleta dostępna · {nazwa}” / „Toaleta częściowo dostępna · {nazwa}”, `tags.accessible_toilet`, `sourceUrl` i `editedAt` źródła.
+
+Koszt (Dworzec Główny → Rynek, Rynek → Wawel, 4–6 wariantów): +20–40 ms na całe zapytanie.
+
 ## Taksówka i samochód (`transport: 'taxi' | 'car'`)
 
 `acquire-roads.py` (pyosmium, ten sam PBF i obszar) zapisuje drogi przejezdne `motorway`…`living_street` + `service` (bez `area=yes`, `service=emergency_access`). Dostęp wg hierarchii `motorcar` > `motor_vehicle` > `vehicle` > `access`: `yes/designated/permissive` — tak; `destination/customers` — tak, z karą (×4 czasu + 60 s), więc tylko blisko końców; reszta (`no`, `private`, `delivery`, `psv`, `agricultural`…) — wykluczone. Jednokierunkowość: `oneway=yes/-1`, rondo (`junction=roundabout/circular`), autostrada; `oneway=reversible/alternating` pomijane. `roads.ts` buduje graf CSR na tablicach typowanych i wybiera największą silnie spójną składową.
 
-**Model czasu (szacunek, bez ruchu na żywo):** prędkość = `maxspeed` (także `PL:urban` 50, `PL:rural` 90, `PL:zone30`, `PL:living_street` 20) albo domyślna dla klasy (autostrada 120, ekspresowa/trunk 90, główne do lokalnych 50, `unclassified` 40, `residential` 30, `living_street` 15, `service` 15 km/h) × współczynnik miejski 0,65 (≤ 50 km/h), 0,8 (≤ 80), 0,9 (> 80); do tego +15 s na sygnalizacji świetlnej (`highway=traffic_signals`) i +4 s na skrzyżowaniu ≥ 3 ramion. Nie liczymy czekania na taksówkę, szukania miejsca ani opłat — nie podajemy cen (brak cytowalnego oficjalnego cennika taksówek w Krakowie).
+**Model czasu (szacunek, bez ruchu na żywo):** prędkość = `maxspeed` (także `PL:urban` 50, `PL:rural` 90, `PL:zone30`, `PL:living_street` 20) albo domyślna dla klasy (autostrada 120, ekspresowa/trunk 90, główne do lokalnych 50, `unclassified` 40, `residential` 30, `living_street` 15, `service` 15 km/h) × współczynnik miejski 0,65 (≤ 50 km/h), 0,8 (≤ 80), 0,9 (> 80); do tego +15 s na sygnalizacji świetlnej (`highway=traffic_signals`) i +4 s na skrzyżowaniu ≥ 3 ramion. Nie liczymy czekania na taksówkę ani szukania miejsca. Taksówka ma `DriveLeg.fare` — przedział z maksymalnych cen miejskich (strefa I: min taryfa 1, max taryfa 2 + 20 %; źródło i wzór w DATA-SOURCES.md) — oraz `JourneyOption.rideLinks` (Uber z wypełnionym odbiorem i celem, Bolt/FreeNow — oficjalne strony dla Krakowa).
 
 **Krawężnik (miejsce wsiadania/wysiadania):** spośród do 40 węzłów drogowych w promieniu 250 m (bez autostrad i dróg ekspresowych, tylko główna spójna składowa) wybieramy ten z najkrótszym dojściem pieszym z dzisiejszymi preferencjami — najbliższa droga bywa tunelem (np. pod Dworcem Głównym). Odcinek pieszy pojawia się, gdy krawężnik jest > 40 m od punktu.
 
@@ -84,7 +97,7 @@ Warianty samochodowe/taksówki są na początku listy, za nimi jak dotąd piesze
 
 ## Języki odpowiedzi
 
-`POST /api/journey` przyjmuje `locale` (`pl` domyślnie, `en`, `uk`). Wszystkie teksty planera (wskazówki, etykiety, tytuły faktów, `issues`, `errors`, błędy 400/500) pochodzą z `src/lib/i18n/server-messages.ts`; liczby mnogie przez `Intl.PluralRules` (pl: 1 stopień, 2–4 / 22–24 stopnie, 5–21 stopni; uk: 1/21 сходинка, 2–4 сходинки, 5–20 сходинок), dystanse w formacie lokalnym (1,2 km / 1.2 km / 1,2 км). Nazwy ulic, przystanków i miejsc pozostają jak w źródle.
+`POST /api/journey` przyjmuje `locale` (`pl` domyślnie, `en`, `de`). Wszystkie teksty planera (wskazówki, etykiety, tytuły faktów, `issues`, `errors`, błędy 400/500) pochodzą z `src/lib/i18n/server-messages.ts`; liczby mnogie przez `Intl.PluralRules` (pl: 1 stopień, 2–4 / 22–24 stopnie, 5–21 stopni; en i de: one/other — 1 step / 1 Stufe, 2 steps / 2 Stufen), dystanse w formacie lokalnym (1,2 km / 1.2 km / 1,2 km). Nazwy ulic, przystanków i miejsc pozostają jak w źródle.
 
 ## Wyszukiwanie miejsc
 
@@ -105,10 +118,11 @@ Zgłoszenia użytkowników (reports) ──────────────�
 - **Źródła:** OSM `map` (obtainedAt = data ekstraktu, editedAt = edycja elementu, confirmedAt = tylko `check_date`), UMK `city`, partner `partner`, demo `example`, zgłoszenie `unverified`. Zgłoszenia ≤ 30 m (najbliższy obiekt) lub o tym samym ID OSM są tylko listowane jako niezweryfikowane źródła z opisem (`note`), bez zamiany na fakty.
 - **Łączenie:** UMK ↔ OSM po podobnej nazwie ≤ 60 m lub tym samym adresie urzędu ≤ 150 m; partner może dołączyć dane do istniejącego obiektu (`existingObjectId`).
 - **Konflikty:** ten sam klucz z `yes` i `no` od różnych źródeł obiektu → `conflicts[]`, `hasConflict`; oba fakty zostają. Różne wejścia jednego budynku nie są konfliktem. `wheelchair` w podsumowaniu: najlepsze źródło (miasto > OSM obiekt > OSM wejście > partner).
+- **Stronicowanie:** `GET /api/objects?category&q&lat&lon&locale&withData&limit&offset` → `ObjectPage { objects, total, nextOffset }` (`limit` domyślnie 30, maks. 100; `offset` domyślnie 0; `nextOffset: null` na ostatniej stronie). Kolejność jest pełna (remisy rozstrzyga id), więc strony się nie nakładają; nakładka partnerów/zgłoszeń przebudowuje się co 15 s, więc nowy obiekt może przesunąć dalsze strony.
 - **Ranking:** z zapytaniem — trafność nazwy/adresu (bez polskich znaków, prefiksy), potem odległość; bez zapytania — więcej znanych faktów, potem odległość; `withData=1` ukrywa obiekty bez faktów. Promowani partnerzy (plan `partner`) są na górze **tylko w dopasowanym zbiorze** i ≤ 5 km od punktu użytkownika, zawsze oznaczeni `partner.promoted`.
 - **Model biznesowy (prototyp):** właściciele (hotele, organizatorzy, lokale) dodają deklaracje dostępności za darmo; plan `partner` daje wyróżnienie. Dalej: płatności, weryfikacja właściciela, audyt terenowy jako osobny status z datą.
 
-**Nowe źródło:** parser do `{name, address, features[{key,value,detail}]}` z oryginalnym zdaniem, plik w `data/` z URL/obtainedAt/SHA-256, funkcja `attachX` w `buildCatalog` z własnym `SourceStatus` i regułą łączenia; test na zapisanej kopii. **Nowa kategoria:** `ObjectCategory` w `explore-types.ts`, `classify()` w `acquire-objects.py`, etykiety pl/en/uk w `objects.ts`. **Inne miasto:** BBOX i plik PBF w skryptach, kopertę w `pointSchema`/`partnerSubmissionSchema`, lokalny odpowiednik wykazu urzędu.
+**Nowe źródło:** parser do `{name, address, features[{key,value,detail}]}` z oryginalnym zdaniem, plik w `data/` z URL/obtainedAt/SHA-256, funkcja `attachX` w `buildCatalog` z własnym `SourceStatus` i regułą łączenia; test na zapisanej kopii. **Nowa kategoria:** `ObjectCategory` w `explore-types.ts`, `classify()` w `acquire-objects.py`, etykiety pl/en/de w `objects.ts`. **Inne miasto:** BBOX i plik PBF w skryptach, kopertę w `pointSchema`/`partnerSubmissionSchema`, lokalny odpowiednik wykazu urzędu.
 
 ## AI
 
@@ -119,13 +133,53 @@ OpenAI Responses API, `gpt-5.6-luna` (dostęp sprawdzony przez `/v1/models` 3.10
 
 AI nie tworzy ani nie wybiera tras.
 
+## Zgłoszenia i obsługa przez miasto
+
+Dwa rodzaje zgłoszeń (`Report.type`): `barrier` — utrudnienie na trasie (domyślne), `blocked` — „uniemożliwiło mi dotarcie tam, gdzie chciałem/am” (dla miasta najważniejsze; osobny filtr i kafelek w panelu).
+
+**API dla aplikacji (publiczne, kontrola Origin/Host, limit 20 zapytań AI/min):**
+
+| Metoda i ścieżka | Treść | Wynik |
+| --- | --- | --- |
+| `POST /api/reports/auto` | `{ photo?, location, locationSource: 'gps'\|'map'\|'fact', factId?, locale?, type?: 'barrier'\|'blocked', comment? (≤ 800), destination? (≤ 200) }` | 201 `{ report }` |
+| `POST /api/reports/[id]/photos` | `{ photo, locale? }` — kolejne zdjęcie, maks. 4 na zgłoszenie (z pierwszym) | 201 `{ report, photo }`, 409 po limicie, 404 |
+| `GET /api/reports/[id]/photo` | pierwsze zdjęcie (zgodne z `photoPath`) | JPEG |
+| `GET /api/reports/[id]/photos/[photoId]` | dowolne zdjęcie (`main` = pierwsze zapisane ze zgłoszeniem) | JPEG |
+| `PATCH` / `DELETE /api/reports/[id]` | poprawa opisu / usunięcie (razem ze zdjęciami) | |
+| `GET /api/reports` | ostatnie 100 zgłoszeń z `cityStatus` i `cityNote`, bez `cityHistory` | |
+
+Zdjęcie jest wymagane, chyba że `type: 'blocked'` albo jest komentarz (≥ 3 znaki). Bez zdjęcia nie ma AI: obserwacja to `kind: 'other'`, `description` = komentarz (albo „Nie udało się dotrzeć do celu: …”), `analysis: 'comment'`. Każde zdjęcie przechodzi przez `photoBytes()` (dekodowanie, zmniejszenie, bez EXIF/GPS) i jest opisywane przez AI osobno (`photos[].analysis`). Opis zgłoszenia zmienia się tylko, gdy nie pochodził ze zdjęcia (`failed`, `comment`) — wtedy bierze pierwszy opis AI; opis od AI lub poprawiony przez autora zostaje. Komentarz i cel podróży zostają w osobnych polach. ID zgłoszenia (UUID) działa jak klucz autora: kto je zna, może dodać zdjęcie, poprawić lub usunąć — tak jak dotąd.
+
+Magazyn: `reports(id, body JSON, photo BLOB)` — pierwsze zdjęcie jak wcześniej; `report_photos(id, report_id, photo BLOB, created_at, analysis JSON NULL)` — kolejne. Lista `photos: {id, path, createdAt, analysis?}[]` jest w `body`; dodanie zdjęcia sprawdza limit ponownie po analizie AI, synchronicznie tuż przed zapisem.
+
+**Panel miasta `/city`** (po polsku, dla UMK / ZDMK): kafelki (nowe, w trakcie analizy, „uniemożliwiło dotarcie” z ostatnich 7 dni, wszystkie — kliknięcie ustawia filtr), filtry (status, rodzaj, zakres dat w czasie Krakowa, wyszukiwanie po opisie, komentarzu, celu, miejscu), lista od najnowszych (miniatura, rodzaj, status, opis AI/osoby, komentarz, cel podróży, miejsce, współrzędne, linki OpenStreetMap/Google Maps), panel szczegółów (wszystkie zdjęcia z opisem AI każdego, mapa MapLibre, zmiana statusu, publiczna odpowiedź, historia zmian), eksport CSV z bieżącymi filtrami.
+
+| Metoda i ścieżka | Treść |
+| --- | --- |
+| `POST /api/city/login` | `{ password }` → 204 + ciasteczko; 5 nieudanych prób na klienta i 50 łącznie na 15 min, potem 429 |
+| `POST /api/city/logout` | usuwa ciasteczko |
+| `GET /api/city/reports?status=&type=&from=&to=&q=` | `{ reports }` z `cityHistory`, do 5000 najnowszych |
+| `PATCH /api/city/reports/[id]` | `{ status?: 'new'\|'in_review'\|'forwarded'\|'resolved'\|'rejected', note? (≤ 1000, pusta = usuń) }` |
+| `GET /api/city/reports.csv?…` | CSV (UTF-8 z BOM, RFC 4180, przecinek); te same filtry |
+
+Każda zmiana statusu lub odpowiedzi ustawia `cityUpdatedAt` i dopisuje `{ at, status, note }` do `cityHistory` (tylko dopisywanie; zapis bez zmian nie tworzy wpisu). Nowe zgłoszenia mają `cityStatus: 'new'`; starsze bez pola są traktowane jako nowe. CSV zabezpiecza pola zaczynające się od `= + - @` (prefiks `'`), żeby arkusz nie wykonał formuły.
+
+**Dostęp:** jedno hasło służbowe `CITY_DASHBOARD_PASSWORD` (bez niego panel i `/api/city/*` są wyłączone, 503). Logowanie wymienia hasło na ciasteczko `kk_city` = `v1.<wygaśnięcie>.<nonce>.<HMAC-SHA256>`: HttpOnly, SameSite=Strict, Secure w produkcji, ważne 12 h. Klucz HMAC: `CITY_DASHBOARD_SECRET` albo skrót hasła (zmiana hasła wylogowuje wszystkich). Hasło i podpis porównywane w stałym czasie. Strona `/city` sprawdza ciasteczko po stronie serwera (`await cookies()`), każda trasa `/api/city/*` — w nagłówku żądania; zapisy dodatkowo przez kontrolę Origin/Host. Prototyp nie ma kont ani ról — w docelowej wersji logowanie przez katalog urzędu (SSO), autor zmiany w historii.
+
+**Ochrona danych — co jest przechowywane i kto widzi:**
+
+- Przechowujemy: miejsce (współrzędne, nazwa, źródło lokalizacji), zdjęcia po usunięciu metadanych (do 1400 px), opisy AI, komentarz, cel podróży, daty, status i odpowiedź miasta z historią. **Nie** przechowujemy: kont, e-maili, telefonów, IP (limity działają w pamięci procesu), oryginalnych plików ani EXIF/GPS ze zdjęć.
+- Komentarz i cel podróży są wolnym tekstem i mogą zawierać dane osobowe (np. „jadę do onkologa”) — dlatego formularz powinien to mówić, a panel ostrzega urzędników przed wpisywaniem danych osobowych w publicznej odpowiedzi.
+- Widzi publicznie (`GET /api/reports`, mapa): opis, zdjęcia, komentarz, cel, miejsce, status i odpowiedź miasta. Tylko panel miasta: historia zmian, pełna lista do 5000, CSV. Zdjęcia trafiają do OpenAI do opisu (`store: false`).
+- Propozycja retencji: zgłoszenia `resolved`/`rejected` — anonimizacja po 12 miesiącach od ostatniej zmiany (usunięcie zdjęć, komentarza i celu; zostaje rodzaj, miejsce, daty i status do statystyk); `new` bez reakcji — przegląd po 24 miesiącach; eksporty CSV podlegają zasadom przechowywania dokumentów urzędu. Nie jest jeszcze zautomatyzowane.
+
 ## Interfejs
 
 Next.js 16 (App Router), React 19, shadcn/ui (Radix) + Tailwind 4. MapLibre GL 6 z kafelkami OpenFreeMap; worker serwowany z `public/maplibre` (kopiowany skryptem `copy-maplibre-worker.mjs`). Telefon: mapa u góry i lista pod nią; podczas wpisywania mapa się chowa, a podpowiedzi są pod polem (popover nad klawiaturą iOS był nieczytelny). Desktop: panel 440 px + mapa. Panele: dolna szuflada (vaul) na telefonie, boczny arkusz na desktopie.
 
 ## Trwałość, bezpieczeństwo, prywatność
 
-SQLite WAL, zapytania parametryzowane; zgłoszenie i zdjęcie w jednym rekordzie. Klucz API tylko w pamięci serwera. Walidacja Zod każdego żądania, zdjęcia JPEG/PNG/WebP faktycznie dekodowane, limity wielkości, kontrola Origin/Host przy zapisie, prosty limit zapytań AI w pamięci procesu. Preferencje i ostatnie miejsca są tylko w localStorage. GPS: lokalizacja zgłoszenia lub punkt startu, bez śladu.
+SQLite WAL, zapytania parametryzowane; zgłoszenie i pierwsze zdjęcie w jednym rekordzie, kolejne zdjęcia w `report_photos`. Panel miasta za hasłem i podpisanym ciasteczkiem (wyżej). Klucz API tylko w pamięci serwera. Walidacja Zod każdego żądania, zdjęcia JPEG/PNG/WebP faktycznie dekodowane, limity wielkości, kontrola Origin/Host przy zapisie, prosty limit zapytań AI w pamięci procesu. Preferencje i ostatnie miejsca są tylko w localStorage. GPS: lokalizacja zgłoszenia lub punkt startu, bez śladu.
 
 ## Dalej
 

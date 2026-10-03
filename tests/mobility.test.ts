@@ -143,7 +143,7 @@ const streets = dataset(
   ],
 );
 
-function streetLeg(locale: 'pl' | 'en' | 'uk') {
+function streetLeg(locale: 'pl' | 'en' | 'de') {
   const g = buildGraph(streets);
   const path = shortestPath(g, idx(g, 'a'), idx(g, 'e'), free)!;
   return walkLeg(g, path, { name: 'Start', lat: 50, lon: 19.9 }, { name: 'Muzeum', lat: 50.0011, lon: 19.902 }, free, { departure: null, destination: true, locale });
@@ -163,23 +163,27 @@ test('walking instructions and facts follow the requested locale; names stay as 
   assert.equal(en.steps.at(-1)!.instruction, 'Destination: Muzeum');
   for (const s of en.steps) assert.doesNotMatch(s.instruction.replace(/Floriańska|Szpitalna/, ''), polish);
 
-  const uk = streetLeg('uk');
-  assert.equal(uk.steps[0].instruction, 'Ідіть: Floriańska');
-  assert.equal(uk.steps[1].instruction, 'Поверніть праворуч: Szpitalna');
-  assert.equal(uk.steps[2].instruction, 'Сходи вниз · 22 сходинки · поручень: немає даних');
-  assert.equal(uk.steps.at(-1)!.instruction, 'Місце призначення: Muzeum');
-  for (const s of uk.steps) assert.doesNotMatch(s.instruction.replace(/Floriańska|Szpitalna/, ''), polish);
+  const de = streetLeg('de');
+  assert.equal(de.steps[0].instruction, 'Gehen Sie: Floriańska');
+  assert.equal(de.steps[1].instruction, 'Rechts abbiegen: Szpitalna');
+  assert.equal(de.steps[2].instruction, 'Treppe abwärts · 22 Stufen · Handlauf: keine Angaben');
+  assert.equal(de.steps.at(-1)!.instruction, 'Ziel: Muzeum');
+  assert.equal(de.facts[0].title, 'Treppe abwärts · 22 Stufen');
+  for (const s of de.steps) assert.doesNotMatch(s.instruction.replace(/Floriańska|Szpitalna/, ''), polish);
 });
 
 test('plural forms and number formats per locale', () => {
-  const stairs = (locale: 'pl' | 'en' | 'uk', n: number) => serverMessages(locale).facts.stairs('up', n);
+  const stairs = (locale: 'pl' | 'en' | 'de', n: number) => serverMessages(locale).facts.stairs('up', n);
   assert.deepEqual([1, 2, 5, 12, 22, 25, 101].map(n => stairs('pl', n).split(' · ')[1]), ['1 stopień', '2 stopnie', '5 stopni', '12 stopni', '22 stopnie', '25 stopni', '101 stopni']);
-  assert.deepEqual([1, 3, 5, 11, 21, 24, 111].map(n => stairs('uk', n).split(' · ')[1]), ['1 сходинка', '3 сходинки', '5 сходинок', '11 сходинок', '21 сходинка', '24 сходинки', '111 сходинок']);
+  assert.deepEqual([1, 2, 5, 21, 101].map(n => stairs('de', n).split(' · ')[1]), ['1 Stufe', '2 Stufen', '5 Stufen', '21 Stufen', '101 Stufen']);
   assert.deepEqual([1, 2].map(n => stairs('en', n).split(' · ')[1]), ['1 step', '2 steps']);
   assert.equal(formatDistance(1234, 'pl'), '1,2 km');
   assert.equal(formatDistance(1234, 'en'), '1.2 km');
-  assert.equal(formatDistance(1234, 'uk'), '1,2 км');
-  assert.equal(formatDistance(80, 'uk'), '80 м');
+  assert.equal(formatDistance(1234, 'de'), '1,2 km');
+  assert.equal(formatDistance(80, 'de'), '80 m');
+  assert.equal(serverMessages('de').issues.noBench(10), 'Keine Sitzbank um Minute 10');
+  assert.equal(serverMessages('pl').issues.noBench(10), 'Brak ławki ok. 10. minuty');
+  assert.equal(serverMessages('de').facts.toilet('Rynek', false), 'Barrierefreie Toilette · Rynek');
   assert.equal(serverMessages('xx').labels.preferred, 'Dopasowana do dzisiaj', 'unknown locale falls back to Polish');
 });
 
@@ -188,7 +192,7 @@ test('journey request defaults to transit in Polish; off-network errors are loca
   const parsed = journeyRequestSchema.parse({ from: at, to: at, preferences: defaultPreferences, date: '2026-10-03', time: '14:00' });
   assert.equal(parsed.transport, 'transit');
   assert.equal(parsed.locale, 'pl');
-  assert.equal(journeyRequestSchema.safeParse({ ...parsed, locale: 'de' }).success, false);
+  assert.equal(journeyRequestSchema.safeParse({ ...parsed, locale: 'uk' }).success, false);
   assert.equal(journeyRequestSchema.safeParse({ ...parsed, transport: 'bike' }).success, false);
 
   const g = buildGraph(streets);

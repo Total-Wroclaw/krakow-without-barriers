@@ -27,7 +27,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (isLocale(saved)) setLocaleState(saved);
-    else if (navigator.language.startsWith('uk')) setLocaleState('uk');
+    else if (navigator.language.startsWith('de')) setLocaleState('de');
     else if (!navigator.language.startsWith('pl') && navigator.language) setLocaleState('en');
   }, []);
 
@@ -56,12 +56,11 @@ export function useI18n() {
   return ctx;
 }
 
-/** Plural form index for Polish/Ukrainian (one, few, many) and English (one, other). */
+/** Plural form index for Polish (one, few, many) and English/German (one, other). */
 export function pluralIndex(locale: Locale, n: number): 0 | 1 | 2 {
-  if (locale === 'en') return n === 1 ? 0 : 2;
+  if (locale !== 'pl') return n === 1 ? 0 : 2;
   if (n === 1) return 0;
   const tens = n % 100;
   const units = n % 10;
-  if (locale === 'uk' && units === 1 && tens !== 11) return 0;
   return units >= 2 && units <= 4 && (tens < 12 || tens > 14) ? 1 : 2;
 }

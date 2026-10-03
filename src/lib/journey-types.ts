@@ -54,7 +54,12 @@ export type DriveLeg = {
   departure: number | null;
   /** Where the car is left (car mode only). */
   parking?: ParkingInfo;
+  /** Taxi only: approximate fare from the official Kraków maximum taxi tariff. */
+  fare?: { min: number; max: number; currency: 'PLN'; basis: string; sourceUrl: string };
 };
+
+/** Deep links that open a ride-hailing app with pickup/destination prefilled where supported. */
+export type RideLink = { provider: 'uber' | 'bolt' | 'freenow'; url: string };
 
 export type ParkingInfo = {
   id: string;
@@ -105,6 +110,12 @@ export type JourneyOption = {
    * while `fits` is still true.
    */
   issues: string[];
+  /** Taxi options: links that open ride-hailing apps (Uber prefilled; others open the official Kraków page). */
+  rideLinks?: RideLink[];
+  /** Planned rest stops (benches with `restAfterMinutes`) when preferences.restEvery > 0. */
+  restStops?: number;
+  /** Minutes added to the duration for the planned rests (2 per stop). */
+  restMinutes?: number;
 };
 
 export type JourneyResult = {

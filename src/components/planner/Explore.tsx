@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, CircleHelp, Minus, Search, Star, Store, TriangleAlert, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import type { AccessFeature, FeatureValue, ObjectCategory, PlaceObjectSummary } from '@/lib/explore-types';
+import type { AccessFeature, FeatureValue, ObjectCategory, ObjectPage, PlaceObjectSummary } from '@/lib/explore-types';
 import { distance } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
@@ -73,25 +73,37 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
   const [category, setCategory] = useState<ObjectCategory | 'all'>('museum');
   const [query, setQuery] = useState('');
   const [withData, setWithData] = useState(true);
-  const [state, setState] = useState<{ loading: boolean; error: string; objects: PlaceObjectSummary[] }>({ loading: true, error: '', objects: [] });
+  type State = { loading: boolean; more: boolean; error: string; objects: PlaceObjectSummary[]; total: number; next: number | null };
+  const [state, setState] = useState<State>({ loading: true, more: false, error: '', objects: [], total: 0, next: null });
+  const sentinel = useRef<HTMLDivElement>(null);
+  const origin = useRef(center);
 
+  const params = useCallback(
+    (offset: number) => {
+      const p = new URLSearchParams({ locale, lat: String(origin.current.lat), lon: String(origin.current.lon), limit: '30', offset: String(offset) });
+      if (category !== 'all') p.set('category', category);
+      if (query.trim().length >= 2) p.set('q', query.trim());
+      if (withData) p.set('withData', '1');
+      return p;
+    },
+    [category, query, locale, withData],
+  );
+
+  // First page whenever the search changes. The centre is read at that moment; panning alone does not refetch.
   useEffect(() => {
+    origin.current = center;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setState(s => ({ ...s, loading: true, error: '' }));
       try {
-        const params = new URLSearchParams({ locale, lat: String(center.lat), lon: String(center.lon), limit: '40' });
-        if (category !== 'all') params.set('category', category);
-        if (query.trim().length >= 2) params.set('q', query.trim());
-        if (withData) params.set('withData', '1');
-        const res = await fetch(`/api/objects?${params}`, { signal: controller.signal });
-        const data = await res.json();
+        const res = await fetch(`/api/objects?${params(0)}`, { signal: controller.signal });
+        const data = (await res.json()) as ObjectPage & { error?: string };
         if (!res.ok) throw new Error(data.error);
-        setState({ loading: false, error: '', objects: data.objects });
+        setState({ loading: false, more: false, error: '', objects: data.objects, total: data.total ?? data.objects.length, next: data.nextOffset ?? null });
         onResults(data.objects);
       } catch {
         if (!controller.signal.aborted) {
-          setState({ loading: false, error: t('explore.failed'), objects: [] });
+          setState({ loading: false, more: false, error: t('explore.failed'), objects: [], total: 0, next: null });
           onResults([]);
         }
       }
@@ -100,9 +112,35 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
       clearTimeout(timer);
       controller.abort();
     };
-    // The centre is read when the query changes; panning alone does not refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, query, locale, withData]);
+  }, [params]);
+
+  const loadMore = useCallback(async () => {
+    if (state.loading || state.more || state.next === null) return;
+    setState(s => ({ ...s, more: true }));
+    try {
+      const res = await fetch(`/api/objects?${params(state.next)}`);
+      const data = (await res.json()) as ObjectPage;
+      if (!res.ok) throw new Error();
+      setState(s => {
+        const seen = new Set(s.objects.map(o => o.id));
+        const objects = [...s.objects, ...data.objects.filter(o => !seen.has(o.id))];
+        onResults(objects);
+        return { ...s, more: false, objects, total: data.total ?? s.total, next: data.nextOffset ?? null };
+      });
+    } catch {
+      setState(s => ({ ...s, more: false, next: null }));
+    }
+  }, [state.loading, state.more, state.next, params, onResults]);
+
+  // Infinite scroll: load the next page when the end of the list comes into view.
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver(entries => entries[0]?.isIntersecting && loadMore(), { rootMargin: '400px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore]);
 
   return (
     <div className="flex flex-col gap-4 px-4 pb-10">
@@ -143,9 +181,9 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
 
       <section aria-labelledby="explore-results" aria-busy={state.loading} className="flex flex-col gap-3">
         <h2 id="explore-results" className="px-1 text-lg font-bold">
-          {state.loading ? t('explore.loading') : tp('explore.count', state.objects.length)}
+          {state.loading ? t('explore.loading') : tp('explore.count', state.total)}
         </h2>
-        <p className="sr-only" role="status">{state.loading ? t('explore.loading') : tp('explore.count', state.objects.length)}</p>
+        <p className="sr-only" role="status">{state.loading ? t('explore.loading') : state.more ? t('explore.loadingMore') : tp('explore.count', state.total)}</p>
         {state.loading && !state.objects.length ? (
           [0, 1, 2].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)
         ) : state.error ? (
@@ -197,6 +235,15 @@ export function Explore({ center, selectedId, onResults, onSelect, onOwner }: Pr
             ))}
           </ul>
         )}
+        <div ref={sentinel} aria-hidden="true" />
+        {state.more ? (
+          <p className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+            <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+            {t('explore.loadingMore')}
+          </p>
+        ) : !state.loading && state.objects.length && state.next === null ? (
+          <p className="px-1 text-sm text-muted-foreground">{t('explore.end')}</p>
+        ) : null}
       </section>
       <Button variant="secondary" className="h-11 self-start" onClick={onOwner}>
         <Store />

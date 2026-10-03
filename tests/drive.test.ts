@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { buildGraph, metres } from '../src/lib/routing';
 import { buildRoadGraph, fastestDrive, ROAD_CLASSES, urbanFactor } from '../src/lib/roads';
 import { driveOptions } from '../src/lib/drive';
+import { taxiFare } from '../src/lib/taxi';
 import { planJourney } from '../src/lib/journey';
 import { defaultPreferences, type Preferences } from '../src/lib/schemas';
 import type { Dataset, OsmNode, Way } from '../src/lib/data';
@@ -100,6 +101,15 @@ test('taxi: walk to the kerb when it is meaningfully far, then a door-to-door dr
   assert.equal(taxi.walkingDistance, walk.distance);
   assert.equal(taxi.transfers, 0);
   assertChained(taxi, 36000);
+  // Fare from the Kraków maximum tariff for the driven distance; Uber prefilled with the kerb and the destination.
+  assert.deepEqual(drive.fare, taxiFare(drive.distance, 'pl'));
+  assert.equal(drive.fare!.currency, 'PLN');
+  assert.ok(drive.fare!.min >= 9 && drive.fare!.min < drive.fare!.max);
+  assert.deepEqual(taxi.rideLinks!.map(l => l.provider), ['uber', 'bolt', 'freenow']);
+  const uber = new URL(taxi.rideLinks![0].url);
+  assert.equal(uber.origin + uber.pathname, 'https://m.uber.com/looking');
+  assert.equal(JSON.parse(uber.searchParams.get('pickup')!).latitude, Math.round(drive.from.lat * 1e6) / 1e6);
+  assert.equal(JSON.parse(uber.searchParams.get('drop[0]')!).addressLine1, 'Róg');
   // Wheelchair: still fits, with a note to book an accessible vehicle.
   const [accessible] = driveOptions(f.walk, f.roads, place('Dom', f.house), place('Róg', f.corner), { ...free, mobility: 'wheelchair' }, 0, 'taxi', 'en');
   assert.equal(accessible.label, 'Taxi');
@@ -116,8 +126,8 @@ test('car without any car park nearby: clearly labelled kerbside drop-off that d
   assert.deepEqual(car.legs.map(l => l.type), ['drive', 'walk']);
   assert.equal(car.fits, false);
   assert.deepEqual(car.issues, ['Brak parkingu w promieniu 600 m']);
-  const [wheel] = driveOptions(f.walk, f.roads, place('Róg', f.corner), place('Dom', f.house), { ...free, mobility: 'wheelchair' }, 0, 'car', 'uk');
-  assert.deepEqual(wheel.issues, ['Немає парковки з місцями для людей з інвалідністю в радіусі 600 м']);
+  const [wheel] = driveOptions(f.walk, f.roads, place('Róg', f.corner), place('Dom', f.house), { ...free, mobility: 'wheelchair' }, 0, 'car', 'de');
+  assert.deepEqual(wheel.issues, ['Kein Parkplatz mit Behindertenstellplätzen im Umkreis von 600 m']);
   assertChained(car, 0);
 });
 

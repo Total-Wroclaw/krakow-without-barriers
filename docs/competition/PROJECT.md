@@ -8,7 +8,7 @@ Każdy Krok dobiera trasę i pokazuje miejsca według dzisiejszych preferencji d
 
 ## Działający prototyp
 
-Responsywna aplikacja webowa (PWA) po polsku, angielsku i ukraińsku.
+Responsywna aplikacja webowa (PWA) po polsku, angielsku i niemiecku.
 
 - **Trasa:** wyszukiwanie adresów, miejsc i przystanków jak w Jakdojade; warianty pieszo, tramwajem/autobusem ZTP z przesiadkami, taksówką lub samochodem z parkingiem (na wózku tylko parkingi z miejscami dla osób z niepełnosprawnościami). Każdy wariant ma pasek z barierami w miejscu, w którym wystąpią; mapa (standardowa lub satelitarna) i równoważna lista kroków.
 - **Odkrywaj:** muzea, zabytki, kultura, urzędy, toalety, noclegi, zdrowie, parki z konkretnymi faktami (wejście bez stopni, podjazd, winda, schodołaz, szerokość drzwi, toaleta, język migowy), każdy ze źródłem, datą i statusem.

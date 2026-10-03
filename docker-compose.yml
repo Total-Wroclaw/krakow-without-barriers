@@ -1,0 +1,17 @@
+# Dokploy deployment: one web service, persistent volume for reports, photos and tile caches.
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
+      CITY_DASHBOARD_PASSWORD: ${CITY_DASHBOARD_PASSWORD:-}
+      CITY_DASHBOARD_SECRET: ${CITY_DASHBOARD_SECRET:-}
+    volumes:
+      - krok-data:/data
+    expose:
+      - "3000"
+
+volumes:
+  krok-data:

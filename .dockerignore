@@ -1,0 +1,11 @@
+node_modules
+.next
+.runtime
+artifacts
+.git
+.env*
+!.env.example
+docs/competition
+public/maplibre
+*.tsbuildinfo
+.DS_Store

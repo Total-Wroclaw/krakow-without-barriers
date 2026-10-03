@@ -56,6 +56,9 @@ export const RAMP_WHEELCHAIR = 64;
 /** Steps with some ramp or rails (`ramp=yes`): usable with a pushchair, not proven for a wheelchair. */
 export const RAMP_ANY = 128;
 export const SETT = 256;
+/** Stairs with more than LONG_FLIGHT_STEPS steps (`step_count`): tiring on crutches. */
+export const LONG_FLIGHT = 512;
+export const LONG_FLIGHT_STEPS = 15;
 
 /** Per-node barriers met when passing through the node. */
 export const KERB_RAISED = 1;
@@ -108,6 +111,8 @@ export function wayMobility(tags: Record<string, string>) {
   }
   if (tags.wheelchair === 'no') bits |= NO_WHEELCHAIR;
   if (tags.highway === 'steps') {
+    const steps = Number(tags.step_count);
+    if (Number.isFinite(steps) && steps > LONG_FLIGHT_STEPS) bits |= LONG_FLIGHT;
     if (tags['ramp:wheelchair'] === 'yes') bits |= RAMP_WHEELCHAIR;
     if (tags.ramp === 'yes' || tags['ramp:wheelchair'] === 'yes') bits |= RAMP_ANY;
   }
@@ -125,9 +130,14 @@ export function nodeBarrier(tags: Record<string, string>) {
   return bits;
 }
 
-/** Stairs a person can use with today's mobility (wheels need an integrated ramp). */
+/** Wheelchair or pushchair: kerbs, surfaces and ramps decide the route. */
+export function onWheels(mobility: Mobility | undefined): mobility is 'wheelchair' | 'stroller' {
+  return mobility === 'wheelchair' || mobility === 'stroller';
+}
+
+/** Stairs a person can use with today's mobility (wheels need an integrated ramp; on foot or crutches any stairs). */
 export function stairsPassable(tags: Record<string, string>, mobility: Mobility) {
-  if (mobility === 'walk') return true;
+  if (!onWheels(mobility)) return true;
   const bits = wayMobility(tags);
   return mobility === 'wheelchair' ? (bits & RAMP_WHEELCHAIR) !== 0 : (bits & RAMP_ANY) !== 0;
 }
@@ -420,7 +430,7 @@ function forbiddenFlags(flags: number, p: Preferences, mobility = 0) {
 /** Stairs that today's preferences exclude. Unknown direction never satisfies a directional exclusion. */
 export function forbidden(edge: Edge, p: Preferences) {
   if (edge.way.tags.highway !== 'steps') return false;
-  if (p.mobility !== 'walk' && !stairsPassable(edge.way.tags, p.mobility)) return true;
+  if (!stairsPassable(edge.way.tags, p.mobility)) return true;
   if (p.mobility === 'wheelchair') return false;
   return p.avoidStairs || (p.avoidDown && edge.direction !== 'up') || (p.avoidUp && edge.direction !== 'down');
 }
@@ -460,6 +470,38 @@ function wheelCost(g: WalkGraph, e: number, mobility: 'wheelchair' | 'stroller',
   return factor * length + fixed;
 }
 
+/**
+ * Walking on crutches: stairs are allowed (subject to the stair preferences) but cost much more
+ * without a known handrail and on long flights; rough surfaces and raised kerbs cost a little;
+ * detours along footpaths are worth less than for walking (shorter is better).
+ */
+export const crutchCosts = { stairs: 1, noHandrail: 6, noHandrailFixed: 20, longFlight: 4, longFlightFixed: 30, rough: 1, veryRough: 2, steep: 1, kerbRaised: 15, step: 25, street: 0.1 } as const;
+
+function crutchCost(g: WalkGraph, e: number, flags: number, length: number) {
+  const c = crutchCosts;
+  const bits = g.edgeMobility[e];
+  let cost = 0;
+  if (flags & STEPS) {
+    cost += c.stairs * length;
+    if (!(flags & HANDRAIL)) cost += c.noHandrail * length + c.noHandrailFixed;
+    if (bits & LONG_FLIGHT) cost += c.longFlight * length + c.longFlightFixed;
+  } else if (bits) {
+    if (bits & IMPASSABLE) return Infinity;
+    if (bits & VERY_ROUGH) cost += c.veryRough * length;
+    else if (bits & ROUGH) cost += c.rough * length;
+    if (bits & STEEP) cost += c.steep * length;
+  }
+  const node = g.nodeBarrier[g.edgeTo[e]];
+  if (node & KERB_RAISED) cost += c.kerbRaised;
+  if (node & STEP_BARRIER) cost += c.step;
+  return cost;
+}
+
+/** Benches matter for routing when resting is preferred or rest stops are planned. */
+export function wantsRest(p: Preferences) {
+  return p.preferRest || (p.restEvery ?? 0) > 0;
+}
+
 /** Routing cost of an edge, Infinity when excluded. Cost is never below its length. */
 export function edgeCost(g: WalkGraph, e: number, p: Preferences | null, penalise?: Uint8Array) {
   const length = g.edgeLength[e];
@@ -467,12 +509,15 @@ export function edgeCost(g: WalkGraph, e: number, p: Preferences | null, penalis
   if (p) {
     const flags = g.edgeFlags[e];
     if (forbiddenFlags(flags, p, g.edgeMobility[e])) return Infinity;
-    if (p.mobility !== 'walk') {
+    if (onWheels(p.mobility)) {
       cost += wheelCost(g, e, p.mobility, length);
       if (cost === Infinity) return Infinity;
+    } else if (p.mobility === 'crutches') {
+      cost += crutchCost(g, e, flags, length);
+      if (cost === Infinity) return Infinity;
     }
-    if (!(flags & PEDESTRIAN)) cost += length * 0.3;
-    if (p.preferRest && !(flags & BENCH)) cost += length * 0.25;
+    if (!(flags & PEDESTRIAN)) cost += length * (p.mobility === 'crutches' ? crutchCosts.street : 0.3);
+    if (wantsRest(p) && !(flags & BENCH)) cost += length * 0.25;
     if (p.preferHandrails && flags & STEPS && !(flags & HANDRAIL)) cost += length * 5;
   }
   if (penalise && penalise[g.edgeWay[e]]) cost += length * 3;

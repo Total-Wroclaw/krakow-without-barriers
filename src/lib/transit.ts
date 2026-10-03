@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { runtimeDir } from './server';
-import { metres, nearest, PointGrid, reach, shortestPath, type Reach, type WalkGraph } from './routing';
+import { metres, nearest, onWheels, PointGrid, reach, shortestPath, wantsRest, type Reach, type WalkGraph } from './routing';
 import { activeServices, connectionTable, scan, usableConnections, type ConnectionTable, type Footpaths, type ScanJourney } from './transit-scan';
 import { makeOption, snap, straightWalk, walkBetween, walkLeg, WALK_SPEED } from './walking';
 import { serverMessages } from './i18n/server-messages';
@@ -47,7 +47,8 @@ let transit: TransitData | undefined;
 
 function transitData(): TransitData {
   if (transit) return transit;
-  const file = path.join(runtimeDir, 'transit.sqlite');
+  // KROK_TRANSIT_DB lets a container bake the timetable into the image while reports live on a volume.
+  const file = process.env.KROK_TRANSIT_DB ?? path.join(runtimeDir, 'transit.sqlite');
   if (!existsSync(file)) throw new TransitUnavailableError('Brak lokalnego rozkładu ZTP.');
   const db = new DatabaseSync(file, { readOnly: true });
   const stops = db.prepare('SELECT id, name, code, lat, lon, wheelchair FROM stops').all() as Stop[];
@@ -158,7 +159,7 @@ function timetableWindow(data: TransitData, date: string, start: number, end: nu
 const transferCache = new Map<string, number>();
 
 function preferenceKey(p: Preferences) {
-  return [p.avoidStairs, p.avoidDown, p.avoidUp, p.preferHandrails, p.preferRest].map(Number).join('') + p.mobility;
+  return [p.avoidStairs, p.avoidDown, p.avoidUp, p.preferHandrails, wantsRest(p)].map(Number).join('') + p.mobility;
 }
 
 /**
@@ -380,7 +381,7 @@ function buildOption(data: TransitData, g: WalkGraph, c: Candidate, from: CityPl
   // GTFS accessibility, only where it matters today. Unknown is listed but does not make the option unfit.
   const hard: string[] = [];
   const soft: string[] = [];
-  if (p.mobility !== 'walk') {
+  if (onWheels(p.mobility)) {
     if (rides.some(r => r.wheelchair === '2')) soft.push(m.issues.tripNotAccessible);
     else if (rides.some(r => r.wheelchair !== '1')) soft.push(m.issues.tripUnknown);
     if (rides.some(r => r.from.wheelchair === '2' || r.to.wheelchair === '2')) (p.mobility === 'wheelchair' ? hard : soft).push(m.issues.stopNotAccessible);
@@ -439,7 +440,7 @@ export function transitOptions(g: WalkGraph, from: CityPlace, to: CityPlace, p: 
   }
 
   // On wheels, trips known to be accessible rank above unknown ones (and, for a pushchair, above trips marked not accessible).
-  const rank = (c: Candidate) => (p.mobility === 'walk' ? 0 : accessRank(c));
+  const rank = (c: Candidate) => (onWheels(p.mobility) ? accessRank(c) : 0);
   const chosen = nonDominated(candidates)
     .sort((a, b) => rank(a) - rank(b) || a.journey.leave - b.journey.leave || a.journey.arrival - b.journey.arrival)
     .slice(0, MAX_OPTIONS);

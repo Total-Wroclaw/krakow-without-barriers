@@ -1,10 +1,11 @@
+import { publicReport } from '@/lib/reports-server';
 import { boundedJson, guard, listReports, saveReport } from '@/lib/server';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    return Response.json({ reports: listReports() }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ reports: listReports().map(publicReport) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return Response.json({ error: 'Nie udało się odczytać zgłoszeń. Spróbuj ponownie.' }, { status: 500 });
   }

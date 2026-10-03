@@ -25,6 +25,7 @@ export function useReportTitle() {
   return useCallback(
     (r: Report) => {
       const o = r.observation;
+      if (r.type === 'blocked') return t('report.blockedTitle');
       if (o.kind === 'stairs' && o.handrail !== 'unknown') return t(o.handrail === 'yes' ? 'kind.stairsRail' : 'kind.stairsNoRail');
       return t(kindKeys[o.kind]);
     },
@@ -32,7 +33,7 @@ export function useReportTitle() {
   );
 }
 
-async function shrink(file: File) {
+export async function shrink(file: File) {
   const bitmap = await createImageBitmap(file);
   const ratio = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
@@ -43,7 +44,7 @@ async function shrink(file: File) {
   return canvas.toDataURL('image/jpeg', 0.82);
 }
 
-function gpsPoint(): Promise<{ lat: number; lon: number } | null> {
+export function gpsPoint(): Promise<{ lat: number; lon: number } | null> {
   if (!navigator.geolocation) return Promise.resolve(null);
   return new Promise(resolve =>
     navigator.geolocation.getCurrentPosition(
@@ -54,7 +55,7 @@ function gpsPoint(): Promise<{ lat: number; lon: number } | null> {
   );
 }
 
-const inKrakow = (p: { lat: number; lon: number }) => p.lat >= 49.94 && p.lat <= 50.2 && p.lon >= 19.75 && p.lon <= 20.25;
+export const inKrakow = (p: { lat: number; lon: number }) => p.lat >= 49.94 && p.lat <= 50.2 && p.lon >= 19.75 && p.lon <= 20.25;
 
 export type CaptureTarget = { place: CityPlace; source: 'map' | 'fact'; factId?: string };
 
@@ -280,6 +281,29 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
           </div>
         )}
 
+        {report.photos && report.photos.length > 1 ? (
+          <div className="flex flex-wrap gap-2">
+            {report.photos.slice(1).map(p => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={p.id} src={p.path} alt={t('report.photoAlt', { description: p.analysis?.description ?? draft.description })} className="size-24 rounded-lg bg-muted object-cover" />
+            ))}
+          </div>
+        ) : null}
+        {report.comment ? <p className="rounded-lg bg-muted/70 p-3 text-sm">{report.comment}</p> : null}
+        {(report.photos?.length ?? (report.photoPath ? 1 : 0)) < 4 ? (
+          <AddPhoto reportId={report.id} onAdded={onChange} />
+        ) : null}
+        {report.cityStatus ? (
+          <StatusRow tone="city" label={t('report.cityStatus', { status: t(`city.${report.cityStatus}`) })}>
+            {report.cityNote ? (
+              <>
+                <span className="font-medium text-foreground">{t('report.cityReply')}: </span>
+                {report.cityNote}
+              </>
+            ) : null}
+          </StatusRow>
+        ) : null}
+
         <StatusRow tone="report" label={t('report.status')}>
           {t('report.addedOn', { date: formatDate(report.obtainedAt, locale) })}
           {report.analysis === 'ai' ? ` ${t('report.byAi')}` : report.analysis === 'edited' ? ` ${t('report.byAuthor')}` : ''}
@@ -291,6 +315,39 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
         </Button>
       </div>
     </Panel>
+  );
+}
+
+function AddPhoto({ reportId, onAdded }: { reportId: string; onAdded: (r: Report) => void }) {
+  const { t, locale } = useI18n();
+  const [busy, setBusy] = useState(false);
+  return (
+    <label className="inline-flex h-11 cursor-pointer items-center gap-2 self-start rounded-md border bg-card px-4 text-sm font-medium hover:bg-accent focus-within:ring-2 focus-within:ring-ring">
+      {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />}
+      {t('report.morePhotos')}
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        disabled={busy}
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          setBusy(true);
+          try {
+            const data = await postJson(`/api/reports/${reportId}/photos`, { photo: await shrink(file), locale }, 60000);
+            onAdded(data.report as Report);
+            toast.success(t('report.photoAdded'));
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : t('report.failed'));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </label>
   );
 }
 

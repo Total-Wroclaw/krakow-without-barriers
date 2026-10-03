@@ -97,4 +97,8 @@ export type ObjectQuery = {
   locale?: Locale;
   /** Only objects with at least one known (yes/limited/no) feature. */
   withData?: boolean;
+  /** Paging for infinite scroll. */
+  offset?: number;
 };
+
+export type ObjectPage = { objects: PlaceObjectSummary[]; total: number; nextOffset: number | null };

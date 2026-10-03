@@ -13,7 +13,7 @@ export function apiKey(){
 export const runtimeDir=process.env.KROK_STORAGE_DIR??path.join(process.cwd(),'.runtime');
 let database:DatabaseSync|undefined;
 export function db(){
- if(!database){mkdirSync(runtimeDir,{recursive:true,mode:0o700});database=new DatabaseSync(path.join(runtimeDir,'reports.sqlite'));database.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, body TEXT NOT NULL, photo BLOB);');}
+ if(!database){mkdirSync(runtimeDir,{recursive:true,mode:0o700});database=new DatabaseSync(path.join(runtimeDir,'reports.sqlite'));database.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, body TEXT NOT NULL, photo BLOB); CREATE TABLE IF NOT EXISTS report_photos (id TEXT PRIMARY KEY, report_id TEXT NOT NULL, photo BLOB NOT NULL, created_at TEXT NOT NULL, analysis TEXT); CREATE INDEX IF NOT EXISTS report_photos_report ON report_photos(report_id);');}
  return database;
 }
 export function listReports():Report[]{return (db().prepare('SELECT body FROM reports ORDER BY rowid DESC LIMIT 100').all() as {body:string}[]).map(r=>JSON.parse(r.body));}
@@ -32,7 +32,7 @@ export async function saveReport(input:unknown):Promise<Report>{
  const parsed=reportInputSchema.parse(input);
  if(!validLocation(parsed.locationId,parsed.location))throw new Error('Wybierz punkt na mapie Krakowa.');
  const photo=parsed.photo?await photoBytes(parsed.photo):null;
- const id=randomUUID();const report:Report={id,observation:parsed.observation,locationId:parsed.locationId,photoPath:photo?`/api/reports/${id}/photo`:null,obtainedAt:new Date().toISOString(),confirmedAt:null,status:'unverified',source:'user',...(parsed.location?{location:parsed.location}:{})};
+ const id=randomUUID();const report:Report={id,observation:parsed.observation,locationId:parsed.locationId,photoPath:photo?`/api/reports/${id}/photo`:null,obtainedAt:new Date().toISOString(),confirmedAt:null,status:'unverified',source:'user',cityStatus:'new',...(parsed.location?{location:parsed.location}:{})};
  db().prepare('INSERT INTO reports (id,body,photo) VALUES (?,?,?)').run(id,JSON.stringify(report),photo);
  return report;
 }

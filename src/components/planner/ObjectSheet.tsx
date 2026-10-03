@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { Camera, ExternalLink, LoaderCircle, Navigation, Store, TriangleAlert } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Camera, ExternalLink, LoaderCircle, Navigation, Store, TriangleAlert, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { FeatureKey, ObjectSource, PlaceObject, SourceStatus } from '@/lib/explore-types';
 import { formatDate } from '@/lib/format';
@@ -10,6 +10,7 @@ import { AerialSection } from './AerialSection';
 import { PartnerBadges, featureStyle } from './Explore';
 import { StatusRow } from './FactSheet';
 import { Panel } from './Panel';
+import { useMediaQuery } from '@/hooks/use-media-query';
 
 /** Facts people most often need; shown as "no data" when no source mentions them. */
 const coreKeys: FeatureKey[] = ['step_free_entrance', 'ramp', 'lift', 'door_width', 'accessible_toilet'];
@@ -46,7 +47,7 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
   const missing = coreKeys.filter(k => !known.has(k));
 
   return (
-    <Panel open onOpenChange={open => !open && onClose()} title={o?.name ?? t('explore.loading')} description={o ? [o.categoryLabel, o.address].filter(Boolean).join(', ') : undefined}>
+    <PlaceFrame title={o?.name ?? t('explore.loading')} description={o ? [o.categoryLabel, o.address].filter(Boolean).join(', ') : undefined} onClose={onClose}>
       {state.loading ? (
         <p className="flex items-center gap-2 py-6 text-muted-foreground" role="status">
           <LoaderCircle className="size-5 animate-spin" aria-hidden />
@@ -154,7 +155,50 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
           </Button>
         </div>
       )}
-    </Panel>
+    </PlaceFrame>
+  );
+}
+
+/**
+ * Desktop: a non-modal floating card over the right side of the map, so the list and map stay usable.
+ * Phones: the usual bottom drawer.
+ */
+function PlaceFrame({ title, description, onClose, children }: { title: string; description?: string; onClose: () => void; children: ReactNode }) {
+  const { t } = useI18n();
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!wide) return;
+    heading.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [wide, onClose]);
+
+  if (!wide) {
+    return (
+      <Panel open onOpenChange={open => !open && onClose()} title={title} description={description}>
+        {children}
+      </Panel>
+    );
+  }
+  return (
+    <section
+      aria-labelledby="place-card-title"
+      className="fixed bottom-10 right-16 top-4 z-30 flex w-[min(420px,calc(100vw-520px))] flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl shadow-ink/20 animate-in fade-in slide-in-from-right-4"
+    >
+      <header className="flex items-start justify-between gap-3 border-b px-5 pb-3 pt-4">
+        <div className="min-w-0">
+          <h2 id="place-card-title" ref={heading} tabIndex={-1} className="text-xl font-bold leading-tight outline-none">{title}</h2>
+          {description ? <p className="mt-0.5 text-sm text-muted-foreground">{description}</p> : null}
+        </div>
+        <button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-muted" aria-label={t('explore.close')}>
+          <X className="size-5" />
+        </button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">{children}</div>
+    </section>
   );
 }
 

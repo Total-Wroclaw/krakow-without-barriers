@@ -24,6 +24,7 @@ import { OptionCard } from './OptionCard';
 import { PartnerForm } from './PartnerForm';
 import { PlaceInput } from './PlaceInput';
 import { PreferencesBar, PreferencesPanel } from './Preferences';
+import { ReportChooser } from './ReportChooser';
 import { ReportFab, ReportPanel, useReportCapture, type CaptureTarget } from './Reports';
 import { TimeChooser, type When } from './TimeChooser';
 import { TransportPicker } from './TransportPicker';
@@ -87,6 +88,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const [objectId, setObjectId] = useState<string | null>(null);
   const [partner, setPartner] = useState<{ open: boolean; existing: PlaceObject | null }>({ open: false, existing: null });
   const [hydrated, setHydrated] = useState(false);
+  const [chooser, setChooser] = useState(false);
   const [retry, setRetry] = useState(0);
   const [searching, setSearching] = useState<Record<string, boolean>>({});
   const searchActive = Object.values(searching).some(Boolean);
@@ -171,6 +173,22 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const onOpen = useCallback((report: Report, editing: boolean) => setOpenReport({ report, editing }), []);
   const { capture, busy } = useReportCapture({ fallback, onSaved, onOpen });
 
+  // What "selected place" means for a report: an open barrier, an open place card, or the trip destination.
+  const reportTarget = useMemo((): CaptureTarget | null => {
+    if (fact) return { place: { id: `point:${fact.lat}:${fact.lon}`, name: fact.title, lat: fact.lat, lon: fact.lon, source: fact.sourceUrl }, source: 'fact', factId: fact.id };
+    const o = objectId ? objects.find(x => x.id === objectId) : undefined;
+    if (o) return { place: { id: `point:${o.lat}:${o.lon}`, name: o.name, lat: o.lat, lon: o.lon, source: 'object' }, source: 'fact', factId: o.id };
+    if (to) return { place: { ...to, id: `point:${to.lat}:${to.lon}` }, source: 'fact' };
+    return null;
+  }, [fact, objectId, objects, to]);
+  const mapPoint = useCallback((): CaptureTarget => {
+    const c = mapCenter.current;
+    return { place: { id: `point:${c.lat}:${c.lon}`, name: t('report.mapPoint'), lat: c.lat, lon: c.lon, source: 'map' }, source: 'map' };
+  }, [t]);
+
+  // Toilets come from the Explore index; open their place card instead of a map fact.
+  const openFact = useCallback((f: CityFact) => (f.kind === 'toilet' && f.objectId ? setObjectId(f.objectId) : setFact(f)), []);
+
   function choose(id: string) {
     setSelectedId(id);
     setDetail(true);
@@ -223,14 +241,14 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           objects={exploring ? objects : []}
           selectedObjectId={objectId}
           onSelect={choose}
-          onFact={setFact}
+          onFact={openFact}
           onReport={r => setOpenReport({ report: r, editing: false })}
           onObject={setObjectId}
           onMove={c => (mapCenter.current = c)}
         />
         {!embed ? (
           <div className="absolute left-3 top-3 z-10 lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))] lg:left-4 lg:top-auto">
-            <ReportFab busy={busy} onClick={() => capture()} />
+            <ReportFab busy={busy} onClick={() => setChooser(true)} />
           </div>
         ) : null}
       </div>
@@ -373,6 +391,19 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
               </div>
               <h1 className="sr-only">{t('results.detailH1')}</h1>
               <OptionCard option={selected} selected onSelect={() => setMobileView(v => (v === 'map' ? 'list' : 'map'))} />
+              {selected.rideLinks?.length ? (
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('taxi.open')}>
+                  <span className="text-sm text-muted-foreground">{t('taxi.open')}:</span>
+                  {selected.rideLinks.map(link => (
+                    <Button key={link.provider} variant="outline" className="h-11" asChild>
+                      <a href={link.url} target="_blank" rel="noreferrer">
+                        {({ uber: 'Uber', bolt: 'Bolt', freenow: 'FREENOW' } as const)[link.provider]}
+                        <span className="sr-only"> {t('fact.newTab')}</span>
+                      </a>
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
               {!embed ? (
                 <Button variant="outline" className="h-11 self-start" onClick={share}>
                   <Share2 />
@@ -380,7 +411,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                 </Button>
               ) : null}
               <h2 className="px-1 text-lg font-bold">{t('results.steps')}</h2>
-              <JourneyDetail option={selected} reports={routeReports} onFact={setFact} onReport={r => setOpenReport({ report: r, editing: false })} />
+              <JourneyDetail option={selected} reports={routeReports} onFact={openFact} onReport={r => setOpenReport({ report: r, editing: false })} />
             </div>
           ) : null}
           </TabsContent>
@@ -406,6 +437,15 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           setObjectId(null);
           setPartner({ open: true, existing: o });
         }}
+      />
+      <ReportChooser
+        open={chooser}
+        onOpenChange={setChooser}
+        onPhoto={() => capture(fact || objectId ? (reportTarget ?? undefined) : undefined)}
+        selected={reportTarget}
+        mapPoint={mapPoint}
+        destination={to?.name}
+        onSaved={onSaved}
       />
       <PartnerForm open={partner.open} existing={partner.existing} onClose={() => setPartner({ open: false, existing: null })} />
       {openReport ? (

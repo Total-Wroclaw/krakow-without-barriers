@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Accessibility, Armchair, ArrowDown, ArrowUp, Grid3x3, OctagonAlert, CarFront, CarTaxiFront, ChevronDown, CircleDot, DoorOpen, ExternalLink, Footprints, MapPin, MessageSquareWarning, SquareParking } from 'lucide-react';
+import { Accessibility, Armchair, ArrowDown, ArrowUp, Grid3x3, OctagonAlert, Toilet, CarFront, CarTaxiFront, ChevronDown, CircleDot, DoorOpen, ExternalLink, Footprints, MapPin, MessageSquareWarning, SquareParking } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { CityFact } from '@/lib/city-types';
 import type { JourneyOption, Leg, WalkLeg } from '@/lib/journey-types';
@@ -77,14 +77,14 @@ export function JourneyDetail({ option, reports, onFact, onReport }: Props) {
 
 function FactChip({ fact, onFact }: { fact: CityFact; onFact: (f: CityFact) => void }) {
   const { t } = useI18n();
-  const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'entrance' ? DoorOpen : fact.kind === 'kerb' ? OctagonAlert : fact.kind === 'surface' ? Grid3x3 : fact.direction === 'up' ? ArrowUp : fact.direction === 'down' ? ArrowDown : CircleDot;
+  const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Toilet : fact.kind === 'entrance' ? DoorOpen : fact.kind === 'kerb' ? OctagonAlert : fact.kind === 'surface' ? Grid3x3 : fact.direction === 'up' ? ArrowUp : fact.direction === 'down' ? ArrowDown : CircleDot;
   return (
     <button
       type="button"
       onClick={() => onFact(fact)}
       className={cn(
         'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm font-medium',
-        fact.kind === 'stairs' || fact.kind === 'kerb' || fact.kind === 'surface' ? 'bg-barrier-soft text-barrier' : fact.kind === 'bench' ? 'bg-rest-soft text-rest' : 'bg-accent text-accent-foreground',
+        fact.kind === 'stairs' || fact.kind === 'kerb' || fact.kind === 'surface' ? 'bg-barrier-soft text-barrier' : fact.kind === 'bench' ? (fact.restAfterMinutes ? 'bg-rest text-white' : 'bg-rest-soft text-rest') : 'bg-accent text-accent-foreground',
       )}
     >
       <Icon className="size-4 shrink-0" aria-hidden />
@@ -162,6 +162,19 @@ function DrivePart({ leg }: { leg: Extract<Leg, { type: 'drive' }> }) {
         {t('leg.drive', { mode: t(leg.mode === 'taxi' ? 'option.taxi' : 'option.car'), distance: distance(leg.distance, locale), duration: duration(leg.seconds, locale) })}
       </p>
       <p className="text-sm text-muted-foreground">{t('leg.driveEstimate')}</p>
+      {leg.fare ? (
+        <p className="text-sm">
+          <span className="font-semibold">{t('taxi.fare', { min: Math.round(leg.fare.min), max: Math.round(leg.fare.max) })}</span>
+          <span className="text-muted-foreground">
+            {' '}({leg.fare.basis},{' '}
+            <a href={leg.fare.sourceUrl} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
+              {t('explore.sources').toLocaleLowerCase()}
+              <span className="sr-only"> {t('fact.newTab')}</span>
+            </a>
+            )
+          </span>
+        </p>
+      ) : null}
       {p ? (
         <div className="flex items-start gap-3 rounded-lg border bg-card px-3 py-2.5 text-sm">
           <SquareParking className="mt-0.5 size-5 shrink-0 text-drive" aria-hidden />

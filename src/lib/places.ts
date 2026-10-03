@@ -61,7 +61,7 @@ function metres(a: Point, b: Point) {
 const cellKey = (lat: number, lon: number) => Math.floor(lat / CELL) * 100000 + Math.floor(lon / CELL);
 
 function loadStops(): { name: string; lat: number; lon: number; modes: string }[] {
-  const file = path.join(process.env.KROK_STORAGE_DIR ?? path.join(/* turbopackIgnore: true */ process.cwd(), '.runtime'), 'transit.sqlite');
+  const file = process.env.KROK_TRANSIT_DB ?? path.join(process.env.KROK_STORAGE_DIR ?? path.join(/* turbopackIgnore: true */ process.cwd(), '.runtime'), 'transit.sqlite');
   if (!existsSync(file)) return [];
   let db: DatabaseSync | undefined;
   try {

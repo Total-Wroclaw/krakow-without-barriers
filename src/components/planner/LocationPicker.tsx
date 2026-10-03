@@ -44,12 +44,7 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
       const c = instance.getCenter();
       const point = { lat: +c.lat.toFixed(6), lon: +c.lng.toFixed(6) };
       if (!inKrakow(point)) return;
-      let name = t('report.mapPoint');
-      try {
-        const res = await fetch(`/api/places?reverse=1&lat=${point.lat}&lon=${point.lon}&locale=${locale}`);
-        const data = await res.json();
-        if (res.ok && data.place?.name) name = data.place.name;
-      } catch {}
+      const name = (await reverseName(point, locale)) ?? t('report.mapPoint');
       setLabel(name);
       latest.current({ id: `point:${point.lat}:${point.lon}`, name, lat: point.lat, lon: point.lon, source: 'map' });
     });
@@ -107,15 +102,20 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
   );
 }
 
+/** The nearest address or named place for a point, or null when there is none (or the request fails). */
+export async function reverseName(point: { lat: number; lon: number }, locale: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/places?reverse=1&lat=${point.lat}&lon=${point.lon}&locale=${locale}`);
+    const data = await res.json();
+    if (res.ok && typeof data.place?.name === 'string' && data.place.name) return data.place.name;
+  } catch {}
+  return null;
+}
+
 /** GPS preset, resolved to the nearest address. */
 export async function gpsPlace(fallbackName: string, locale: string): Promise<CityPlace | null> {
   const gps = await gpsPoint();
   if (!gps || !inKrakow(gps)) return null;
-  let name = fallbackName;
-  try {
-    const res = await fetch(`/api/places?reverse=1&lat=${gps.lat}&lon=${gps.lon}&locale=${locale}`);
-    const data = await res.json();
-    if (res.ok && data.place?.name) name = data.place.name;
-  } catch {}
+  const name = (await reverseName(gps, locale)) ?? fallbackName;
   return { id: `point:${gps.lat}:${gps.lon}`, name, lat: gps.lat, lon: gps.lon, source: 'GPS' };
 }

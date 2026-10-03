@@ -258,6 +258,19 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
     } catch {}
   }
 
+  /** "Set as start / destination" from a tap on the map: the same as choosing a search suggestion. */
+  const pickOnMap = useCallback(
+    (role: 'from' | 'to', place: CityPlace) => {
+      if (role === 'from') setFrom(place);
+      else setTo(place);
+      // New ends mean new options; show them in the list rather than a route that is about to change.
+      if (detail) closeDetail();
+    },
+    // closeDetail only reads history and setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [detail],
+  );
+
   function routeTo(o: PlaceObject) {
     setTo({ id: o.id, name: o.name, lat: o.lat, lon: o.lon, source: 'object' });
     setObjectId(null);
@@ -468,6 +481,8 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
         <MapView
           options={exploring ? [] : options}
           selectedId={exploring ? null : selectedId}
+          detail={!exploring && detail}
+          focus={fact}
           from={exploring ? null : from}
           to={exploring ? null : to}
           reports={exploring ? [] : routeReports}
@@ -478,6 +493,8 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           onReport={r => setOpenReport({ report: r, editing: false })}
           onObject={setObjectId}
           onMove={c => (mapCenter.current = c)}
+          onPick={exploring ? undefined : pickOnMap}
+          pickRoles={embed ? ['from'] : undefined}
         />
         {!embed ? (
           <div className="absolute left-3 top-3 z-10 lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))] lg:left-4 lg:top-auto">

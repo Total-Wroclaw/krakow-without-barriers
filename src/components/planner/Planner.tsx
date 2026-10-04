@@ -365,11 +365,11 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
               <h1 className="sr-only">{embed ? t('embed.title') : t('home.h1')}</h1>
               <section className="rounded-2xl border bg-card p-1.5 shadow-sm" aria-label={t('search.region')}>
                 <div className="relative">
-                  <div className="pr-12">
+                  <div className={searchActive ? undefined : 'pr-12'}>
                     <PlaceInput label={t('search.from')} placeholder={embed ? t('embed.from') : t('search.fromPlaceholder')} value={from} onChange={setFrom} marker="start" near={to} onError={m => toast.error(m)} onActiveChange={onFromActive} />
                   </div>
                   <div className="ml-12 mr-14 border-t" />
-                  <div className="pr-12">
+                  <div className={searchActive ? undefined : 'pr-12'}>
                     {embed ? (
                       <p className="flex min-h-12 items-center gap-3 px-3">
                         <span aria-hidden className="size-3 shrink-0 rounded-full border-[3px] border-primary bg-primary" />

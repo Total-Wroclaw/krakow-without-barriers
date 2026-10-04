@@ -13,7 +13,9 @@ const modes: { value: TransportMode; icon: typeof TramFront; key: 'transport.wal
 
 export function TransportPicker({ value, onChange }: { value: TransportMode; onChange: (m: TransportMode) => void }) {
   const { t } = useI18n();
-  // Layout follows the picker's own width (the desktop panel is narrow), not the screen width.
+  // Layout follows the picker's own width (the desktop panel is narrow), not the screen width:
+  // a 2×2 grid of icon + label on the narrowest phones, one row of icon-over-label columns sized to
+  // their labels from 18rem, and icon beside label once there is plenty of room.
   return (
     <div className="@container">
     <ToggleGroup
@@ -21,16 +23,16 @@ export function TransportPicker({ value, onChange }: { value: TransportMode; onC
       value={value}
       onValueChange={v => v && onChange(v as TransportMode)}
       aria-label={t('transport.label')}
-      className="grid w-full grid-cols-4 gap-1"
+      className="grid w-full grid-cols-2 gap-1 @[18rem]:grid-cols-[repeat(4,auto)]"
     >
       {modes.map(({ value: mode, icon: Icon, key }) => (
         <ToggleGroupItem
           key={mode}
           value={mode}
-          className="h-auto min-h-12 min-w-0 flex-col gap-0.5 rounded-lg! px-1 py-1.5 text-xs leading-tight data-[state=on]:bg-accent data-[state=on]:text-accent-foreground @xl:flex-row @xl:gap-1.5 @xl:text-sm"
+          className="h-auto min-h-11 min-w-0 gap-1.5 rounded-lg! px-1.5 py-1.5 text-sm leading-tight whitespace-normal data-[state=on]:bg-accent data-[state=on]:text-accent-foreground @[18rem]:min-h-12 @[18rem]:flex-col @[18rem]:gap-0.5 @[18rem]:text-xs @xl:flex-row @xl:gap-1.5 @xl:text-sm"
         >
           <Icon aria-hidden />
-          <span className="max-w-full text-center break-words">{t(key)}</span>
+          <span className="min-w-0 text-center break-words">{t(key)}</span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

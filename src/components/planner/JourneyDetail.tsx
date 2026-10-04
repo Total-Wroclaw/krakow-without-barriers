@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
-import { Accessibility, Armchair, ArrowDown, ArrowRightLeft, ArrowUp, Grid3x3, OctagonAlert, Toilet, CarFront, CarTaxiFront, ChevronDown, CircleDot, CornerUpLeft, CornerUpRight, DoorOpen, ExternalLink, Footprints, MapPin, MessageSquareWarning, SquareParking, TrendingDown, TrendingUp, Undo2, type LucideIcon } from 'lucide-react';
+import { useState, type ComponentType } from 'react';
+import { Accessibility, Armchair, ArrowRightLeft, ArrowUp, Grid3x3, OctagonAlert, Toilet, CarFront, CarTaxiFront, ChevronDown, CornerUpLeft, CornerUpRight, DoorOpen, ExternalLink, Footprints, MapPin, MessageSquareWarning, SquareParking, Undo2 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { CityFact } from '@/lib/city-types';
 import type { JourneyOption, Leg, Maneuver, WalkLeg } from '@/lib/journey-types';
@@ -9,6 +9,7 @@ import { clock, distance, duration } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import { factTitle } from '@/lib/journey-ui';
 import { cn } from '@/lib/utils';
+import { Stairs, StairsDown, StairsUp, stairsIcon } from './icons';
 import { LineBadge } from './OptionCard';
 import { useReportTitle } from './Reports';
 
@@ -108,7 +109,7 @@ function groupFacts(facts: CityFact[], title: (f: CityFact) => string) {
 
 function FactChip({ fact, onFact, count = 1 }: { fact: CityFact; onFact: (f: CityFact) => void; count?: number }) {
   const { t, tp } = useI18n();
-  const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Toilet : fact.kind === 'entrance' ? DoorOpen : fact.kind === 'kerb' ? OctagonAlert : fact.kind === 'surface' ? Grid3x3 : fact.direction === 'up' ? ArrowUp : fact.direction === 'down' ? ArrowDown : CircleDot;
+  const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Toilet : fact.kind === 'entrance' ? DoorOpen : fact.kind === 'kerb' ? OctagonAlert : fact.kind === 'surface' ? Grid3x3 : stairsIcon(fact.direction);
   return (
     <button
       type="button"
@@ -183,9 +184,9 @@ function WalkPart({ leg, next, onFact, last }: { leg: WalkLeg; next?: Leg; onFac
   );
 }
 
-const maneuverIcons: Record<Maneuver, LucideIcon> = {
+const maneuverIcons: Record<Maneuver, ComponentType<{ className?: string }>> = {
   go: ArrowUp, straight: ArrowUp, right: CornerUpRight, left: CornerUpLeft, back: Undo2,
-  cross: ArrowRightLeft, stairsUp: TrendingUp, stairsDown: TrendingDown, stairs: Footprints, arrive: MapPin,
+  cross: ArrowRightLeft, stairsUp: StairsUp, stairsDown: StairsDown, stairs: Stairs, arrive: MapPin,
 };
 
 function ManeuverIcon({ maneuver }: { maneuver?: Maneuver }) {

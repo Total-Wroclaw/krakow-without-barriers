@@ -151,7 +151,8 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
   ) : null;
 
   const field = (
-    <div className="flex min-h-12 items-center gap-3 rounded-lg px-3 focus-within:bg-accent/60 focus-within:ring-2 focus-within:ring-ring">
+    // Narrow phones get tighter gaps so the typed text keeps most of the row.
+    <div className="flex min-h-12 items-center gap-2 rounded-lg px-2.5 focus-within:bg-accent/60 focus-within:ring-2 focus-within:ring-ring min-[400px]:gap-3 min-[400px]:px-3">
       <span
         aria-hidden="true"
         className={cn(
@@ -159,7 +160,8 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
           marker === 'start' ? 'border-ink bg-white' : 'border-primary bg-primary',
         )}
       />
-      <span aria-hidden="true" onClick={() => inputRef.current?.focus()} className="w-12 shrink-0 text-sm text-muted-foreground">
+      {/* At least as wide as "Dokąd" so the two rows line up; longer translations widen it instead of being cut. */}
+      <span aria-hidden="true" onClick={() => inputRef.current?.focus()} className="min-w-12 shrink-0 text-sm whitespace-nowrap text-muted-foreground">
         {label}
       </span>
       <CommandPrimitive.Input
@@ -188,7 +190,7 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
         enterKeyHint="search"
         className="h-12 min-w-0 flex-1 bg-transparent text-base font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground focus-visible:outline-none"
       />
-      {loading ? <LoaderCircle aria-hidden className="size-4 animate-spin text-muted-foreground" /> : null}
+      {loading ? <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin text-muted-foreground" /> : null}
       {query ? (
         <button
           type="button"
@@ -197,7 +199,7 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
             onChange(null);
             inputRef.current?.focus();
           }}
-          className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted"
+          className="-mr-1 grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted"
           aria-label={t('search.clear', { label })}
         >
           <X className="size-4" />

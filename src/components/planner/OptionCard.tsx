@@ -1,10 +1,11 @@
 'use client';
-import { Accessibility, Armchair, ArrowDown, ArrowUp, BusFront, Check, CarFront, CarTaxiFront, ChevronRight, CircleAlert, Footprints, Info, OctagonAlert, TramFront } from 'lucide-react';
+import { Accessibility, Armchair, BusFront, Check, CarFront, CarTaxiFront, ChevronRight, CircleAlert, Footprints, Info, OctagonAlert, TramFront } from 'lucide-react';
 import type { JourneyOption, Leg } from '@/lib/journey-types';
 import { clock, distance, duration } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import { strip } from '@/lib/journey-ui';
 import { cn } from '@/lib/utils';
+import { stairsIcon } from './icons';
 
 type RideLeg = Extract<Leg, { type: 'ride' }>;
 type DriveLeg = Extract<Leg, { type: 'drive' }>;
@@ -27,11 +28,11 @@ export function LineBadge({ leg, className }: { leg: RideLeg; className?: string
   );
 }
 
-export function DriveBadge({ leg }: { leg: DriveLeg }) {
+export function DriveBadge({ leg, className }: { leg: DriveLeg; className?: string }) {
   const { t, locale } = useI18n();
   const Icon = leg.mode === 'taxi' ? CarTaxiFront : CarFront;
   return (
-    <span className="inline-flex h-7 items-center gap-1 rounded-md bg-drive px-1.5 text-sm font-bold text-white tabular-nums">
+    <span className={cn('inline-flex h-7 items-center gap-1 rounded-md bg-drive px-1.5 text-sm font-bold text-white tabular-nums', className)}>
       <Icon className="size-4" aria-hidden />
       <span className="sr-only">{t(leg.mode === 'taxi' ? 'option.taxi' : 'option.car')}</span>
       {duration(leg.seconds, locale)}
@@ -43,8 +44,8 @@ export function DriveBadge({ leg }: { leg: DriveLeg }) {
 export function BarrierStrip({ option }: { option: JourneyOption }) {
   const { segments, marks } = strip(option);
   return (
-    <div className="relative mt-1 h-7" aria-hidden="true">
-      <div className="absolute inset-x-0 top-4 h-2 overflow-hidden rounded-full bg-muted">
+    <div className="relative h-5" aria-hidden="true">
+      <div className="absolute inset-x-0 top-1.5 h-2 overflow-hidden rounded-full bg-muted">
         {segments.map((s, i) => (
           <span
             key={i}
@@ -63,7 +64,7 @@ export function BarrierStrip({ option }: { option: JourneyOption }) {
         ))}
       </div>
       {marks.slice(0, 8).map(({ fact, at }) => {
-        const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Armchair : fact.kind === 'kerb' ? OctagonAlert : fact.direction === 'up' ? ArrowUp : ArrowDown;
+        const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Armchair : fact.kind === 'kerb' ? OctagonAlert : stairsIcon(fact.direction);
         return (
           <span
             key={fact.id}
@@ -73,7 +74,7 @@ export function BarrierStrip({ option }: { option: JourneyOption }) {
             )}
             style={{ left: `clamp(10px, ${at * 100}%, calc(100% - 10px))` }}
           >
-            <Icon className="size-3" strokeWidth={3} />
+            <Icon className="size-3.5" strokeWidth={fact.kind === 'stairs' ? 2.5 : 3} />
           </span>
         );
       })}
@@ -95,16 +96,20 @@ export function useStairsText() {
 /**
  * A route option. The card itself opens details (`onOpen`); the separate "Wybierz" button (`onPick`)
  * only makes it the active route on the map. The two are siblings, never a button inside a button.
+ * Kept compact so a phone shows two or three options at a glance; the details view has the full story.
  */
 export function OptionCard({ option, selected, onOpen, onPick }: { option: JourneyOption; selected: boolean; onOpen: () => void; onPick?: () => void }) {
   const { t, tp, locale } = useI18n();
   const stairsText = useStairsText();
   const vehicles = option.legs.filter((l): l is RideLeg | DriveLeg => l.type !== 'walk');
   const stairsTotal = option.stairs.up + option.stairs.down + option.stairs.unknown;
+  const StairsIcon = stairsIcon(option.stairs.unknown || (option.stairs.up && option.stairs.down) ? 'unknown' : option.stairs.up ? 'up' : 'down');
   const firstWalk = option.legs[0]?.type === 'walk' ? option.legs[0] : null;
   const parking = option.legs.find((l): l is DriveLeg => l.type === 'drive' && !!l.parking)?.parking;
   const fare = option.legs.find((l): l is DriveLeg => l.type === 'drive' && !!l.fare)?.fare;
   const title = option.kind === 'walk' ? t('option.walkOnly') : option.kind === 'taxi' ? t('option.taxi') : option.kind === 'car' ? t('option.car') : null;
+  const notFit = !option.fits && option.issues.length > 0;
+  const issues = option.issues.join(', ');
   return (
     <div
       className={cn(
@@ -117,27 +122,27 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
       onClick={onOpen}
       aria-current={selected ? 'true' : undefined}
       aria-describedby={`${option.id}-hint`}
-      className="flex w-full flex-col gap-2 p-4 text-left"
+      className="flex w-full flex-col gap-1 px-3 pt-2 pb-2 text-left"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <p className="min-w-0 leading-5">
           {option.departure !== null && option.arrival !== null ? (
-            <p className="text-lg font-bold tabular-nums">
+            <span className="mr-2 text-base/5 font-bold whitespace-nowrap tabular-nums">
               {clock(option.departure)}
-              <span className="px-1 font-normal text-muted-foreground">–</span>
+              <span className="px-0.5 font-normal text-muted-foreground">–</span>
               {clock(option.arrival)}
-            </p>
+            </span>
           ) : (
-            <p className="text-lg font-bold">{title}</p>
+            <span className="mr-2 text-base/5 font-bold">{title}</span>
           )}
-          <p className="text-sm text-muted-foreground">{option.label}</p>
-        </div>
-        <p className="shrink-0 text-right">
-          <span className="block text-xl font-bold tabular-nums">{duration(option.departure !== null && option.arrival !== null ? option.arrival - option.departure : option.duration, locale)}</span>
+          <span className="text-[0.8125rem] text-muted-foreground">{option.label}</span>
         </p>
+        <span className="shrink-0 text-base/5 font-bold whitespace-nowrap tabular-nums">
+          {duration(option.departure !== null && option.arrival !== null ? option.arrival - option.departure : option.duration, locale)}
+        </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+      <div className="flex flex-wrap items-center gap-1 text-sm">
         {option.kind === 'walk' ? (
           <span className="inline-flex items-center gap-1 font-medium">
             <Footprints className="size-4" aria-hidden />
@@ -153,9 +158,9 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
               </span>
             ) : null}
             {vehicles.map((leg, i) => (
-              <span key={i} className="inline-flex items-center gap-1.5">
+              <span key={i} className="inline-flex items-center gap-1">
                 {i > 0 || (firstWalk && firstWalk.seconds > 30) ? <ChevronRight className="size-4 text-muted-foreground" aria-hidden /> : null}
-                {leg.type === 'ride' ? <LineBadge leg={leg} /> : <DriveBadge leg={leg} />}
+                {leg.type === 'ride' ? <LineBadge leg={leg} className="h-6" /> : <DriveBadge leg={leg} className="h-6" />}
               </span>
             ))}
           </>
@@ -164,7 +169,7 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
 
       <BarrierStrip option={option} />
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.8125rem] leading-5">
         {option.kind !== 'walk' ? (
           <span className="text-muted-foreground">
             {t('option.onFoot', { distance: distance(option.walkingDistance, locale) })}
@@ -173,7 +178,7 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
         ) : null}
         {stairsTotal ? (
           <span className="inline-flex items-center gap-1 font-medium text-barrier">
-            {option.stairs.down ? <ArrowDown className="size-4" aria-hidden /> : <ArrowUp className="size-4" aria-hidden />}
+            <StairsIcon className="size-4 shrink-0" />
             {stairsText(option)}
           </span>
         ) : (
@@ -187,43 +192,46 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
         ) : null}
         {option.restStops ? (
           <span className="inline-flex items-center gap-1 font-medium text-rest">
-            <Armchair className="size-4" aria-hidden />
+            <Armchair className="size-3.5 shrink-0" aria-hidden />
             {tp('option.restStops', option.restStops)}
           </span>
         ) : null}
         {option.rests ? (
           <span className="inline-flex items-center gap-1 text-rest">
-            <Armchair className="size-4" aria-hidden />
+            <Armchair className="size-3.5 shrink-0" aria-hidden />
             {tp('option.benches', option.rests)}
           </span>
         ) : null}
         {parking?.disabledSpaces ? (
           <span className="inline-flex items-center gap-1 font-medium text-primary">
-            <Accessibility className="size-4" aria-hidden />
-            {tp('leg.parkingDisabled', parking.disabledSpaces)}
+            <Accessibility className="size-3.5 shrink-0" aria-hidden />
+            <span aria-hidden>{tp('option.parkingDisabled', parking.disabledSpaces)}</span>
+            <span className="sr-only">{tp('leg.parkingDisabled', parking.disabledSpaces)}</span>
+          </span>
+        ) : null}
+        {!notFit && issues ? (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <Info className="size-3.5 shrink-0" aria-hidden />
+            {issues}
           </span>
         ) : null}
       </div>
 
-      {!option.fits && option.issues.length ? (
-        <p className="flex items-start gap-2 rounded-lg bg-barrier-soft px-3 py-2 text-sm font-medium text-barrier">
-          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>{t('option.notFit', { issues: option.issues.join(', ') })}</span>
-        </p>
-      ) : option.issues.length ? (
-        <p className="flex items-start gap-2 text-sm text-muted-foreground">
-          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>{option.issues.join(', ')}</span>
+      {notFit ? (
+        // One line on the card; the full sentence stays in the DOM for screen readers and in the tooltip.
+        <p className="flex min-w-0 items-center gap-1.5 mt-0.5 rounded-md bg-barrier-soft px-2 py-0.5 text-[0.8125rem] leading-5 font-medium text-barrier" title={t('option.notFit', { issues })}>
+          <CircleAlert className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{t('option.notFitShort', { issues })}</span>
         </p>
       ) : null}
     </button>
       {onPick ? (
-        <div className="flex items-center justify-between gap-3 border-t px-4 py-2">
+        <div className="flex items-center justify-between gap-2 border-t px-1.5 py-0.5">
           <button
             type="button"
             id={`${option.id}-hint`}
             onClick={onOpen}
-            className="-ml-2 inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+            className="inline-flex min-h-10 min-w-0 items-center gap-0.5 rounded-lg px-1.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
           >
             {t('option.details')}
             <ChevronRight className="size-4 shrink-0" aria-hidden />
@@ -233,7 +241,7 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
             onClick={onPick}
             aria-pressed={selected}
             className={cn(
-              'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors',
+              'inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border px-3 text-sm font-semibold whitespace-nowrap transition-colors',
               selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground hover:border-primary',
             )}
           >

@@ -1,9 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Info, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useI18n } from '@/lib/i18n/client';
+import { formatDate } from '@/lib/format';
+import type { Health } from '@/lib/health';
 import type { MessageKey } from '@/lib/i18n/messages';
 
 const sections: [MessageKey, MessageKey, string?][] = [
@@ -58,6 +60,34 @@ function Privacy() {
   );
 }
 
+/** Snapshot dates of the data actually in use, from /api/health. */
+function Freshness() {
+  const { t, locale } = useI18n();
+  const [health, setHealth] = useState<Health | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/health', { signal: controller.signal }).then(r => (r.ok ? r.json() : null)).then(setHealth, () => {});
+    return () => controller.abort();
+  }, []);
+  if (!health) return null;
+  const of = (id: Health['sources'][number]['id']) => health.sources.find(s => s.id === id);
+  const date = (v?: string | null) => (v ? formatDate(v, locale) : t('about.fresh.unknown'));
+  const osm = of('osm');
+  const transit = of('transit');
+  const venues = of('cityVenues');
+  return (
+    <section aria-labelledby="about-fresh">
+      <h3 id="about-fresh" className="font-semibold">{t('about.fresh.title')}</h3>
+      <ul className="text-muted-foreground">
+        <li>{t('about.fresh.osm', { date: date(osm?.sourceDate ?? osm?.obtainedAt) })}</li>
+        <li>{t('about.fresh.transit', { date: date(transit?.obtainedAt), until: date(transit?.validUntil) })}</li>
+        <li>{t('about.fresh.city', { date: date(venues?.obtainedAt) })}</li>
+      </ul>
+      {health.sources.some(s => s.stale) ? <p className="mt-1 font-medium text-barrier">{t('about.fresh.stale')}</p> : null}
+    </section>
+  );
+}
+
 export function About() {
   const { t } = useI18n();
   return (
@@ -74,6 +104,7 @@ export function About() {
           <DialogDescription>{t('about.subtitle')}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 text-sm leading-relaxed">
+          <Freshness />
           <Privacy />
           {sections.map(([title, body, url]) => (
             <section key={title}>

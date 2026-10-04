@@ -6,6 +6,7 @@ import { runtimeDir } from './server';
 import { metres, nearest, onWheels, PointGrid, reach, shortestPath, wantsRest, type Reach, type WalkGraph } from './routing';
 import { activeServices, connectionTable, scan, usableConnections, type ConnectionTable, type Footpaths, type ScanJourney } from './transit-scan';
 import { makeOption, snap, straightWalk, walkBetween, walkLeg, WALK_SPEED } from './walking';
+import { addRestStops } from './journey-extras';
 import { serverMessages } from './i18n/server-messages';
 import type { Locale } from './i18n/locales';
 import type { Preferences } from './schemas';
@@ -210,7 +211,7 @@ function verifyTransfers(data: TransitData, g: WalkGraph, journey: ScanJourney, 
   return valid;
 }
 
-type Endpoint = { node: number; reach: Reach; seconds: Map<number, number> };
+type Endpoint = { node: number; reach: Reach; seconds: Map<number, number>; walkingSeconds: Map<number, number> };
 
 /** Walking seconds between a place and every reachable stop within STOP_RADIUS. */
 function endpoint(data: TransitData, g: WalkGraph, place: Point, p: Preferences, reverse: boolean, locale: Locale): Endpoint {
@@ -237,14 +238,14 @@ function endpoint(data: TransitData, g: WalkGraph, place: Point, p: Preferences,
       seconds.set(s, Math.round(total / WALK_SPEED));
     }
   }
-  return { node, reach: result, seconds };
+  return { node, reach: result, seconds, walkingSeconds: new Map(seconds) };
 }
 
 function walkingSeconds(j: ScanJourney) {
   return j.accessSeconds + j.egressSeconds + j.parts.reduce((s, p) => s + (p.kind === 'walk' ? p.seconds : 0), 0);
 }
 
-type Candidate = { journey: ScanJourney; window: Window; signature: string };
+type Candidate = { journey: ScanJourney; window: Window; signature: string; option: JourneyOption };
 
 function signature(j: ScanJourney, w: Window) {
   return j.parts
@@ -343,16 +344,20 @@ function rideLeg(data: TransitData, w: Window, board: number, alight: number): R
 
 const stopPoint = (s: Stop): LegPoint => ({ name: s.name, lat: s.lat, lon: s.lon });
 
-function buildOption(data: TransitData, g: WalkGraph, c: Candidate, from: CityPlace, to: CityPlace, access: Endpoint, egress: Endpoint, p: Preferences, locale: Locale): JourneyOption {
+function buildOption(data: TransitData, g: WalkGraph, c: Pick<Candidate, 'journey' | 'window'>, from: CityPlace, to: CityPlace, access: Endpoint, egress: Endpoint, p: Preferences, locale: Locale): JourneyOption {
   const m = serverMessages(locale);
   const { journey: j, window: w } = c;
   const origin: LegPoint = { name: from.name, lat: from.lat, lon: from.lon };
   const destination: LegPoint = { name: to.name, lat: to.lat, lon: to.lon };
   const legs: Leg[] = [];
+  // The scan reserves access rests in accessSeconds. Build the bare walk at its original
+  // departure; addRestStops then consumes the reservation exactly once.
+  const reservedRest = j.accessSeconds - access.walkingSeconds.get(j.startStop)!;
+  const departure = j.leave + reservedRest;
 
   const startStop = data.stops[j.startStop];
   const accessPath = access.reach.path(stopNode(data, g, j.startStop)) ?? [];
-  legs.push(walkLeg(g, accessPath, origin, stopPoint(startStop), p, { departure: j.leave, destination: false, locale }));
+  legs.push(walkLeg(g, accessPath, origin, stopPoint(startStop), p, { departure, destination: false, locale }));
 
   let lastArrival = j.leave;
   for (const part of j.parts) {
@@ -386,7 +391,7 @@ function buildOption(data: TransitData, g: WalkGraph, c: Candidate, from: CityPl
     else if (rides.some(r => r.wheelchair !== '1')) soft.push(m.issues.tripUnknown);
     if (rides.some(r => r.from.wheelchair === '2' || r.to.wheelchair === '2')) (p.mobility === 'wheelchair' ? hard : soft).push(m.issues.stopNotAccessible);
   }
-  return makeOption(id, 'transit', label, legs, j.leave, lastArrival + egressLeg.seconds, p, locale, { hard, soft });
+  return makeOption(id, 'transit', label, legs, departure, lastArrival + egressLeg.seconds, p, locale, { hard, soft });
 }
 
 /**
@@ -413,6 +418,8 @@ export function transitOptions(g: WalkGraph, from: CityPlace, to: CityPlace, p: 
   // A wheelchair cannot use trips explicitly marked not accessible (GTFS wheelchair_accessible=2).
   let table = window.table;
   if (p.mobility === 'wheelchair') table = window.accessibleTable ??= usableConnections(window.table, window.tripAccess, p.mobility);
+  // Scan results store connection indices, so every subsequent lookup must use this exact table.
+  const scannedWindow = table === window.table ? window : { ...window, table };
 
   // Per-query copy: footpath estimates are corrected as real walks are checked.
   const footpaths: Footpaths = { ...data.footpaths, seconds: data.footpaths.seconds.slice() };
@@ -432,10 +439,29 @@ export function transitOptions(g: WalkGraph, from: CityPlace, to: CityPlace, p: 
     if (!found.length) break;
     const verified = found.map(j => verifyTransfers(data, g, j, footpaths, p));
     if (verified.includes(false)) continue; // re-run the same departure with corrected transfers
+    let restTimesChanged = false;
+    const next = found.map(journey => {
+      const option = buildOption(data, g, { journey, window: scannedWindow }, from, to, access, egress, p, locale);
+      const bareDeparture = option.departure!;
+      addRestStops(option, g, p, locale);
+      const requiredAccess = access.walkingSeconds.get(journey.startStop)! + bareDeparture - option.departure!;
+      if (requiredAccess > access.seconds.get(journey.startStop)!) {
+        access.seconds.set(journey.startStop, requiredAccess);
+        restTimesChanged = true;
+      }
+      return {
+        // Rank the actual rested journey, including rests after the last vehicle.
+        journey: { ...journey, leave: option.departure!, arrival: option.arrival! },
+        window: scannedWindow, signature: signature(journey, scannedWindow), option,
+      };
+    });
+    // Like transfer validation, rest validation corrects access times before accepting options.
+    // Re-scan the same departure so a later reachable vehicle is found instead of dropping a trip.
+    if (restTimesChanged) continue;
     scans++;
-    candidates.push(...found.map(journey => ({ journey, window, signature: signature(journey, window) })));
+    candidates.push(...next);
     if (nonDominated(candidates).length >= MAX_OPTIONS + 1) break;
-    t = Math.min(...found.map(j => j.leave)) + 60;
+    t = Math.min(...next.map(c => c.journey.leave)) + 60;
     if (t > windowStart + WINDOW_SECONDS - 3 * 3600) break;
   }
 
@@ -445,5 +471,5 @@ export function transitOptions(g: WalkGraph, from: CityPlace, to: CityPlace, p: 
     .sort((a, b) => rank(a) - rank(b) || a.journey.leave - b.journey.leave || a.journey.arrival - b.journey.arrival)
     .slice(0, MAX_OPTIONS);
   if (!chosen.length) return { options: [], errors: [m.errors.noConnection] };
-  return { options: chosen.map(c => buildOption(data, g, c, from, to, access, egress, p, locale)), errors: [] };
+  return { options: chosen.map(c => c.option), errors: [] };
 }

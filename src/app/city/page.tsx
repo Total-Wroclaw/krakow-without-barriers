@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
+import { connection } from 'next/server';
 import CityDashboard from '@/components/city/CityDashboard';
 import CityLogin from '@/components/city/CityLogin';
 import { CITY_COOKIE, cityEnabled, verifySession } from '@/lib/city-auth';
@@ -11,6 +12,8 @@ export const metadata: Metadata = {
 };
 
 export default async function CityPage() {
+  // Deployment credentials are supplied at runtime, including after the build.
+  await connection();
   if (!cityEnabled()) {
     return (
       <main className="mx-auto grid min-h-dvh max-w-lg place-content-center gap-3 p-6">

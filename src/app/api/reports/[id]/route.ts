@@ -1,6 +1,5 @@
-import { z } from 'zod';
 import { apiMessages } from '@/lib/i18n/request-locale';
-import { authorCanDelete, checkEditToken, deleteReport, publicReport, REPORT_TOKEN_HEADER, updateReport } from '@/lib/reports-server';
+import { authorCanDelete, checkEditToken, deleteReport, publicReport, reportCorrectionSchema, REPORT_TOKEN_HEADER, updateReport } from '@/lib/reports-server';
 import { boundedJson, guard } from '@/lib/server';
 export const runtime = 'nodejs';
 
@@ -34,9 +33,8 @@ export async function PATCH(request: Request, { params }: Context) {
   if (access === 'not_found') return Response.json({ error: m.notFound }, { status: 404 });
   if (access === 'forbidden') return Response.json({ error: m.forbidden }, { status: 403 });
   try {
-    const input = z.object({ observation: z.unknown().optional(), location: z.unknown().optional(), locale: z.string().optional() }).parse(body);
-    if (input.observation === undefined && input.location === undefined) throw new Error('empty');
-    const report = updateReport(id, input.observation, input.location);
+    const input = reportCorrectionSchema.parse(body);
+    const report = updateReport(id, input.observation, input.location, { comment: input.comment, destination: input.destination });
     if (!report) return Response.json({ error: m.notFound }, { status: 404 });
     return Response.json({ report: publicReport(report) });
   } catch {

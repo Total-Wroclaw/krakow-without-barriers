@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { apiMessages } from '@/lib/i18n/request-locale';
-import { autoReportSchema, newEditToken, publicReport, saveAutoReport } from '@/lib/reports-server';
+import { autoReportSchema, newEditToken, publicReport, reportSubmissionSchema, REPORT_TOKEN_HEADER, saveAutoReport, saveAutoReportOnce } from '@/lib/reports-server';
 import { boundedJson, guard } from '@/lib/server';
 export const runtime = 'nodejs';
 
@@ -14,6 +14,13 @@ export async function POST(request: Request) {
   try {
     body = await boundedJson(request);
     const input = autoReportSchema.parse(body);
+    const submissionId = request.headers.get('x-report-submission-id');
+    if (submissionId) {
+      const submission = reportSubmissionSchema.parse({ id: submissionId, token: request.headers.get(REPORT_TOKEN_HEADER) });
+      const report = await saveAutoReportOnce(input, submission);
+      if (!report) return Response.json({ error: apiMessages(request, body).reports.forbidden }, { status: 403 });
+      return Response.json({ report: publicReport(report), editToken: submission.token }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+    }
     const { token, hash } = newEditToken();
     return Response.json({ report: publicReport(await saveAutoReport(input, hash)), editToken: token }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {

@@ -131,6 +131,11 @@
 }
 
 /* MapLibre: keep attribution legible and controls touch-sized. */
+/* Attribution stays above the phone's panel sheet. */
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-bottom-left {
+  bottom: var(--map-inset, 0px);
+}
 .maplibregl-ctrl-attrib {
   font-size: 11px;
 }

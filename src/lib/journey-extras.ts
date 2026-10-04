@@ -155,7 +155,8 @@ function rideBounds(option: JourneyOption) {
 
 /** Planned rests: bench facts with `restAfterMinutes`, +2 min each, `restStops`/`restMinutes`, notes for marks without a bench. */
 export function addRestStops(option: JourneyOption, g: WalkGraph, p: Preferences, locale: Locale = 'pl') {
-  if (!((p.restEvery ?? 0) > 0)) return option;
+  // Transit options already include these rests when the timetable search accepts them.
+  if (!((p.restEvery ?? 0) > 0) || option.restStops !== undefined) return option;
   const m = serverMessages(locale);
   const { first, last } = rideBounds(option);
   const transferSlack = (leg: number) => {
@@ -236,9 +237,10 @@ function toiletFact(t: AccessibleToilet, locale: Locale): CityFact {
     direction: 'unknown',
     editedAt: t.editedAt,
     obtainedAt: t.obtainedAt,
-    confirmedAt: null,
-    status: 'osm',
+    confirmedAt: t.confirmedAt,
+    status: t.status,
     sourceUrl: t.sourceUrl,
+    sourceLabel: t.sourceLabel,
     objectId: t.objectId,
   };
 }

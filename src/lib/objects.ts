@@ -11,6 +11,7 @@ import type { AccessFeature, FeatureKey, FeatureValue, ObjectCategory, ObjectPag
 import type { CityVenuesFile } from './city-venues';
 import { locales, type Locale } from './i18n/locales';
 import type { Report } from './schemas';
+import type { CityFact } from './city-types';
 import { publicPhotoPath } from './report-photos';
 import { fold, words } from './places';
 
@@ -457,6 +458,7 @@ export type AccessibleToilet = {
   objectId: string; name: string | null; lat: number; lon: number;
   /** 'yes' = accessible, 'limited' = partly accessible (as stated by the source). */
   value: 'yes' | 'limited'; sourceUrl: string; editedAt: string | null; obtainedAt: string;
+  status: CityFact['status']; sourceLabel: string; confirmedAt: string | null;
 };
 /**
  * Toilets a wheelchair user can rely on: a toilet with wheelchair=yes|limited, or any place whose source states
@@ -466,15 +468,20 @@ export type AccessibleToilet = {
 export function accessibleToiletsOf(cat: Catalog): AccessibleToilet[] {
   const out: AccessibleToilet[] = [];
   for (const r of cat.recs) {
-    const facts = r.features.filter(f => f.key === 'accessible_toilet');
+    // Demonstration declarations must never become operational amenities, even after Explore
+    // has loaded the partner overlay. Keep real sources when a place also has an example source.
+    const sources = new Map(r.sources.filter(s => s.status !== 'example').map(s => [s.id, s]));
+    const facts = r.features.filter(f => f.key === 'accessible_toilet' && sources.has(f.sourceId));
     if (!facts.length || facts.some(f => f.value === 'no')) continue;
     const isToilet = r.category === 'toilet';
     const best = facts.find(f => f.value === 'yes') ?? (isToilet ? facts.find(f => f.value === 'limited') : undefined);
     if (!best) continue;
-    const source = r.sources.find(s => s.id === best.sourceId) ?? r.sources[0];
+    const source = sources.get(best.sourceId)!;
     out.push({
       objectId: r.id, name: r.name, lat: r.lat, lon: r.lon, value: best.value === 'yes' ? 'yes' : 'limited',
-      sourceUrl: source?.url ?? (r.osmIds[0] ? osmUrl(r.osmIds[0]) : ''), editedAt: source?.editedAt ?? null, obtainedAt: source?.obtainedAt ?? '',
+      sourceUrl: source.url ?? '', editedAt: source.editedAt ?? null, obtainedAt: source.obtainedAt,
+      status: source.kind === 'osm' ? 'osm' : source.kind === 'user' ? 'unverified' : source.kind,
+      sourceLabel: source.label, confirmedAt: source.confirmedAt,
     });
   }
   return out;

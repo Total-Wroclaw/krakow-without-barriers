@@ -31,7 +31,14 @@ export const autoReportSchema = z
   .refine(v => !!v.photo || v.type === 'blocked' || (v.comment?.length ?? 0) >= 3, { message: 'photo_or_comment', path: ['photo'] });
 export type AutoReportInput = z.infer<typeof autoReportSchema>;
 
-export const addPhotoSchema = z.object({ photo: photoString, locale: z.enum(locales).default('pl') });
+export const addPhotoSchema = z.object({ photo: photoString, locale: z.enum(locales).default('pl'), uploadId: z.uuid().optional() });
+export const reportCorrectionSchema = z.object({
+  observation: observationSchema.optional(),
+  location: placeSchema.optional(),
+  comment: z.string().trim().max(800).optional(),
+  destination: z.string().trim().max(200).optional(),
+  locale: z.enum(locales).optional(),
+}).refine(v => v.observation !== undefined || v.location !== undefined || v.comment !== undefined || v.destination !== undefined, { message: 'empty_update' });
 
 const failedObservation: Observation = { kind: 'other', description: 'Zdjęcie bez opisu. Dodaj krótki opis, co utrudnia przejście.', direction: 'unknown', handrail: 'unknown', surface: 'unknown', uncertainty: '' };
 
@@ -96,7 +103,7 @@ export function authorCanDelete(id: string) {
   return !!report && (report.cityStatus ?? 'new') === 'new';
 }
 
-export async function saveAutoReport(input: AutoReportInput, editTokenHash: string | null = null): Promise<Report> {
+export async function saveAutoReport(input: AutoReportInput, editTokenHash: string | null = null, id = randomUUID()): Promise<Report> {
   const photo = input.photo ? await photoBytes(input.photo) : null;
   let observation: Observation;
   let analysis: Report['analysis'];
@@ -110,7 +117,6 @@ export async function saveAutoReport(input: AutoReportInput, editTokenHash: stri
     observation = commentObservation(input);
     analysis = 'comment';
   }
-  const id = randomUUID();
   const now = new Date().toISOString();
   const point = `point:${input.location.lat}:${input.location.lon}`;
   const photoPath = photo ? `/api/reports/${id}/photo` : null;
@@ -137,6 +143,25 @@ export async function saveAutoReport(input: AutoReportInput, editTokenHash: stri
   return report;
 }
 
+/** A caller keeps this random id and token before sending, so a lost response can be retried safely. */
+export const reportSubmissionSchema = z.object({ id: z.uuid(), token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) });
+const submissions = new Map<string, { hash: string; promise: Promise<Report> }>();
+export async function saveAutoReportOnce(input: AutoReportInput, submission: z.infer<typeof reportSubmissionSchema>): Promise<Report | null> {
+  const { id, token } = reportSubmissionSchema.parse(submission);
+  const hash = hashToken(token);
+  const existing = readReport(id);
+  if (existing) return checkEditToken(id, token) === 'ok' ? existing : null;
+  const pending = submissions.get(id);
+  if (pending) return pending.hash === hash ? pending.promise : null;
+  const promise = saveAutoReport(input, hash, id);
+  submissions.set(id, { hash, promise });
+  try {
+    return await promise;
+  } finally {
+    submissions.delete(id);
+  }
+}
+
 export function photoCount(report: Report) {
   return report.photos?.length ?? (report.photoPath ? 1 : 0);
 }
@@ -145,16 +170,21 @@ export type AddPhotoResult = { report: Report; photo: ReportPhoto } | { error: '
 
 /** Adds one photo (max MAX_PHOTOS per report), analysed by AI. The report's observation only changes if it had none from a photo. */
 export async function addReportPhoto(reportId: string, input: z.infer<typeof addPhotoSchema>): Promise<AddPhotoResult> {
+  // Namespace caller ids by report, so another author's upload cannot claim the same database key.
+  const id = input.uploadId ? createHash('sha256').update(`${reportId}:${input.uploadId}`).digest('hex') : randomUUID();
   const before = readReport(reportId);
   if (!before) return { error: 'not_found' };
+  const previous = photoList(before).find(p => p.id === id);
+  if (previous) return { report: before, photo: previous };
   if (photoCount(before) >= MAX_PHOTOS) return { error: 'limit' };
   const bytes = await photoBytes(input.photo);
   const analysis = await analyse(input.photo, input.locale);
   // Re-read after the awaits: the check-and-insert below is synchronous, so concurrent uploads cannot pass the limit.
   const report = readReport(reportId);
   if (!report) return { error: 'not_found' };
+  const completed = photoList(report).find(p => p.id === id);
+  if (completed) return { report, photo: completed };
   if (photoCount(report) >= MAX_PHOTOS) return { error: 'limit' };
-  const id = randomUUID();
   const createdAt = new Date().toISOString();
   const photo: ReportPhoto = { id, path: `/api/reports/${reportId}/photos/${id}`, createdAt, ...(analysis ? { analysis: analysis.observation, people: analysis.people } : {}), visibility: initialVisibility(analysis?.people) };
   const photos = photoList(report);
@@ -200,14 +230,22 @@ export function deleteReport(id: string) {
 }
 
 /** Author's corrections: the description and/or the location (e.g. GPS put it on the wrong side of the street). */
-export function updateReport(id: string, observation: unknown, location?: unknown): Report | null {
+export function updateReport(id: string, observation: unknown, location?: unknown, words: { comment?: string; destination?: string } = {}): Report | null {
   const report = readReport(id);
   if (!report) return null;
   const parsed = observation === undefined ? report.observation : observationSchema.parse(observation);
   const place = location === undefined ? null : placeSchema.parse(location);
+  const corrected = reportCorrectionSchema.parse({ ...(observation === undefined ? {} : { observation: parsed }), ...(place ? { location: place } : {}), ...words });
+  const comment = corrected.comment === undefined ? report.comment : corrected.comment || undefined;
+  const destination = corrected.destination === undefined ? report.destination : corrected.destination || undefined;
+  // A text-only report derives its observation from these words. Photo/AI observations remain independent.
+  const commentOnly = report.analysis === 'comment' && observation === undefined;
+  if (commentOnly && (comment?.length ?? 0) < 3 && photoCount(report) === 0) throw new Error('comment_required');
   const next: Report = {
     ...report,
-    observation: parsed,
+    comment,
+    destination,
+    observation: commentOnly ? commentObservation({ comment, destination, type: report.type ?? 'blocked' }) : parsed,
     ...(observation === undefined ? {} : { analysis: 'edited' as const }),
     ...(place ? { location: { ...place, id: `point:${place.lat}:${place.lon}` }, locationSource: 'map' as const, locationId: report.locationId.startsWith('point:') ? `point:${place.lat}:${place.lon}` : report.locationId } : {}),
     editedAt: new Date().toISOString(),

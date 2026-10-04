@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { ArrowDownUp, Compass, Info, Footprints, MapPin, Navigation, RefreshCw, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,6 +28,7 @@ import { RouteDetails } from './RouteDetails';
 import { ReportFab, ReportPanel, useReportCapture, type CaptureTarget } from './Reports';
 import { TimeChooser, type When } from './TimeChooser';
 import { TransportPicker } from './TransportPicker';
+import { useBottomSheet } from './useBottomSheet';
 
 const MapView = dynamic(() => import('./MapView'), {
   ssr: false,
@@ -82,7 +83,6 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState(false);
-  const [mobileView, setMobileView] = useState<'map' | 'list'>('list');
   const [reports, setReports] = useState<Report[]>([]);
   const [fact, setFact] = useState<CityFact | null>(null);
   const [openReport, setOpenReport] = useState<{ report: Report; editing: boolean } | null>(null);
@@ -105,6 +105,10 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const onToActive = useCallback((v: boolean) => setSearching(s => ({ ...s, to: v })), []);
   const mapCenter = useRef({ lat: 50.061, lon: 19.945 });
   const scroller = useRef<HTMLDivElement>(null);
+  // Phones: the panel is a sheet over the map; typing a place opens it fully for the suggestions.
+  const sheet = useBottomSheet(scroller, searchActive ? 'full' : undefined);
+  const mobileView = sheet.snap === 'peek' ? 'map' : 'list';
+  const setMobileView = (view: 'map' | 'list') => sheet.setSnap(view === 'map' ? 'peek' : 'half');
   const listScroll = useRef(0);
   const listOpener = useRef<HTMLElement | null>(null);
 
@@ -217,7 +221,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   function closeDetail() {
     if (window.history.state?.krokDetail) window.history.back();
     else setDetail(false);
-    setMobileView('list');
+    if (sheet.snap === 'peek') sheet.setSnap('half');
   }
 
   useEffect(() => {
@@ -313,7 +317,6 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
     setTab('route');
   }
 
-  const showMapOnMobile = detail && mobileView === 'map';
   const exploring = tab === 'explore' && !embed;
 
   return (
@@ -322,9 +325,27 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
         {t('app.skip')}
       </a>
 
-      <main id="planner" className="order-2 flex min-h-0 flex-1 flex-col border-border bg-background lg:order-1 lg:w-[440px] lg:flex-none lg:border-r">
+      <main
+        id="planner"
+        className={cn(
+          'order-2 flex min-h-0 flex-1 flex-col border-border bg-background lg:order-1 lg:w-[440px] lg:flex-none lg:border-r',
+          'max-lg:absolute max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-20 max-lg:h-[var(--sheet,50svh)] max-lg:flex-none max-lg:rounded-t-[1.75rem] max-lg:border-t max-lg:shadow-[0_-8px_32px_rgb(15_23_42/0.16)]',
+          !sheet.dragging && 'max-lg:transition-[height] max-lg:duration-300 max-lg:ease-out motion-reduce:transition-none',
+        )}
+        style={sheet.height !== null ? ({ '--sheet': `${sheet.height}px` } as CSSProperties) : undefined}
+      >
+        <div className="flex shrink-0 justify-center lg:hidden">
+          <button
+            type="button"
+            {...sheet.handle}
+            aria-label={t(sheet.snap === 'full' ? 'sheet.collapse' : 'sheet.expand')}
+            className="grid h-7 w-full touch-none cursor-grab place-items-center active:cursor-grabbing"
+          >
+            <span aria-hidden className="h-1.5 w-11 rounded-full bg-muted-foreground/35" />
+          </button>
+        </div>
         <div ref={scroller} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <header className="flex items-center justify-between gap-2 px-4 pb-2 pt-3 lg:pt-5">
+          <header className="flex items-center justify-between gap-2 px-4 pb-2 pt-1 lg:pt-5">
             {embed ? (
               <p className="flex items-center gap-2 text-lg font-bold tracking-tight">
                 <MapPin className="size-5 text-primary" aria-hidden />
@@ -471,8 +492,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
 
       <div
         className={cn(
-          'relative order-1 shrink-0 transition-[height] lg:order-2 lg:h-auto lg:flex-1',
-          searchActive ? 'h-0 overflow-clip' : showMapOnMobile ? 'h-[68svh]' : detail ? 'h-[30svh]' : 'h-[34svh]',
+          'order-1 max-lg:absolute max-lg:inset-0 lg:relative lg:order-2 lg:flex-1',
         )}
       >
         <MapView
@@ -494,6 +514,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           objectsFitKey={exploring ? objectsFit : undefined}
           onPick={exploring ? undefined : pickOnMap}
           pickRoles={embed ? ['from'] : undefined}
+          bottomInset={sheet.mobile && sheet.height ? Math.min(sheet.height, Math.round(window.innerHeight * 0.6)) : 0}
         />
         {!embed ? (
           <div className="absolute left-3 top-3 z-10 lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))] lg:left-4 lg:top-auto">

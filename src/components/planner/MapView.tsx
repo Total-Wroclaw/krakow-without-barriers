@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent, Marker } from 'maplibre-gl';
 import { Flag, LoaderCircle, LocateFixed, Map as MapIcon, Minus, Plus, Satellite, X } from 'lucide-react';
@@ -86,6 +86,8 @@ type Props = {
   /** Set when a click on empty map may offer "set as start / destination" (the Route tab). */
   onPick?: (role: PickRole, place: CityPlace) => void;
   pickRoles?: PickRole[];
+  /** Pixels of the map covered from below (the phone's panel sheet): fits, pans and the visible area leave it out. */
+  bottomInset?: number;
 };
 
 type Pick = { lat: number; lon: number; name?: string | null };
@@ -93,7 +95,7 @@ type Pick = { lat: number; lon: number; name?: string | null };
 const coords = (p: { lat: number; lon: number }) => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
 const flat = (p: { lat: number; lon: number } | null | undefined) => (p ? `${p.lat},${p.lon}` : '');
 
-export default function MapView({ options, selectedId, detail = false, focus, from, to, reports, objects = [], selectedObjectId, onSelect, onFact, onReport, onObject, onMove, onViewportChange, objectsFitKey, onPick, pickRoles = ['from', 'to'] }: Props) {
+export default function MapView({ options, selectedId, detail = false, focus, from, to, reports, objects = [], selectedObjectId, onSelect, onFact, onReport, onObject, onMove, onViewportChange, objectsFitKey, onPick, pickRoles = ['from', 'to'], bottomInset = 0 }: Props) {
   const { t, tp, locale } = useI18n();
   const reportTitle = useReportTitle();
   const container = useRef<HTMLDivElement>(null);
@@ -104,6 +106,11 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
   const latest = useRef({ onSelect, onFact, onReport, onObject, onMove, onPick, detail, onViewportChange });
   latest.current = { onSelect, onFact, onReport, onObject, onMove, onPick, detail, onViewportChange };
   const render = useRef<() => void>(() => {});
+  // Read when the camera moves, so dragging the sheet never re-renders or moves the map.
+  const inset = useRef(bottomInset);
+  inset.current = bottomInset;
+  /** Shifts a camera target up into the part of the map that is not covered. */
+  const lift = () => ({ offset: [0, -inset.current / 2] as [number, number] });
   /** What the camera last reacted to; see the camera rules in `render`. */
   const seen = useRef({ results: [] as JourneyOption[], detail: '', ends: '', objects: '', object: '', focus: '' });
   /** A place picked on the map itself is already in view, so choosing it must not move the camera. */
@@ -152,7 +159,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
         setLocating(false);
         userPos.current = { lat: p.coords.latitude, lon: p.coords.longitude };
         watchPosition();
-        map.current?.easeTo({ center: [p.coords.longitude, p.coords.latitude], zoom: Math.max(map.current.getZoom(), 16), duration: 600 });
+        map.current?.easeTo({ center: [p.coords.longitude, p.coords.latitude], zoom: Math.max(map.current.getZoom(), 16), duration: 600, ...lift() });
       },
       () => {
         setLocating(false);
@@ -261,9 +268,13 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       render.current();
     });
     const viewport = (user: boolean): MapViewport => {
-      const c = instance.getCenter();
-      const b = instance.getBounds();
-      return { bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], center: { lat: c.lat, lon: c.lng }, zoom: instance.getZoom(), user };
+      // Only the uncovered part of the map counts as visible (north-up map, so two corners are enough).
+      const { clientWidth: w, clientHeight: h } = instance.getContainer();
+      const bottom = Math.max(1, h - inset.current);
+      const nw = instance.unproject([0, 0]);
+      const se = instance.unproject([w, bottom]);
+      const c = instance.unproject([w / 2, bottom / 2]);
+      return { bbox: [nw.lng, se.lat, se.lng, nw.lat], center: { lat: c.lat, lon: c.lng }, zoom: instance.getZoom(), user };
     };
     instance.once('load', () => latest.current.onViewportChange?.(viewport(false)));
     instance.on('moveend', e => {
@@ -368,15 +379,15 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
         if (points.length > 1) {
           const bounds = new maplibregl.LngLatBounds();
           points.forEach(([lat, lon]) => bounds.extend([lon, lat]));
-          instance.fitBounds(bounds, { padding: { top: 70, bottom: 50, left: 50, right: 70 }, maxZoom: 17, duration }, APP_MOVE);
-        } else if (points.length === 1) instance.easeTo({ center: [points[0][1], points[0][0]], zoom: 15, duration }, APP_MOVE);
+          instance.fitBounds(bounds, { padding: { top: 70, bottom: 50 + inset.current, left: 50, right: 70 }, maxZoom: 17, duration }, APP_MOVE);
+        } else if (points.length === 1) instance.easeTo({ center: [points[0][1], points[0][0]], zoom: 15, duration, ...lift() }, APP_MOVE);
       };
       const ends = () => [from, to].filter((p): p is CityPlace => !!p).map(p => [p.lat, p.lon] as [number, number]);
       /** Pans (same zoom) only when the point is not comfortably inside the visible map. */
       const reveal = (lat: number, lon: number) => {
         const { x, y } = instance.project([lon, lat]);
         const { clientWidth: w, clientHeight: h } = instance.getContainer();
-        if (x < 40 || y < 40 || x > w - 40 || y > h - 40) instance.easeTo({ center: [lon, lat], duration }, APP_MOVE);
+        if (x < 40 || y < 40 || x > w - 40 || y > h - inset.current - 40) instance.easeTo({ center: [lon, lat], duration, ...lift() }, APP_MOVE);
       };
 
       if (next.detail && next.detail !== prev.detail && selected) {
@@ -392,7 +403,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       }
       if (next.object && next.object !== prev.object) {
         const chosen = objects.find(o => o.id === selectedObjectId);
-        if (chosen && clickedObject.current !== chosen.id) instance.easeTo({ center: [chosen.lon, chosen.lat], zoom: Math.max(instance.getZoom(), 16), duration }, APP_MOVE);
+        if (chosen && clickedObject.current !== chosen.id) instance.easeTo({ center: [chosen.lon, chosen.lat], zoom: Math.max(instance.getZoom(), 16), duration, ...lift() }, APP_MOVE);
       }
       clickedObject.current = null;
       if (next.focus && next.focus !== prev.focus && focus) reveal(focus.lat, focus.lon);
@@ -452,7 +463,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
   const pickInside = pick ? inKrakow(pick) : false;
   const control = 'grid size-11 place-items-center text-foreground transition-colors hover:bg-accent disabled:opacity-50';
   return (
-    <div className="relative size-full">
+    <div className="relative size-full" style={{ '--map-inset': `${bottomInset}px` } as CSSProperties}>
       <div ref={container} className="size-full" />
       <Popover open={!!pick} onOpenChange={open => !open && setPick(null)}>
         <PopoverAnchor virtualRef={pickAnchor} />

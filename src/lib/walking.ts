@@ -1,7 +1,7 @@
 // Turns graph paths into user-facing walking legs and walking-only journey options.
 import { handrail, type Way } from './data';
 import {
-  bearing, edgeAt, metres, nearest, nodePoint, onWheels, shortestPath, stairsPassable, strollerLift, type WalkGraph,
+  bearing, edgeAt, metres, nearest, nodePoint, onWheels, shortestPath, stairsPassable, strollerLift, wayMobility, type WalkGraph,
   IMPASSABLE, LONG_FLIGHT_STEPS, KERB_RAISED, KERB_ROLLED, KERB_UNKNOWN, NARROW, NODE_NO_WHEELCHAIR, NO_WHEELCHAIR, ROUGH, SETT, STEEP, STEP_BARRIER, VERY_ROUGH,
 } from './routing';
 import { serverMessages, type ServerMessages } from './i18n/server-messages';
@@ -375,6 +375,13 @@ export function assess(legs: Leg[], p: Preferences, locale: Locale = 'pl', extra
         stairs[fact.direction]++;
         if (!stairsPassable(fact.tags, p.mobility)) blockedStairs++;
         else if (strollerLift(fact.tags, p.mobility)) lifts.push(stepCount(fact.tags)!);
+        // A ramp only answers whether the steps can be bypassed. The same way can still be
+        // impassable, too narrow or explicitly unavailable to wheelchairs. These properties
+        // are not separate surface facts on stairs, but must survive fallback-route assessment.
+        const bits = wayMobility(fact.tags);
+        if (bits & IMPASSABLE) stretches.impassable = 1;
+        if (bits & NARROW) stretches.narrow = 1;
+        if (bits & NO_WHEELCHAIR) stretches.noWheelchair = 1;
         const rail = handrail(fact.tags);
         if (rail === 'no') noHandrail++;
         else if (rail === 'unknown') handrailUnknown++;

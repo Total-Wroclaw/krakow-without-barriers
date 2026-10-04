@@ -17,8 +17,6 @@ import type { DriveLeg, JourneyOption, Leg, LegPoint, ParkingInfo } from './jour
 const ROAD_SNAP = 400;
 /** A car park further than this from any road node is not reachable by car in our data. */
 const PARKING_ROAD_SNAP = 200;
-/** Below this distance between a place and the kerb no walking leg is shown. */
-const WALK_THRESHOLD = 40;
 export const PARKING_RADIUS = 600;
 const PARKING_CANDIDATES = 12;
 const MAX_CAR_OPTIONS = 3;
@@ -33,9 +31,9 @@ const point = (p: { name: string; lat: number; lon: number }): LegPoint => ({ na
 
 type Context = { walk: WalkGraph; roads: RoadGraph; p: Preferences; locale: Locale };
 
-/** Walking leg between a place and the kerb, or null when they are practically the same spot. */
+/** Even a short access walk can contain stairs or a kerb. Only identical endpoints need no walk. */
 function kerbWalk(c: Context, from: LegPoint, to: LegPoint, departure: number, destination: boolean) {
-  if (metres(from, to) <= WALK_THRESHOLD) return null;
+  if (from.lat === to.lat && from.lon === to.lon) return null;
   try {
     return walkBetween(c.walk, from, to, c.p, { departure, destination, locale: c.locale }) ?? straightWalk(from, to, departure, c.locale);
   } catch {

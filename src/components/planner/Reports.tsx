@@ -322,7 +322,6 @@ export function ReportPanel({ report, editing: openWith, onClose, onChange, onDe
     <Panel open onOpenChange={open => !open && onClose()} title={reportTitle({ ...report, observation: draft })}>
       <div className="flex flex-col gap-5 pt-1">
         {report.photoPath ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={report.photoPath} alt={t('report.photoAlt', { description: draft.description })} className="max-h-72 w-full rounded-xl bg-muted object-cover" />
         ) : null}
 
@@ -404,7 +403,6 @@ export function ReportPanel({ report, editing: openWith, onClose, onChange, onDe
         {report.photos && report.photos.filter(p => p.path && p.path !== report.photoPath).length ? (
           <div className="flex flex-wrap gap-2">
             {report.photos.filter(p => p.path && p.path !== report.photoPath).map(p => (
-              // eslint-disable-next-line @next/next/no-img-element
               <img key={p.id} src={p.path} alt={t('report.photoAlt', { description: p.analysis?.description ?? draft.description })} className="size-24 rounded-lg bg-muted object-cover" />
             ))}
           </div>

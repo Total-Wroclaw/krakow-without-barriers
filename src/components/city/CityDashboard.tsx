@@ -240,7 +240,6 @@ function ReportRow({ report: r, onOpen }: { report: Report; onOpen: () => void }
       <article aria-labelledby={headingId} className={cn('grid gap-4 rounded-xl border bg-card p-4 shadow-sm sm:grid-cols-[112px_1fr_auto]', typeOf(r) === 'blocked' && 'border-l-4 border-l-tram')}>
         <div className="relative size-28 shrink-0 overflow-hidden rounded-lg bg-muted">
           {r.photoPath ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={r.photoPath} alt={`Zdjęcie zgłoszenia: ${r.observation.description}`} loading="lazy" className="size-full object-cover" />
           ) : (
             <div className="grid size-full place-items-center text-center text-xs text-muted-foreground">

@@ -266,7 +266,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       // One click handler decides what a click means, in this order:
       // markers (barriers, reports, ends) > places > the chosen route > alternatives > empty map.
       // Per-layer handlers would fire for every line under the pointer, so a tap on the chosen
-      // route used to switch to an alternative lying underneath it.
+      // route would switch to an alternative lying underneath it.
       let pickTimer: number | undefined;
       instance.on('click', (e: MapMouseEvent) => {
         window.clearTimeout(pickTimer);
@@ -478,7 +478,6 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       pickPin.current = null;
     };
     // Re-run per clicked point (and language), not when the name arrives.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickKey, locale]);
   // Leaving the Route tab closes the card.
   useEffect(() => {

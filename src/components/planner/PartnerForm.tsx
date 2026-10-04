@@ -82,7 +82,6 @@ export function PartnerForm({ open, existing, edit, onClose, onSaved }: {
         onClose();
       });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, existing, edit?.id, edit?.token, locale]);
 
   async function submit(e: FormEvent) {

@@ -60,7 +60,6 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
       map.current = null;
     };
     // The map is created once; later value changes come from presets via jumpTo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => setLabel(value.name), [value.name]);

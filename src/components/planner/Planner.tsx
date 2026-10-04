@@ -288,7 +288,6 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
       if (detail) closeDetail();
     },
     // closeDetail only reads history and setters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [detail],
   );
 

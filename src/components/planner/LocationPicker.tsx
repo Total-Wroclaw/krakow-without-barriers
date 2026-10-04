@@ -40,7 +40,7 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
       attributionControl: { compact: true },
       // One-finger page scroll keeps working on phones; two fingers move the map.
       cooperativeGestures: window.matchMedia('(pointer: coarse)').matches,
-      locale: { 'Map.Title': t('report.pickerMap'), 'AttributionControl.ToggleAttribution': t('map.attribution'), 'CooperativeGesturesHandler.MobileHelpText': t('aerial.twoFingers') },
+      locale: { 'Map.Title': t('report.pickerMap'), 'AttributionControl.ToggleAttribution': t('map.attribution'), 'CooperativeGesturesHandler.MobileHelpText': t('map.twoFingers') },
     });
     instance.on('moveend', async e => {
       // Only user moves and preset jumps (not the initial render) change the chosen point.

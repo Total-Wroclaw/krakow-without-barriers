@@ -392,6 +392,7 @@ const pl = {
   'aerial.disclosure': 'Opis automatyczny, niesprawdzony na miejscu.',
   'aerial.checking': 'Sprawdzamy na zbliżeniach, co jeszcze widać na zdjęciu…',
   'aerial.twoFingers': 'Przesuń zdjęcie dwoma palcami',
+  'map.twoFingers': 'Przesuń mapę dwoma palcami',
   'card.showAll': 'Pokaż wszystkie ({n})',
   'card.showLess': 'Pokaż mniej',
 
@@ -1037,6 +1038,7 @@ const en: Messages = {
   'aerial.disclosure': 'Automatic description, not checked on site.',
   'aerial.checking': 'Checking close-ups for anything else on the photo…',
   'aerial.twoFingers': 'Use two fingers to move the photo',
+  'map.twoFingers': 'Use two fingers to move the map',
   'card.showAll': 'Show all ({n})',
   'card.showLess': 'Show less',
   'explore.h1': 'Explore places in Kraków',
@@ -1671,6 +1673,7 @@ const de: Messages = {
   'aerial.disclosure': 'Automatische Beschreibung, vor Ort nicht geprüft.',
   'aerial.checking': 'Nahaufnahmen werden auf weitere Details im Foto geprüft…',
   'aerial.twoFingers': 'Foto mit zwei Fingern verschieben',
+  'map.twoFingers': 'Karte mit zwei Fingern verschieben',
   'card.showAll': 'Alle anzeigen ({n})',
   'card.showLess': 'Weniger anzeigen',
   'explore.h1': 'Orte in Krakau entdecken',

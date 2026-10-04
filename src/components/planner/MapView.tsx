@@ -13,6 +13,7 @@ import { useI18n } from '@/lib/i18n/client';
 import type { JourneyOption } from '@/lib/journey-types';
 import type { Report } from '@/lib/schemas';
 import { allFacts, factTitle } from '@/lib/journey-ui';
+import { stairsPaths } from './icons';
 import { reverseName } from './LocationPicker';
 import { inKrakow, useReportTitle } from './Reports';
 
@@ -27,9 +28,9 @@ const APP_MOVE = { krokApp: true };
 const colors = { walk: '#14213d', tram: '#c4122f', bus: '#2443b0', drive: '#0e6c80' };
 
 const icons = {
-  down: '<path d="M12 5v14M5 12l7 7 7-7"/>',
-  up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
-  unknown: '<circle cx="12" cy="12" r="3"/>',
+  down: stairsPaths.down,
+  up: stairsPaths.up,
+  unknown: stairsPaths.any,
   bench: '<path d="M4 12h16M6 12v6M18 12v6M6 8h12"/>',
   entrance: '<path d="M13 4h5v16h-5M3 12h10M9 8l4 4-4 4"/>',
   report: '<path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>',

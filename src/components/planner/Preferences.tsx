@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Accessibility, Armchair, ArrowDown, ArrowUp, Baby, Ban, Footprints, Grip, LoaderCircle, SlidersHorizontal, Sparkles, Toilet } from 'lucide-react';
+import { Accessibility, Armchair, Baby, Ban, Footprints, Grip, LoaderCircle, SlidersHorizontal, Sparkles, Toilet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ import { distance } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import type { MessageKey } from '@/lib/i18n/messages';
 import { preferencesSchema, type Preferences } from '@/lib/schemas';
+import { StairsDown, StairsUp } from './icons';
 import { Panel } from './Panel';
 
 type StairMode = 'any' | 'noDown' | 'noUp' | 'none';
@@ -29,10 +30,10 @@ function stairMode(p: Preferences): StairMode {
   return 'any';
 }
 
-const stairOptions: { value: StairMode; key: MessageKey; icon: typeof ArrowDown }[] = [
+const stairOptions: { value: StairMode; key: MessageKey; icon: React.ComponentType<{ 'aria-hidden'?: boolean }> }[] = [
   { value: 'any', key: 'prefs.stairs.any', icon: Footprints },
-  { value: 'noDown', key: 'prefs.stairs.noDown', icon: ArrowDown },
-  { value: 'noUp', key: 'prefs.stairs.noUp', icon: ArrowUp },
+  { value: 'noDown', key: 'prefs.stairs.noDown', icon: StairsDown },
+  { value: 'noUp', key: 'prefs.stairs.noUp', icon: StairsUp },
   { value: 'none', key: 'prefs.stairs.none', icon: Ban },
 ];
 

@@ -32,7 +32,7 @@ const surfaceLabel = { paving_stones: 'kostka', asphalt: 'asfalt', sett: 'bruk',
 
 function ObservationFacts({ o }: { o: Observation }) {
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
       <dt className="text-muted-foreground">Rodzaj</dt>
       <dd>{kindLabel[o.kind]}</dd>
       <dt className="text-muted-foreground">Poręcz</dt>
@@ -54,7 +54,7 @@ const peopleLabel = { none: 'AI: nie widać osób ani tablic rejestracyjnych', p
 function PhotoPrivacy({ photo, busy, onChange }: { photo: ReportPhoto; busy: boolean; onChange: (visibility: PhotoVisibility) => void }) {
   const isPublic = photo.visibility === 'public';
   return (
-    <div className="grid gap-2 rounded-md bg-muted/50 p-2">
+    <div className="grid min-w-0 gap-2 rounded-md bg-muted/50 p-2">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={isPublic ? 'secondary' : 'outline'}>{isPublic ? 'Publiczne' : photo.reviewedAt ? 'Ukryte przez urząd' : 'Ukryte — czeka na sprawdzenie'}</Badge>
       </div>
@@ -63,11 +63,11 @@ function PhotoPrivacy({ photo, busy, onChange }: { photo: ReportPhoto; busy: boo
         {photo.reviewedAt && <> · decyzja urzędu {formatDate(photo.reviewedAt)}</>}
       </p>
       {isPublic ? (
-        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onChange('hidden')} className="justify-self-start">
+        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onChange('hidden')} className="h-auto min-h-8 justify-self-start whitespace-normal py-1.5 text-left">
           <EyeOff aria-hidden="true" /> Ukryj zdjęcie przed mieszkańcami
         </Button>
       ) : (
-        <Button type="button" size="sm" disabled={busy} onClick={() => onChange('public')} className="justify-self-start">
+        <Button type="button" size="sm" disabled={busy} onClick={() => onChange('public')} className="h-auto min-h-8 justify-self-start whitespace-normal py-1.5 text-left">
           <Eye aria-hidden="true" /> Opublikuj zdjęcie (nie widać osób ani tablic)
         </Button>
       )}
@@ -198,9 +198,9 @@ function Detail({ report: r, onSaved, onUnauthorized }: { report: Report; onSave
           {photos.length === 0 ? (
             <p className="text-sm text-muted-foreground">Zgłoszenie bez zdjęcia.</p>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
               {photos.map((p, i) => (
-                <li key={p.id} className="grid content-start gap-2 rounded-lg border bg-card p-2">
+                <li key={p.id} className="grid min-w-0 content-start gap-2 rounded-lg border bg-card p-2">
                   <a href={p.path} target="_blank" rel="noreferrer" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={p.path} alt={`Zdjęcie ${i + 1}${p.analysis ? `: ${p.analysis.description}` : ''} (otwórz w pełnym rozmiarze)`} loading="lazy" className="aspect-[4/3] w-full rounded-md bg-muted object-cover" />

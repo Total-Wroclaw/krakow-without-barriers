@@ -249,7 +249,7 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
             aria-pressed={selected}
             aria-describedby={`${option.id}-name`}
             className={cn(
-              'inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border px-3 text-sm font-semibold whitespace-nowrap transition-colors',
+              'inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border px-3 text-sm font-semibold whitespace-nowrap transition-colors',
               selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground hover:border-primary',
             )}
           >

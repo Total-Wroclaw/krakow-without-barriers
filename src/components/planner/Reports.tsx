@@ -159,9 +159,6 @@ export function useReportCapture({ fallback, onSaved, onOpen }: {
             id,
             description: report.observation.description,
             action: { label: t('report.fix'), onClick: () => onOpen(report, true) },
-            // The place is a guess (GPS or the point on screen): let it be corrected straight away.
-            ...(report.location ? { cancel: { label: t('report.fixPlace'), onClick: () => onOpen(report, 'place') } } : {}),
-            duration: 10_000,
           });
         }
       } catch (e) {

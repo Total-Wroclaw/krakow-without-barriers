@@ -13,7 +13,7 @@ import { useI18n } from '@/lib/i18n/client';
 import type { JourneyOption } from '@/lib/journey-types';
 import type { Report } from '@/lib/schemas';
 import { allFacts, factTitle } from '@/lib/journey-ui';
-import { stairsPaths } from './icons';
+import { elevatorPath, stairsPaths } from './icons';
 import { reverseName } from './LocationPicker';
 import { inKrakow, useReportTitle } from './Reports';
 
@@ -37,6 +37,7 @@ const icons = {
   toilet: '<path d="M7 4h2v4H7zM15 4h2v4h-2zM6 10h5v10H6zM14 10h4l-1 10h-2z"/>',
   kerb: '<path d="M4 18h6v-6h10"/>',
   surface: '<path d="M4 4h16v16H4zM4 12h16M12 4v16"/>',
+  elevator: elevatorPath,
 };
 
 function markerElement(label: string, icon: string, background: string, size = 30) {
@@ -355,8 +356,8 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       const placed: { el: HTMLElement; lat: number; lon: number; rank: number }[] = [];
       if (selected) {
         for (const fact of allFacts(selected)) {
-          const icon = fact.kind === 'toilet' ? icons.toilet : fact.kind === 'bench' ? icons.bench : fact.kind === 'entrance' ? icons.entrance : fact.kind === 'kerb' ? icons.kerb : fact.kind === 'surface' ? icons.surface : icons[fact.direction];
-          const bg = fact.kind === 'toilet' ? '#7a3e9d' : fact.kind === 'bench' ? '#0f766e' : fact.kind === 'entrance' ? '#2443b0' : '#a1460a';
+          const icon = fact.kind === 'elevator' ? icons.elevator : fact.kind === 'toilet' ? icons.toilet : fact.kind === 'bench' ? icons.bench : fact.kind === 'entrance' ? icons.entrance : fact.kind === 'kerb' ? icons.kerb : fact.kind === 'surface' ? icons.surface : icons[fact.direction];
+          const bg = fact.kind === 'elevator' ? '#2443b0' : fact.kind === 'toilet' ? '#7a3e9d' : fact.kind === 'bench' ? '#0f766e' : fact.kind === 'entrance' ? '#2443b0' : '#a1460a';
           const el = markerElement(factTitle(fact, t, tp), icon, bg, fact.kind === 'stairs' ? 34 : 30);
           // Stairs always show; benches and entrances only once zoomed in, to avoid clutter.
           if (fact.kind !== 'stairs' && fact.kind !== 'kerb' && fact.kind !== 'toilet' && !fact.restAfterMinutes) el.classList.add('map-minor');

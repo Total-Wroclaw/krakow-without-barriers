@@ -5,7 +5,7 @@ import { clock, distance, duration } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import { strip } from '@/lib/journey-ui';
 import { cn } from '@/lib/utils';
-import { stairsIcon } from './icons';
+import { Elevator, stairsIcon } from './icons';
 
 type RideLeg = Extract<Leg, { type: 'ride' }>;
 type DriveLeg = Extract<Leg, { type: 'drive' }>;
@@ -64,13 +64,13 @@ export function BarrierStrip({ option }: { option: JourneyOption }) {
         ))}
       </div>
       {marks.slice(0, 8).map(({ fact, at }) => {
-        const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Armchair : fact.kind === 'kerb' ? OctagonAlert : stairsIcon(fact.direction);
+        const Icon = fact.kind === 'elevator' ? Elevator : fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Armchair : fact.kind === 'kerb' ? OctagonAlert : stairsIcon(fact.direction);
         return (
           <span
             key={fact.id}
             className={cn(
               'absolute top-0 grid size-5 -translate-x-1/2 place-items-center rounded-full border-2 border-card',
-              fact.kind === 'bench' ? 'bg-rest text-white' : 'bg-barrier text-white',
+              fact.kind === 'bench' ? 'bg-rest text-white' : fact.kind === 'elevator' ? 'bg-primary text-white' : 'bg-barrier text-white',
             )}
             style={{ left: `clamp(10px, ${at * 100}%, calc(100% - 10px))` }}
           >

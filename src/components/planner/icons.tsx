@@ -13,6 +13,9 @@ export const stairsPaths = {
   any: '<path d="M21 5h-4v4h-4v4H9v4H5v4H3"/>',
 };
 
+/** A lift car with up and down arrows. */
+export const elevatorPath = '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="m9 9 3-3 3 3M9 15l3 3 3-3"/>';
+
 type IconProps = SVGProps<SVGSVGElement> & { strokeWidth?: number | string };
 
 function icon(paths: string, name: string) {
@@ -43,6 +46,7 @@ function icon(paths: string, name: string) {
 export const StairsUp = icon(stairsPaths.up, 'StairsUp');
 export const StairsDown = icon(stairsPaths.down, 'StairsDown');
 export const Stairs = icon(stairsPaths.any, 'Stairs');
+export const Elevator = icon(elevatorPath, 'Elevator');
 
 /** Stairs icon for the direction of travel; mixed or unknown directions get the plain flight. */
 export function stairsIcon(direction: 'up' | 'down' | 'unknown') {

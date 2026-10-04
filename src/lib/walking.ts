@@ -287,6 +287,17 @@ export function walkLeg(g: WalkGraph, edges: number[], from: LegPoint, to: LegPo
     }
   }
 
+  // Lifts on the way, for everyone: where the route changes level without stairs. Whether one works today
+  // is not in any open data, so it is listed as mapped, with its wheelchair tag when present.
+  const seenLifts = new Set<number>();
+  edges.forEach((e, i) => {
+    const node = g.edgeTo[e];
+    const source = g.elevatorNodes.get(node);
+    if (!source || seenLifts.has(node)) return;
+    seenLifts.add(node);
+    placed.push({ fact: osmFact(g, 'elevator', 'node', source.id, m.facts.elevator(source.tags.wheelchair), source, source.tags, source.editedAt), at: position[i + 1] });
+  });
+
   // Kerbs, steps and surfaces matter on wheels and on crutches; listed once each, in route order.
   if (p.mobility !== 'walk') {
     const nodeKind = p.mobility === 'crutches' ? crutchNodeKind : nodeBarrierKind;

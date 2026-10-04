@@ -9,7 +9,7 @@ import { clock, distance, duration } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import { factTitle } from '@/lib/journey-ui';
 import { cn } from '@/lib/utils';
-import { Stairs, StairsDown, StairsUp, stairsIcon } from './icons';
+import { Elevator, Stairs, StairsDown, StairsUp, stairsIcon } from './icons';
 import { LineBadge } from './OptionCard';
 import { useReportTitle } from './Reports';
 
@@ -109,7 +109,7 @@ function groupFacts(facts: CityFact[], title: (f: CityFact) => string) {
 
 function FactChip({ fact, onFact, count = 1 }: { fact: CityFact; onFact: (f: CityFact) => void; count?: number }) {
   const { t, tp } = useI18n();
-  const Icon = fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Toilet : fact.kind === 'entrance' ? DoorOpen : fact.kind === 'kerb' ? OctagonAlert : fact.kind === 'surface' ? Grid3x3 : stairsIcon(fact.direction);
+  const Icon = fact.kind === 'elevator' ? Elevator : fact.kind === 'bench' ? Armchair : fact.kind === 'toilet' ? Toilet : fact.kind === 'entrance' ? DoorOpen : fact.kind === 'kerb' ? OctagonAlert : fact.kind === 'surface' ? Grid3x3 : stairsIcon(fact.direction);
   return (
     <button
       type="button"

@@ -236,6 +236,8 @@ export type WalkGraph = {
   nodeBarrier: Uint8Array;
   /** Source records of nodes with a barrier bit, for facts. */
   barrierNodes: Map<number, OsmNode>;
+  /** Lifts (highway=elevator) on the walking graph. */
+  elevatorNodes: Map<number, OsmNode>;
   /** Incoming edge ids of node n are inEdges[inOffsets[n]..inOffsets[n+1]]. */
   inOffsets: Int32Array;
   inEdges: Int32Array;
@@ -346,9 +348,11 @@ export function buildGraph(data: Dataset): WalkGraph {
   }
   const barriers = new Uint8Array(n);
   const barrierNodes = new Map<number, OsmNode>();
+  const elevatorNodes = new Map<number, OsmNode>();
   for (let i = 0; i < n; i++) {
     const source = data.nodes[ids[i]];
     const tags = source?.tags;
+    if (tags?.highway === 'elevator') elevatorNodes.set(i, source);
     if (!tags || !(tags.kerb || tags.barrier || tags.wheelchair)) continue;
     barriers[i] = nodeBarrier(tags);
     if (barriers[i]) barrierNodes.set(i, source);
@@ -400,6 +404,7 @@ export function buildGraph(data: Dataset): WalkGraph {
     edgeMobility,
     nodeBarrier: barriers,
     barrierNodes,
+    elevatorNodes,
     inOffsets,
     inEdges,
     connected,

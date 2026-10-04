@@ -93,7 +93,10 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const mapCenter = useRef({ lat: 50.061, lon: 19.945 });
   const scroller = useRef<HTMLDivElement>(null);
   // Phones: the panel is a sheet over the map; typing a place opens it fully for the suggestions.
-  const sheet = useBottomSheet(scroller, searchActive ? 'full' : undefined);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const sheet = useBottomSheet(scroller, searchActive ? 'full' : undefined, tabsRef);
+  // Collapsed, the sheet shows the tabs: tapping one opens it.
+  const openSheet = () => sheet.snap === 'peek' && sheet.setSnap('half');
   const mobileView = sheet.snap === 'peek' ? 'map' : 'list';
   const setMobileView = (view: 'map' | 'list') => sheet.setSnap(view === 'map' ? 'peek' : 'half');
   const listScroll = useRef(0);
@@ -346,12 +349,12 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           <Tabs value={embed ? 'route' : tab} onValueChange={v => setTab(v as 'route' | 'explore')} className="gap-0">
           {!embed && !showDetail ? (
             <div className="px-4 pb-3">
-              <TabsList className="grid h-12! w-full grid-cols-2 gap-1 p-1" aria-label={t('tabs.label')}>
-                <TabsTrigger value="route" className="h-10! min-w-0 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
+              <TabsList ref={tabsRef} className="grid h-12! w-full grid-cols-2 gap-1 p-1" aria-label={t('tabs.label')}>
+                <TabsTrigger value="route" onClick={openSheet} className="h-10! min-w-0 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
                   <Navigation aria-hidden />
                   {t('tabs.route')}
                 </TabsTrigger>
-                <TabsTrigger value="explore" className="h-10! min-w-0 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
+                <TabsTrigger value="explore" onClick={openSheet} className="h-10! min-w-0 gap-1.5 text-base text-muted-foreground data-[state=active]:text-foreground">
                   <Compass aria-hidden />
                   {t('tabs.explore')}
                 </TabsTrigger>

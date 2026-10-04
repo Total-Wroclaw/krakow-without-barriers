@@ -6,21 +6,34 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Poin
 
 export type Snap = 'peek' | 'half' | 'full';
 const order: Snap[] = ['peek', 'half', 'full'];
-/** Handle plus the first row of the panel. */
+/** Collapsed height when the peek element can't be measured: handle plus the first row of the panel. */
 const PEEK = 112;
+/** Space kept under the peek element (e.g. the tabs) when collapsed. */
+const PEEK_GAP = 12;
 /** Map left visible above the fully open sheet, so it can be tapped or dragged back down. */
 const TOP_GAP = 64;
 /** How far ahead (ms) a flick carries the sheet when choosing where it settles. */
 const FLICK_MS = 180;
 
-export function useBottomSheet(scroller: RefObject<HTMLElement | null>, forced?: Snap) {
+/**
+ * `peekTo`: the element that must stay fully visible when the sheet is collapsed (the tabs), measured so the
+ * collapsed height follows font size and language instead of a fixed number.
+ */
+export function useBottomSheet(scroller: RefObject<HTMLElement | null>, forced?: Snap, peekTo?: RefObject<HTMLElement | null>) {
   const [snap, setSnap] = useState<Snap>('half');
+  const [peek, setPeek] = useState(PEEK);
   const [drag, setDrag] = useState<number | null>(null);
   const [viewport, setViewport] = useState<{ h: number; mobile: boolean } | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 1023.98px)');
-    const update = () => setViewport({ h: window.innerHeight, mobile: mq.matches });
+    const update = () => {
+      setViewport({ h: window.innerHeight, mobile: mq.matches });
+      const el = peekTo?.current;
+      const box = scroller.current;
+      // Distance from the sheet's top edge to the bottom of the element, ignoring the current scroll.
+      if (el && box) setPeek(Math.round(el.getBoundingClientRect().bottom - box.getBoundingClientRect().top + box.scrollTop + box.offsetTop + PEEK_GAP));
+    };
     update();
     window.addEventListener('resize', update);
     mq.addEventListener('change', update);
@@ -28,12 +41,12 @@ export function useBottomSheet(scroller: RefObject<HTMLElement | null>, forced?:
       window.removeEventListener('resize', update);
       mq.removeEventListener('change', update);
     };
-  }, []);
+  }, [peekTo, scroller]);
 
   const current = forced ?? snap;
   const heightOf = useCallback(
-    (s: Snap) => (viewport ? (s === 'peek' ? PEEK : s === 'half' ? Math.round(viewport.h * 0.5) : viewport.h - TOP_GAP) : 0),
-    [viewport],
+    (s: Snap) => (viewport ? (s === 'peek' ? peek : s === 'half' ? Math.round(viewport.h * 0.5) : viewport.h - TOP_GAP) : 0),
+    [viewport, peek],
   );
   const height = viewport?.mobile ? (drag ?? heightOf(current)) : null;
 

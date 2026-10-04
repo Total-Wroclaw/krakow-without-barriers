@@ -1,34 +1,88 @@
 1
-00:00:00,000 --> 00:00:08,000
-Każdy Krok: czy dam radę przejść tę trasę dzisiaj?
-Polski prototyp. Preferencje dotyczą barier, nie diagnozy.
+00:00:00,000 --> 00:00:04,000
+Każdy Krok — czy dam radę przejść tę trasę dzisiaj?
 
 2
-00:00:08,000 --> 00:00:20,000
-AI przygotowuje szkic dzisiejszych potrzeb. Użytkownik go zatwierdza.
-Trasy liczy deterministyczny graf OSM, nie model językowy.
+00:00:04,000 --> 00:00:09,316
+Anna chodzi dziś o kulach. Jedzie z Dworca Głównego na Wawel. Zaczyna od potrzeb, nie od diagnozy.
 
 3
-00:00:20,000 --> 00:00:40,000
-Kraków: dojścia piesze + planowy rozkład tramwajów i autobusów ZTP.
-Mapa i równoważna lista. Ortofotomapa GUGiK nie jest obrazem na żywo.
+00:00:09,316 --> 00:00:18,310
+Opisuje to własnymi słowami. AI zamienia opis na ustawienia, które widać i można zmienić.
 
 4
-00:00:40,000 --> 00:01:04,000
-Wawel: około 409 m bez schodów oznaczonych w grafie
-lub 378 m z jednym odcinkiem schodów. Dystans z geometrii OSM.
+00:00:18,310 --> 00:00:23,028
+Schody w dół bolą, w górę da radę: kierunek schodów to osobne ustawienie. Anna poprawia je jednym dotknięciem.
 
 5
-00:01:04,000 --> 00:01:20,000
-Brak danych nie oznacza dostępności.
-Źródło, data pozyskania i nieznana weryfikacja pozostają widoczne.
+00:00:23,028 --> 00:00:31,275
+Warianty tramwajem i pieszo. Pasek pokazuje, gdzie są schody (tu: w górę), ławki i przerwy co 10 minut.
 
 6
-00:01:20,000 --> 00:01:32,000
-Zdjęcie w tej demonstracji jest ilustracją testową.
-Nie przedstawia rzeczywistej obserwacji terenowej w Krakowie.
+00:00:31,275 --> 00:00:37,400
+Krok po kroku: przystanek, tramwaj 76, dojście. Toalety przystosowane i ławka na odpoczynek po 10 minutach.
 
 7
-00:01:32,000 --> 00:01:51,000
-AI tworzy szkic. Użytkownik poprawia opis i potwierdza treść.
-Zapis jest trwały, a zgłoszenie nadal niezweryfikowane.
+00:00:37,400 --> 00:00:45,571
+Każdy fakt ma źródło i daty: OpenStreetMap, pobrano, ostatnia edycja, brak potwierdzenia na miejscu.
+
+8
+00:00:45,571 --> 00:00:53,998
+Droga powrotna: te same schody są teraz w dół. Wariant z nimi jest oznaczony jako niepasujący do dzisiaj.
+
+9
+00:00:53,998 --> 00:01:03,014
+Odkrywaj: ok. 3 080 miejsc z OSM, wykaz budynków Urzędu Miasta i deklaracje właścicieli.
+
+10
+00:01:03,014 --> 00:01:12,719
+Najpierw cztery kluczowe fakty. Wejścia się różnią, więc piszemy „nie przy każdym wejściu”. Parking: brak danych.
+
+11
+00:01:12,719 --> 00:01:20,811
+Pochodzenie: Urząd Miasta i OpenStreetMap, z datą pobrania, datą edycji i informacją, że nikt nie potwierdził tego na miejscu.
+
+12
+00:01:20,811 --> 00:01:25,834
+Brak informacji zostaje brakiem: Filharmonia nie ma w źródłach danych o wejściu, toalecie ani windzie. Nie zgadujemy.
+
+13
+00:01:25,834 --> 00:01:31,454
+Okolica z lotu ptaka: ortofotomapa GUGiK z punktami z OSM: wejścia, przystanki, schody, parkingi.
+
+14
+00:01:31,454 --> 00:01:38,568
+AI podpowiada, jak dojść i wejść, na podstawie danych. Gdy wejście nie ma danych w OSM, mówi to wprost.
+
+15
+00:01:38,568 --> 00:01:43,612
+Obserwacje ze zdjęcia są sprawdzane na zbliżeniach. Mediana błędu położenia 1,7–2,3 m (12 miejsc).
+
+16
+00:01:43,612 --> 00:01:46,230
+Coś się zmieniło? Jedno zdjęcie wystarczy. Tu zdjęcie testowe.
+
+17
+00:01:46,230 --> 00:01:54,344
+Przed pierwszym zdjęciem krótko: co trafia do AI, co będzie publiczne, jak poprawić lub usunąć.
+
+18
+00:01:54,344 --> 00:02:04,569
+AI opisuje zdjęcie, usuwa metadane i zapisuje zgłoszenie jako niezweryfikowane. Autor może je poprawić lub usunąć.
+
+19
+00:02:04,569 --> 00:02:10,877
+Hotel, muzeum albo organizator wydarzenia osadza widżet „Jak do nas dotrzeć bez barier” jedną linijką kodu.
+
+20
+00:02:10,877 --> 00:02:15,382
+Gość widzi trasę dopasowaną do swoich potrzeb, a obiekt nie musi utrzymywać własnej mapy.
+
+21
+00:02:15,382 --> 00:02:21,944
+Panel miasta: zgłoszenia z filtrami, statusem, odpowiedzią i eksportem CSV. Tu przykładowe dane testowe.
+
+22
+00:02:21,944 --> 00:02:27,944
+Każdy Krok: potrzeby na dziś, konkretne bariery ze źródłem i datą, braki pokazane wprost.
+

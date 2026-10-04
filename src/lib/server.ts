@@ -29,7 +29,7 @@ export async function photoBytes(data:string){
  return sharp(bytes,{limitInputPixels:25_000_000}).rotate().resize({width:1400,height:1400,fit:'inside',withoutEnlargement:true}).jpeg({quality:82}).toBuffer();
 }
 /** Reports attach to an OSM way/node id or to a map point whose id matches its coordinates. */
-export function validLocation(locationId:string,location?:{lat:number;lon:number}){
+function validLocation(locationId:string,location?:{lat:number;lon:number}){
  if(/^(way|node):\d{1,15}$/.test(locationId))return true;
  return !!location&&locationId===`point:${location.lat}:${location.lon}`;
 }

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 
 export type Point = { lat: number; lon: number };
 
-export function pinStyle(pin: AerialPin) {
+function pinStyle(pin: AerialPin) {
   switch (pin.kind) {
     case 'entrance':
       return cn('rounded-md', pin.wheelchair === 'yes' || pin.wheelchair === 'limited' ? 'bg-rest' : pin.wheelchair === 'no' ? 'bg-barrier' : 'bg-ink');

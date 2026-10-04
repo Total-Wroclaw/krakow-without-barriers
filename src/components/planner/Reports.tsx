@@ -49,7 +49,7 @@ export function rememberToken(id: string, token: unknown) {
   } catch { return false; }
 }
 
-export function reportToken(id: string): string | null {
+function reportToken(id: string): string | null {
   try {
     return JSON.parse(localStorage.getItem(TOKENS_KEY) ?? '{}')[id] ?? null;
   } catch {

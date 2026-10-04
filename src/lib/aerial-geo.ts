@@ -20,7 +20,7 @@ export function roundPoint(p: Point): Point {
   return { lat: Math.round(p.lat * 1e5) / 1e5, lon: Math.round(p.lon * 1e5) / 1e5 };
 }
 
-export function mercator({ lat, lon }: Point) {
+function mercator({ lat, lon }: Point) {
   return { x: (lon * R) / 180, y: (Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) * R) / Math.PI };
 }
 
@@ -77,7 +77,7 @@ export function inFrame(pos: { x: number; y: number }, margin = 0.02) {
   return pos.x >= margin && pos.x <= 1 - margin && pos.y >= margin && pos.y <= 1 - margin;
 }
 
-export const compassPoints = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const;
+const compassPoints = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const;
 export type Compass = (typeof compassPoints)[number];
 
 /** Eight-point compass direction from `from` to `to`. */

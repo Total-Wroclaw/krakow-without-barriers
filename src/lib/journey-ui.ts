@@ -13,7 +13,7 @@ function haversine(a: [number, number], b: [number, number]) {
 }
 
 /** Fraction (0..1) along a line where a point lies closest to a vertex. */
-export function fractionAlong(geometry: [number, number][], lat: number, lon: number) {
+function fractionAlong(geometry: [number, number][], lat: number, lon: number) {
   if (geometry.length < 2) return 0;
   let best = 0;
   let bestDistance = Infinity;
@@ -34,12 +34,12 @@ export function fractionAlong(geometry: [number, number][], lat: number, lon: nu
   return total ? before / total : 0;
 }
 
-export function legSeconds(leg: Leg) {
+function legSeconds(leg: Leg) {
   return leg.type === 'ride' ? leg.arrival - leg.departure : leg.seconds;
 }
 
-export type StripSegment = { leg: Leg; start: number; length: number };
-export type StripMark = { fact: CityFact; at: number };
+type StripSegment = { leg: Leg; start: number; length: number };
+type StripMark = { fact: CityFact; at: number };
 
 /** Proportional segments (by time) and fact marks for the barrier strip. */
 export function strip(option: JourneyOption) {
@@ -66,7 +66,7 @@ export function strip(option: JourneyOption) {
 type T = (key: MessageKey, vars?: Record<string, string | number>) => string;
 type TP = (key: MessageKey, n: number, vars?: Record<string, string | number>) => string;
 
-export function stairLabel(fact: CityFact, t: T, tp?: TP) {
+function stairLabel(fact: CityFact, t: T, tp?: TP) {
   const dir = t(fact.direction === 'down' ? 'fact.dirDown' : fact.direction === 'up' ? 'fact.dirUp' : 'fact.dirUnknown');
   const count = Number(fact.tags.step_count);
   const steps = Number.isInteger(count) && count > 0 ? (tp ? tp('fact.stepsN', count) : t('fact.stepsN', { n: count })) : null;
@@ -86,7 +86,7 @@ export function factTitle(fact: CityFact, t: T, tp?: TP) {
   return fact.title;
 }
 
-export function walkLegs(option: JourneyOption) {
+function walkLegs(option: JourneyOption) {
   return option.legs.filter((l): l is Extract<Leg, { type: 'walk' }> => l.type === 'walk');
 }
 

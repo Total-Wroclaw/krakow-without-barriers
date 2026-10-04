@@ -30,7 +30,7 @@ const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/�
 
 const warsawDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' });
 /** Calendar day (YYYY-MM-DD) in Kraków time. */
-export const reportDay = (r: Report) => warsawDay.format(new Date(r.obtainedAt));
+const reportDay = (r: Report) => warsawDay.format(new Date(r.obtainedAt));
 
 /** from/to compare with the Kraków calendar day of obtainedAt. */
 export function filterReports(reports: Report[], f: CityFilter) {

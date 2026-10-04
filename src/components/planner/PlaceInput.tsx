@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 const RECENT_KEY = 'krok-recent-places-v1';
 
-export function readRecent(): PlaceSuggestion[] {
+function readRecent(): PlaceSuggestion[] {
   try {
     return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]').slice(0, 5);
   } catch {
@@ -22,7 +22,7 @@ export function readRecent(): PlaceSuggestion[] {
   }
 }
 
-export function rememberPlace(place: PlaceSuggestion) {
+function rememberPlace(place: PlaceSuggestion) {
   if (place.kind === 'current') return;
   try {
     const next = [place, ...readRecent().filter(p => p.id !== place.id)].slice(0, 5);
@@ -32,7 +32,7 @@ export function rememberPlace(place: PlaceSuggestion) {
 
 const kindIcon = { address: Building2, street: Route, poi: MapPin, stop: TramFront, current: LocateFixed };
 
-export async function locateMe(t: (key: MessageKey, vars?: Record<string, string>) => string): Promise<PlaceSuggestion> {
+async function locateMe(t: (key: MessageKey, vars?: Record<string, string>) => string): Promise<PlaceSuggestion> {
   if (!navigator.geolocation) throw new Error(t('search.noGeo'));
   const position = await new Promise<GeolocationPosition>((resolve, reject) =>
     navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }),

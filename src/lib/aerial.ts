@@ -28,7 +28,7 @@ const FAR_STOP_RADIUS = 500;
 /** Same stop name closer than this is one physical platform. */
 const SAME_PLATFORM = 15;
 /** Earlier user reports within this distance are given to the model. */
-export const REPORT_RADIUS = 150;
+const REPORT_RADIUS = 150;
 
 export type OverlayInputs = {
   /** Entrance ids of the place's own building. Only these become pins: a nearby door may be a neighbour's. */
@@ -109,7 +109,7 @@ const roughSurfaces = new Set(['sett', 'cobblestone', 'unhewn_cobblestone', 'cob
 const roughWay = (tags: Record<string, string>) => roughSurfaces.has(tags.surface) || ['bad', 'very_bad', 'horrible', 'very_horrible', 'impassable'].includes(tags.smoothness);
 
 /** Stairs and rough pedestrian surfaces around the place from the walking graph, as polylines. */
-export function graphLines(g: WalkGraph, place: Point, radius = OVERLAY_RADIUS): AerialLine[] {
+function graphLines(g: WalkGraph, place: Point, radius = OVERLAY_RADIUS): AerialLine[] {
   const ways = new Map<number, number>();
   for (const node of g.nodeGrid.within(place, radius)) {
     for (let e = g.offsets[node]; e < g.offsets[node + 1]; e++) {
@@ -143,7 +143,7 @@ export function graphLines(g: WalkGraph, place: Point, radius = OVERLAY_RADIUS):
 }
 
 /** Raised kerbs, single steps and benches near the place. */
-export function graphMarkers(g: WalkGraph, place: Point, radius = OVERLAY_RADIUS): AerialMarker[] {
+function graphMarkers(g: WalkGraph, place: Point, radius = OVERLAY_RADIUS): AerialMarker[] {
   const markers: AerialMarker[] = [];
   for (const node of g.nodeGrid.within(place, radius)) {
     const tags = g.barrierNodes.get(node)?.tags;
@@ -300,7 +300,7 @@ const personal = [/[\w.+-]+@[\w-]+\.[\w.]+/g, /(?:\+?\d[\s-]?){7,}/g];
 /** Free text from a report without e-mails or phone numbers, shortened. */
 const scrub = (text: string, max = 180) => personal.reduce((t, re) => t.replace(re, '[…]'), text).replace(/\s+/g, ' ').trim().slice(0, max);
 
-export type ReportSummary = { kind: string; type: 'barrier' | 'blocked'; text: string; date: string; cityStatus: string; distance: number };
+type ReportSummary = { kind: string; type: 'barrier' | 'blocked'; text: string; date: string; cityStatus: string; distance: number };
 
 /** Earlier user reports near the place, newest first: kind, short description, date, city status. No ids, photos or names. */
 export function reportsNear(place: Point, reports: Report[], radius = REPORT_RADIUS): ReportSummary[] {
@@ -413,7 +413,7 @@ export type RawAnalysis = {
   recommendation: { entrance: number | null; approachFrom: number | null; why?: string; steps: string[]; avoid: string[]; ask: string[] };
   today: string[];
 };
-export type RawObservation = { x: number; y: number; kind: string; label: string };
+type RawObservation = { x: number; y: number; kind: string; label: string };
 
 /** Accessibility explanations are composed from the selected map record, never model prose or the photo. */
 const entranceEvidence: Record<Locale, Record<Wheelchair, (n: number) => string>> = {

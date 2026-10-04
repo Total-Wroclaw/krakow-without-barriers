@@ -28,7 +28,7 @@ export function LineBadge({ leg, className }: { leg: RideLeg; className?: string
   );
 }
 
-export function DriveBadge({ leg, className }: { leg: DriveLeg; className?: string }) {
+function DriveBadge({ leg, className }: { leg: DriveLeg; className?: string }) {
   const { t, locale } = useI18n();
   const Icon = leg.mode === 'taxi' ? CarTaxiFront : CarFront;
   return (
@@ -41,7 +41,7 @@ export function DriveBadge({ leg, className }: { leg: DriveLeg; className?: stri
 }
 
 /** Time-proportional bar of the trip with the barriers that matter today. */
-export function BarrierStrip({ option }: { option: JourneyOption }) {
+function BarrierStrip({ option }: { option: JourneyOption }) {
   const { segments, marks } = strip(option);
   return (
     <div className="relative h-5" aria-hidden="true">
@@ -82,7 +82,7 @@ export function BarrierStrip({ option }: { option: JourneyOption }) {
   );
 }
 
-export function useStairsText() {
+function useStairsText() {
   const { t } = useI18n();
   return (option: JourneyOption) => {
     const parts = [];

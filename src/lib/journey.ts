@@ -15,7 +15,7 @@ import { onWheels, stairsPassable, type WalkGraph } from './routing';
 import type { CityPlace } from './city-types';
 import type { JourneyOption, JourneyResult, TransportMode } from './journey-types';
 
-export const transportModes = ['walk', 'transit', 'taxi', 'car'] as const satisfies readonly TransportMode[];
+const transportModes = ['walk', 'transit', 'taxi', 'car'] as const satisfies readonly TransportMode[];
 
 export const journeyRequestSchema = z.object({
   from: placeSchema,
@@ -27,8 +27,6 @@ export const journeyRequestSchema = z.object({
   transport: z.enum(transportModes).default('transit'),
   locale: z.enum(locales).default(defaultLocale),
 });
-
-export type JourneyRequest = z.input<typeof journeyRequestSchema>;
 
 function message(error: unknown, fallback: string) {
   return error instanceof OffNetworkError || error instanceof DriveError ? error.message : fallback;

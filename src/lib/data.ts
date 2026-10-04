@@ -12,22 +12,6 @@ export type Dataset = {
   context: { kind: string; points: number[][]; holes?: number[][][] }[];
 };
 
-export const surfaceNames: Record<string, string> = {
-  paving_stones: 'kostka brukowa',
-  asphalt: 'asfalt',
-  sett: 'bruk kamienny',
-  concrete: 'beton',
-  gravel: 'żwir',
-  compacted: 'nawierzchnia utwardzona',
-};
-
-export const statusNames = {
-  osm: 'Dane mapowe · bez weryfikacji terenowej',
-  source: 'Informacja ze źródła · bez potwierdzenia terenowego',
-  unverified: 'Niezweryfikowane zgłoszenie',
-  example: 'Dane przykładowe',
-};
-
 export function handrail(tags: Record<string, string>): 'yes' | 'no' | 'unknown' {
   const keys = ['handrail', 'handrail:left', 'handrail:right', 'handrail:center', 'handrail:both'];
   if (keys.some(k => tags[k] === 'yes')) return 'yes';

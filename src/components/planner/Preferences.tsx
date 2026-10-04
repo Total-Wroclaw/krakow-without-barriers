@@ -86,7 +86,7 @@ export function DistanceControl({ preferences, onChange }: { preferences: Prefer
 
 /** Compact summary of today's needs, opens the editor. */
 export function PreferencesBar({ preferences, onOpen }: { preferences: Preferences; onOpen: () => void }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const mode = stairMode(preferences);
   const chips = [
     preferences.mobility !== 'walk' ? t(`prefs.mobility.${preferences.mobility}`) : null,

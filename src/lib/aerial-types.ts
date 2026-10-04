@@ -83,7 +83,7 @@ export type Weather = { temperature: number; precipitation: number; wind: number
  * How to get in, decided for today's needs. Pins are referenced by number and always exist with the right kind
  * (validated); sentences may reference pins as [n].
  */
-export type AerialRecommendation = {
+type AerialRecommendation = {
   /** The entrance to use (an entrance pin), or null when no mapped entrance can be recommended. */
   entrance: number | null;
   /** Where to arrive from (a stop or parking pin), or null. */

@@ -221,7 +221,7 @@ function crutchSurfaceKind(bits: number): BarrierKind | null {
 /** Stretches shorter than this are not shown unless they block a wheelchair. */
 const MIN_SURFACE = 10;
 
-export type WalkLegOptions = {
+type WalkLegOptions = {
   departure: number | null;
   /** True when the leg ends at the journey's final destination (entrances are shown). */
   destination: boolean;
@@ -492,7 +492,7 @@ export function straightWalk(from: LegPoint, to: LegPoint, departure: number | n
   };
 }
 
-export function legDuration(leg: Leg) {
+function legDuration(leg: Leg) {
   return leg.type === 'ride' ? leg.arrival - leg.departure : leg.seconds;
 }
 

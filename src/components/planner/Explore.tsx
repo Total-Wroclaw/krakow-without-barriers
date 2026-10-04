@@ -18,7 +18,7 @@ export const categories: ObjectCategory[] = ['museum', 'landmark', 'culture', 'o
 /** 'reports' is a special category: user reports instead of places, never part of "all". */
 type Category = ObjectCategory | 'all' | 'reports';
 
-export const valueStyle: Record<FeatureValue, { icon: typeof Check; className: string }> = {
+const valueStyle: Record<FeatureValue, { icon: typeof Check; className: string }> = {
   yes: { icon: Check, className: 'bg-rest-soft text-rest' },
   limited: { icon: Minus, className: 'bg-barrier-soft text-barrier' },
   no: { icon: X, className: 'bg-barrier-soft text-barrier' },
@@ -27,14 +27,14 @@ export const valueStyle: Record<FeatureValue, { icon: typeof Check; className: s
 
 /** For these keys "yes" describes a barrier (e.g. steps at the entrance), so colours invert. */
 const barrierKeys = new Set(['entrance_steps', 'difficult_building']);
-export function featureStyle(feature: AccessFeature) {
+function featureStyle(feature: AccessFeature) {
   if (barrierKeys.has(feature.key) && (feature.value === 'yes' || feature.value === 'no')) {
     return feature.value === 'yes' ? { icon: TriangleAlert, className: valueStyle.no.className } : { icon: Check, className: valueStyle.yes.className };
   }
   return valueStyle[feature.value];
 }
 
-export function FeatureChip({ feature }: { feature: AccessFeature }) {
+function FeatureChip({ feature }: { feature: AccessFeature }) {
   const { t } = useI18n();
   const { icon: Icon, className } = featureStyle(feature);
   return (

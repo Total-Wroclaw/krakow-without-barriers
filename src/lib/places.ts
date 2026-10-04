@@ -255,7 +255,7 @@ function match(doc: Doc, tokens: string[], soft: boolean[] = []): Match | null {
  * Folded query tokens. "ul." is dropped and "os."/"al."/"pl." expanded (soft) anywhere in the query, also mid-query
  * ("dluga ul. 10"); a bare "os"/"al"/"pl"/"ul" as the last token without a dot may still be a word being typed.
  */
-export function queryTokens(query: string): { tokens: string[]; soft: boolean[] } {
+function queryTokens(query: string): { tokens: string[]; soft: boolean[] } {
   const raw = fold(query).split(/(?=[^\p{L}\p{N}])|(?<=[^\p{L}\p{N}])/u);
   const parts: { word: string; dot: boolean }[] = [];
   raw.forEach((piece, i) => {

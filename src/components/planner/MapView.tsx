@@ -81,7 +81,7 @@ function endpointElement(kind: 'start' | 'end', label: string) {
   return el;
 }
 
-export type PickRole = 'from' | 'to';
+type PickRole = 'from' | 'to';
 
 type Props = {
   options: JourneyOption[];

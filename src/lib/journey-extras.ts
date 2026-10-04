@@ -11,19 +11,19 @@ import type { AccessibleToilet } from './objects';
 import type { JourneyOption, WalkLeg } from './journey-types';
 
 /** Time added for each planned rest. */
-export const REST_SECONDS = 120;
+const REST_SECONDS = 120;
 /** A rest bench may be this far from the route. */
-export const REST_RADIUS = 60;
+const REST_RADIUS = 60;
 /** Benches are searched this share of the interval before and after each mark. */
-export const REST_WINDOW = 0.25;
+const REST_WINDOW = 0.25;
 /** At most this many "no bench" notes per option. */
 const MAX_REST_ISSUES = 3;
-export const TOILET_ROUTE_RADIUS = 150;
-export const TOILET_DESTINATION_RADIUS = 300;
-export const MAX_ROUTE_TOILETS = 3;
-export const MAX_DESTINATION_TOILETS = 2;
+const TOILET_ROUTE_RADIUS = 150;
+const TOILET_DESTINATION_RADIUS = 300;
+const MAX_ROUTE_TOILETS = 3;
+const MAX_DESTINATION_TOILETS = 2;
 /** Toilets along the route are at least this far apart (metres along the walk). */
-export const TOILET_SPACING = 400;
+const TOILET_SPACING = 400;
 const SAMPLE_STEP = 20;
 
 /** A point on a walking leg: `at` = metres walked since the start of the journey. */
@@ -62,7 +62,7 @@ function totalWalk(legs: JourneyOption['legs']) {
   return legs.reduce((s, l) => s + (l.type === 'walk' ? l.distance : 0), 0);
 }
 
-export type PlannedRest = { bench: OsmNode; leg: number; at: number; minutes: number };
+type PlannedRest = { bench: OsmNode; leg: number; at: number; minutes: number };
 
 /**
  * Choose a bench near every `restEvery`-minute mark of cumulative walking: within 60 m of the route,
@@ -70,7 +70,7 @@ export type PlannedRest = { bench: OsmNode; leg: number; at: number; minutes: nu
  * from the chosen bench. `capacity(leg)` limits rests on a leg (transfer walks only have so much slack).
  * Marks in the last quarter-interval of the walk are skipped (the destination is near).
  */
-export function planRests(g: WalkGraph, legs: JourneyOption['legs'], restEvery: number, capacity: (leg: number) => number = () => Infinity) {
+function planRests(g: WalkGraph, legs: JourneyOption['legs'], restEvery: number, capacity: (leg: number) => number = () => Infinity) {
   const rests: PlannedRest[] = [];
   const missing: number[] = [];
   if (!(restEvery > 0)) return { rests, missing };

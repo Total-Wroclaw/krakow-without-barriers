@@ -5,7 +5,7 @@ import type { FeatureKey, FeatureValue } from './explore-types';
 
 export const UMK_SOURCE_URL = 'https://www.krakow.pl/getHtml?dok_id=2848';
 
-export type CityFeature = { key: FeatureKey; value: FeatureValue; detail: string };
+type CityFeature = { key: FeatureKey; value: FeatureValue; detail: string };
 export type ParsedVenue = { name: string; address: string; adaptations: string[]; features: CityFeature[]; unmapped: string[] };
 export type CityVenue = ParsedVenue & {
   id: string;
@@ -22,7 +22,7 @@ export type CityVenuesFile = {
 };
 
 const ENTITIES: Record<string, string> = { nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', oacute: 'ó', Oacute: 'Ó', bdquo: '„', rdquo: '”', ldquo: '“', ndash: '–', mdash: '—', hellip: '…' };
-export function decodeEntities(text: string) {
+function decodeEntities(text: string) {
   return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (all, code: string) => {
     if (code[0] === '#') return String.fromCodePoint(code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10));
     return ENTITIES[code] ?? all;

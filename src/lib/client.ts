@@ -28,7 +28,7 @@ export async function requestJson(method: string, url: string, body?: unknown, t
   }
 }
 
-export class RequestError extends Error {
+class RequestError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
   }

@@ -12,7 +12,7 @@ import { gpsPoint, inKrakow } from './Reports';
 
 maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
-export type Preset = { key: string; label: string; place: CityPlace | (() => Promise<CityPlace | null>) };
+type Preset = { key: string; label: string; place: CityPlace | (() => Promise<CityPlace | null>) };
 
 /**
  * Confirm or correct where a report belongs: the map moves under a fixed centre pin, the nearest

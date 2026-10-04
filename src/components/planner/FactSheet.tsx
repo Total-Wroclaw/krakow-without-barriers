@@ -44,7 +44,7 @@ const surfaceKey: Record<string, MessageKey> = {
 };
 
 /** A user report about this fact that contradicts what the map says. */
-export function conflictingReports(fact: CityFact, reports: Report[]) {
+function conflictingReports(fact: CityFact, reports: Report[]) {
   const mapRail = handrail(fact.tags);
   return reports.filter(r => {
     if (r.locationId !== fact.id) return false;

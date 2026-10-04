@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Warsaw' });
 export const formatDate = (iso: string) => dateFormat.format(new Date(iso));
 
-export const statusClass: Record<CityStatus, string> = {
+const statusClass: Record<CityStatus, string> = {
   new: 'bg-primary text-primary-foreground',
   in_review: 'bg-barrier-soft text-barrier border-barrier/30',
   forwarded: 'bg-accent text-accent-foreground border-accent-foreground/20',

@@ -78,7 +78,7 @@ function parkingData(): ParkingData | null {
   return cached;
 }
 
-export function hasDisabledSpaces(p: Parking) {
+function hasDisabledSpaces(p: Parking) {
   return p.disabled === 'yes';
 }
 
@@ -119,8 +119,4 @@ export function parkingNear(point: Point, radius: number, options: { disabledOnl
   return parkingsNear(point, radius, options)
     .slice(0, options.limit ?? 50)
     .map(p => parkingInfo(p, options.locale, p.distance));
-}
-
-export function parkingAvailable() {
-  return parkingData() !== null;
 }

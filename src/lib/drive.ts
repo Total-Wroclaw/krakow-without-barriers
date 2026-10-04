@@ -17,7 +17,7 @@ import type { DriveLeg, JourneyOption, Leg, LegPoint, ParkingInfo } from './jour
 const ROAD_SNAP = 400;
 /** A car park further than this from any road node is not reachable by car in our data. */
 const PARKING_ROAD_SNAP = 200;
-export const PARKING_RADIUS = 600;
+const PARKING_RADIUS = 600;
 const PARKING_CANDIDATES = 12;
 const MAX_CAR_OPTIONS = 3;
 /** Car parks closer together than this count as the same choice. */
@@ -120,7 +120,7 @@ function timed(legs: (Leg | null)[], departure: number) {
   return { legs: result, arrival: clock };
 }
 
-export function taxiOption(c: Context, from: CityPlace, to: CityPlace, departure: number): JourneyOption {
+function taxiOption(c: Context, from: CityPlace, to: CityPlace, departure: number): JourneyOption {
   const m = serverMessages(c.locale);
   const startNode = kerbNode(c, from, false);
   const endNode = kerbNode(c, to, true);
@@ -173,7 +173,7 @@ function parkingChoices(c: Context, to: CityPlace, disabledOnly: boolean): Parki
   return chosen;
 }
 
-export function carOptions(c: Context, from: CityPlace, to: CityPlace, departure: number): JourneyOption[] {
+function carOptions(c: Context, from: CityPlace, to: CityPlace, departure: number): JourneyOption[] {
   const m = serverMessages(c.locale);
   const startNode = kerbNode(c, from, false);
   const origin = point(from);

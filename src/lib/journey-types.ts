@@ -131,7 +131,7 @@ export type JourneyResult = {
   errors: string[];
 };
 
-export type PlaceKind = 'address' | 'street' | 'poi' | 'stop' | 'current';
+type PlaceKind = 'address' | 'street' | 'poi' | 'stop' | 'current';
 
 export type PlaceSuggestion = CityPlace & {
   kind: PlaceKind;

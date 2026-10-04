@@ -131,9 +131,15 @@ async function fetchPage(r: Request, offset: number, locale: string, signal: Abo
   return data;
 }
 
+/** "All" by default; a link may preselect one (?category=museum). Explore only renders in the browser. */
+function initialCategory(): ObjectCategory | 'all' {
+  const asked = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('category');
+  return categories.find(c => c === asked) ?? 'all';
+}
+
 export function Explore({ center, viewport, selectedId, onResults, onSelect, onOwner }: Props) {
   const { t, tp, locale } = useI18n();
-  const [category, setCategory] = useState<ObjectCategory | 'all'>('museum');
+  const [category, setCategory] = useState<ObjectCategory | 'all'>(initialCategory);
   const [query, setQuery] = useState('');
   const [withData, setWithData] = useState(true);
   const q = query.trim().length >= 2 ? query.trim() : '';

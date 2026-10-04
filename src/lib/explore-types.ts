@@ -45,8 +45,10 @@ export type ObjectSource = {
   /** Last edit at the source (e.g. OSM edit time); not a field confirmation. */
   editedAt?: string | null;
   status: SourceStatus;
-  /** Free-text content of the source when it is not mapped to features (e.g. an unverified user report description). */
+  /** Free-text content of the source: an unverified user report's description, or the original wording of a list. */
   note?: string;
+  /** Set when the source describes one entrance of the building rather than the whole place. */
+  part?: 'entrance';
 };
 
 export type PartnerInfo = {

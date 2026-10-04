@@ -238,21 +238,132 @@ test('the bbox parameter accepts "west,south,east,north" and rejects malformed o
     assert.equal(bboxParamSchema.safeParse(bad).success, false, bad);
 });
 
-test('within a map area results are ranked by distance from the map centre; shown distances stay from the user', () => {
+test('a text search within a map area ranks by relevance, then distance from the map centre; shown distances stay from the user', () => {
   const osm = { obtainedAt: OBTAINED, sourceDate: null, objects: [
     osmRec('node:1', { n: 'Muzeum Rynek', la: 50.0617, lo: 19.9373, t: { wheelchair: 'yes', 'toilets:wheelchair': 'yes', ramp: 'yes' } }),
     osmRec('node:2', { n: 'Muzeum Kazimierz', la: 50.0513, lo: 19.9449, t: { wheelchair: 'limited' } }),
-    osmRec('node:3', { n: 'Muzeum Bez Danych', la: 50.0514, lo: 19.945, t: {} }),
+    osmRec('node:3', { n: 'Galeria Muzeum', la: 50.0514, lo: 19.945, t: {} }),
   ] };
   const cat = buildCatalog({ osm });
   const area: [number, number, number, number] = [19.9, 50.04, 19.98, 50.08];
   const kazimierz = { lat: 50.0512, lon: 19.9448 };
-  const page = objects.queryCatalogPage(cat, { category: 'museum', bbox: area, center: kazimierz, lat: 50.0617, lon: 19.9373 });
-  // Nearest to the centre first, but places with no facts after those with facts.
-  assert.deepEqual(page.objects.map(o => o.name), ['Muzeum Kazimierz', 'Muzeum Rynek', 'Muzeum Bez Danych']);
-  assert.ok(page.objects[1].distance! < 20, 'distance is measured from lat/lon (the user), not the map centre');
+  const page = objects.queryCatalogPage(cat, { q: 'muzeum', bbox: area, center: kazimierz, lat: 50.0617, lon: 19.9373 });
+  // All match the word; exact name-word matches score the same, so the nearest to the centre leads.
+  assert.deepEqual(page.objects.map(o => o.name), ['Muzeum Kazimierz', 'Galeria Muzeum', 'Muzeum Rynek']);
+  assert.ok(page.objects[2].distance! < 20, 'distance is measured from lat/lon (the user), not the map centre');
   const { centerParamSchema } = objects;
   assert.deepEqual(centerParamSchema.parse('50.06,19.94'), { lat: 50.06, lon: 19.94 });
   for (const bad of ['50.06', '50.06,19.94,1', '91,19.94', 'x,y', ''])
     assert.equal(centerParamSchema.safeParse(bad).success, false, bad);
+});
+
+// A dense cluster in the middle of the area (many places with lots of facts) and single places spread around it.
+function clusteredCatalog(partners: PartnerRecord[] = []) {
+  const recs: OsmRecord[] = [];
+  for (let i = 0; i < 60; i++) recs.push(osmRec(`node:${100 + i}`, { n: `Centrum ${i}`, la: 50.06 + (i % 8) * 0.0001, lo: 19.94 + Math.floor(i / 8) * 0.0001, t: { wheelchair: 'yes', 'toilets:wheelchair': 'yes', ramp: 'yes' } }));
+  let id = 500;
+  for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) recs.push(osmRec(`node:${id++}`, { n: `Kraniec ${x}-${y}`, la: 50.02 + y * 0.0133 + 0.003, lo: 19.88 + x * 0.02 + 0.005, t: { wheelchair: 'limited' } }));
+  for (let i = 0; i < 10; i++) recs.push(osmRec(`node:${900 + i}`, { n: `Bez danych ${i}`, la: 50.03 + i * 0.005, lo: 19.9 + i * 0.01, t: {} }));
+  return buildCatalog({ osm: { obtainedAt: OBTAINED, sourceDate: null, objects: recs }, partners });
+}
+const AREA: [number, number, number, number] = [19.88, 50.02, 20.0, 50.1];
+const cellsOf = (list: { lat: number; lon: number }[], bbox: [number, number, number, number], n = 6) =>
+  new Set(list.map(o => `${Math.min(n - 1, Math.floor(((o.lon - bbox[0]) / (bbox[2] - bbox[0])) * n))},${Math.min(n - 1, Math.floor(((o.lat - bbox[1]) / (bbox[3] - bbox[1])) * n))}`)).size;
+
+test('browsing a map area spreads the first page over the whole area instead of the densest spot', () => {
+  const cat = clusteredCatalog();
+  const page = objects.queryCatalogPage(cat, { bbox: AREA, limit: 20, center: { lat: 50.06, lon: 19.94 } });
+  // Ranked by facts alone the first 20 would all be in the central cluster (1 cell of 36).
+  assert.ok(cellsOf(page.objects, AREA) >= 18, `first page covers ${cellsOf(page.objects, AREA)} of 36 cells`);
+  assert.ok(page.objects.some(o => o.name.startsWith('Centrum')), 'the dense spot is still represented');
+  // The best place of the cluster (most facts) is the one shown for it.
+  assert.equal(page.objects.filter(o => o.name.startsWith('Centrum')).length <= 3, true);
+  // Places with facts come before places without any, even when those would fill empty cells.
+  const all = [...objects.queryCatalogPage(cat, { bbox: AREA, limit: 100 }).objects, ...objects.queryCatalogPage(cat, { bbox: AREA, limit: 100, offset: 100 }).objects];
+  assert.equal(all.length, 106);
+  assert.equal(all.findIndex(o => o.knownCount === 0), 96);
+  // Zoomed in on the cluster, the same rule lists the cluster itself, spread over that smaller area.
+  const zoomed: [number, number, number, number] = [19.9398, 50.0598, 19.9409, 50.0609];
+  const near = objects.queryCatalogPage(cat, { bbox: zoomed, limit: 20 });
+  assert.equal(near.total, 60);
+  const possible = cellsOf(objects.queryCatalogPage(cat, { bbox: zoomed, limit: 100 }).objects, zoomed);
+  assert.ok(cellsOf(near.objects, zoomed) >= possible * 0.7, `zoomed first page covers ${cellsOf(near.objects, zoomed)} of ${possible} occupied cells`);
+});
+
+test('spread paging is stable: every place exactly once, the same order on every request, promoted partners first', () => {
+  const promotedPartner: PartnerRecord = { id: 'p1', name: 'Partner w rogu', category: 'hotel', lat: 50.09, lon: 19.99, contactEmail: 'a@b.pl', features: [{ key: 'lift', value: 'yes' }], promote: true, plan: 'partner', obtainedAt: OBTAINED };
+  const withPartner = clusteredCatalog([promotedPartner]);
+  const ids: string[] = [];
+  for (let offset: number | null = 0; offset !== null;) {
+    const page = objects.queryCatalogPage(withPartner, { bbox: AREA, limit: 7, offset });
+    ids.push(...page.objects.map(o => o.id));
+    offset = page.nextOffset;
+  }
+  assert.equal(ids.length, 107);
+  assert.equal(new Set(ids).size, 107, 'no duplicates between pages');
+  assert.equal(ids[0], 'partner-p1');
+  const again = objects.queryCatalogPage(withPartner, { bbox: AREA, limit: 100 }).objects.map(o => o.id);
+  assert.deepEqual(again, ids.slice(0, 100), 'paging gives the same order as one big page');
+  // The map centre does not change the browsing order; only the area does.
+  const moved = objects.queryCatalogPage(withPartner, { bbox: AREA, limit: 100, center: { lat: 50.03, lon: 19.89 } }).objects.map(o => o.id);
+  assert.deepEqual(moved, again);
+});
+
+test('spreadOrder: picks one place per tile first, keeps rank order within a pass, keeps every item', () => {
+  const { spreadOrder } = objects;
+  const items = [
+    { id: 'a1', lat: 50.06, lon: 19.94 }, { id: 'a2', lat: 50.0601, lon: 19.9401 }, { id: 'a3', lat: 50.0602, lon: 19.9402 },
+    { id: 'b', lat: 50.095, lon: 19.995 }, { id: 'c', lat: 50.025, lon: 19.885 },
+  ];
+  const order = spreadOrder(items, AREA).map(i => i.id);
+  assert.equal(order.length, 5);
+  assert.deepEqual(order.slice(0, 3).sort(), ['a1', 'b', 'c'], 'one per area before the second of the cluster');
+  assert.ok(order.indexOf('a1') < order.indexOf('a2') && order.indexOf('a1') < order.indexOf('a3'), 'the best of the cluster stands for it');
+  assert.deepEqual(spreadOrder(items, AREA), spreadOrder(items, AREA));
+  assert.deepEqual(spreadOrder(items.slice(0, 2), AREA), items.slice(0, 2));
+});
+
+test('place card facts: one line per feature, conflicts and split entrances stay visible, nothing is filled in', async () => {
+  const { groupFacts, groupSources, keyFactKeys } = await import('../src/lib/place-facts');
+  // Conflict between whole-place sources (city says step-free, the map says no).
+  const conflictCat = buildCatalog({
+    osm: { obtainedAt: OBTAINED, sourceDate: null, objects: [osmRec('way:1', { c: 'office', k: 'office=government', n: 'Urząd Miasta Krakowa - Wydział Geodezji', t: { wheelchair: 'no' } })] },
+    city: city([venue('wydzial-geodezji', 'Wydział Geodezji', 50.0602, 19.9401, ['wejście do budynku dostosowane do potrzeb osób niepełnosprawnych poruszających się na wózkach', 'winda'])]),
+  });
+  const merged = getFromCatalog(conflictCat, 'osm-way-1')!;
+  const entrance = groupFacts(merged.features, merged.sources).find(g => g.key === 'step_free_entrance')!;
+  assert.equal(entrance.conflict, true);
+  assert.equal(entrance.value, 'yes', 'the city list ranks first, the conflict flag stays');
+  assert.equal(entrance.tone, 'warn');
+  assert.deepEqual(entrance.statements.map(s => s.value), ['yes', 'no'], 'both claims are kept');
+  // The list's original wording moves to its source instead of a description that repeats the facts.
+  assert.equal(merged.description, undefined);
+  assert.match(merged.sources.find(s => s.kind === 'city')!.note!, /^Wydział Geodezji: wejście do budynku/);
+
+  // Entrances: the whole-place tag leads; differing entrances mark the fact as mixed, identical details are counted.
+  const doors = buildCatalog({ osm: { obtainedAt: OBTAINED, sourceDate: null, objects: [osmRec('way:5', { t: { wheelchair: 'yes' }, e: [
+    { id: 'node:51', d: 0, ts: '2024-01-01T00:00:00Z', t: { entrance: 'main', wheelchair: 'no', automatic_door: 'no' } },
+    { id: 'node:52', d: 0, ts: '2025-06-01T00:00:00Z', t: { entrance: 'yes', automatic_door: 'no' } },
+    { id: 'node:53', d: 0, ts: null, t: { entrance: 'yes', automatic_door: 'no' } },
+  ] })] } });
+  const o = getFromCatalog(doors, 'osm-way-5')!;
+  assert.deepEqual(o.sources.map(s => s.part ?? 'place'), ['place', 'entrance', 'entrance', 'entrance']);
+  const groups = groupFacts(o.features, o.sources);
+  assert.deepEqual(groups.map(g => g.key), ['step_free_entrance', 'automatic_door'], 'one line per feature');
+  const step = groups[0];
+  assert.equal(step.value, 'yes');
+  assert.equal(step.mixed, true);
+  assert.equal(step.byEntrance, false);
+  const auto = groups[1];
+  assert.equal(auto.byEntrance, true);
+  assert.equal(auto.mixed, false);
+  assert.equal(auto.tone, 'bad');
+  assert.deepEqual(auto.statements[0].details, [{ text: 'wejście główne', count: 1 }, { text: 'wejście', count: 2 }]);
+  // Missing key facts are absent, never guessed.
+  assert.deepEqual(keyFactKeys.filter(k => !groups.some(g => g.key === k)), ['accessible_toilet', 'lift', 'disabled_parking']);
+  // Provenance: map data is one entry (place + entrances, latest edit), not one per entrance.
+  const sources = groupSources(o.sources);
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].entrances.length, 3);
+  assert.equal(sources[0].editedAt, '2025-06-01T00:00:00Z');
 });

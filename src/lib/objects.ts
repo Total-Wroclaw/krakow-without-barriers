@@ -215,21 +215,20 @@ function attachCity(cat: Catalog, file: CityVenuesFile) {
   for (const v of file.venues) {
     if (v.lat === null || v.lon === null) continue; // Unresolved address: listed in the data file, never placed on a guessed point.
     const sid = `city:${v.id}`;
-    const source = { id: sid, kind: 'city' as const, label: LABELS.city.pl, labelKey: 'city' as const, url: file.source.url, obtainedAt: file.source.obtainedAt, confirmedAt: null, editedAt: null, status: 'city' as const };
+    // The list's original wording stays with its source; the facts carry each phrase as their detail.
+    const source = { id: sid, kind: 'city' as const, label: LABELS.city.pl, labelKey: 'city' as const, url: file.source.url, obtainedAt: file.source.obtainedAt, confirmedAt: null, editedAt: null, status: 'city' as const, note: `${v.name}: ${v.adaptations.join('; ')}`.slice(0, 300) };
     const features = v.features.map(f => ({ ...f, sourceId: sid }));
-    const desc = `${v.name}: ${v.adaptations.join('; ')}`;
     // Same place: OSM object within 60 m with a similar name, or an OSM office at the same address within 150 m.
     const match = nearby(cat, v as { lat: number; lon: number }, 150).find(({ rec, d }) => (d <= 60 && !!rec.name && similarNames(rec.name, v.name)) || (rec.category === 'office' && sameAddress(rec.address, v.address)));
     if (match) {
       const rec = match.rec;
       rec.sources.push(source); rec.features.push(...features);
       if (!rec.name || !similarNames(rec.name, v.name)) rec.aliases.push(v.name);
-      rec.description = rec.description ? `${rec.description}\n${desc}` : desc;
       rec.address ??= v.address;
       continue;
     }
     // Several city units can share one building (e.g. Powstania Warszawskiego 10): they stay separate entries.
-    addRec(cat, { id: `city-${v.id}`, name: v.name, names: {}, aliases: [], category: 'office', lat: v.lat, lon: v.lon, address: v.address, description: desc, osmIds: [], sources: [source], features, searchName: [], searchExtra: [] });
+    addRec(cat, { id: `city-${v.id}`, name: v.name, names: {}, aliases: [], category: 'office', lat: v.lat, lon: v.lon, address: v.address, osmIds: [], sources: [source], features, searchName: [], searchExtra: [] });
   }
 }
 
@@ -336,7 +335,7 @@ function fullOf(r: Rec, locale: Locale): PlaceObject {
   return {
     ...summary, conflicts, features: r.features,
     sources: r.sources.map(({ labelKey, observation, note, ...s }) => ({
-      ...s,
+      ...s, ...(labelKey === 'osmEntrance' ? { part: 'entrance' as const } : {}),
       label: labelKey === 'userObservation' ? `${LABELS.user[locale]}: ${OBSERVATION_LABELS[observation ?? 'other'][locale]}` : LABELS[labelKey][locale],
       ...(note ? { note } : {}),
     })),
@@ -355,8 +354,48 @@ export const centerParamSchema = z.string().max(60)
   .pipe(z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]))
   .transform(([lat, lon]) => ({ lat, lon }));
 const knownKeys = (r: Rec) => new Set(r.features.filter(known).map(f => f.key)).size;
-/** Promoted partners are lifted only when within this distance of the user's point (if given). */
+/** Without a map area, promoted partners are lifted only when within this distance of the ranking point (if given). */
 const PROMOTION_RADIUS = 5000;
+
+// Web Mercator position in [0, 1]²: quadtree cells are then map tiles, fixed to the world, so picks stay put when the map pans.
+const mercX = (lon: number) => (lon + 180) / 360;
+const mercY = (lat: number) => {
+  const s = Math.sin((Math.max(-85, Math.min(85, lat)) * Math.PI) / 180);
+  return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
+};
+/** Finer quadtree levels visited after the coarsest; 2^8 cells across the area is finer than any two distinct pins. */
+const SPREAD_LEVELS = 8;
+/**
+ * Order for browsing a map area, like the labels of a map app: the first places are spread over the whole area,
+ * later ones fill in. `items` must come best first. Pass 0 takes the best item of each map tile about the size of
+ * the area, pass 1 the best not-yet-picked item of each tile one zoom level finer that holds no pick yet, and so
+ * on; what is left follows in rank order. Within a pass picks keep rank order. Deterministic for the same items
+ * and area, so offset paging never repeats or skips; zooming out spreads picks over a wider area automatically.
+ */
+export function spreadOrder<T extends { lat: number; lon: number }>(items: T[], bbox: [number, number, number, number]): T[] {
+  if (items.length < 3) return items;
+  const span = Math.max(mercX(bbox[2]) - mercX(bbox[0]), mercY(bbox[1]) - mercY(bbox[3]), 1e-9);
+  const z0 = Math.max(0, Math.min(24, Math.floor(Math.log2(1 / span))));
+  const pos = items.map(i => ({ x: mercX(i.lon), y: mercY(i.lat) }));
+  const picked = new Uint8Array(items.length);
+  const order: number[] = [];
+  for (let level = 0; level <= SPREAD_LEVELS && order.length < items.length; level++) {
+    const n = 2 ** (z0 + level);
+    const x0 = Math.floor(mercX(bbox[0]) * n), y0 = Math.floor(mercY(bbox[3]) * n);
+    // Small relative cell numbers keep keys exact at any zoom.
+    const key = (i: number) => (Math.floor(pos[i].x * n) - x0 + 1) * 1_000_003 + (Math.floor(pos[i].y * n) - y0 + 1);
+    const taken = new Set<number>();
+    for (const i of order) taken.add(key(i));
+    for (let i = 0; i < items.length; i++) {
+      if (picked[i]) continue;
+      const k = key(i);
+      if (taken.has(k)) continue;
+      taken.add(k); picked[i] = 1; order.push(i);
+    }
+  }
+  for (let i = 0; i < items.length; i++) if (!picked[i]) order.push(i);
+  return order.map(i => items[i]);
+}
 export function queryCatalog(cat: Catalog, query: ObjectQuery): PlaceObjectSummary[] {
   return queryCatalogPage(cat, query).objects;
 }
@@ -371,10 +410,11 @@ export function queryCatalogPage(cat: Catalog, query: ObjectQuery): ObjectPage {
   const tokens = words(query.q ?? '');
   const bbox = query.bbox;
   let outside = 0;
-  const scored: { r: Rec; score: number; d: number }[] = [];
+  const scored: { r: Rec; score: number; d: number; k: number }[] = [];
   for (const r of cat.recs) {
     if (query.category && r.category !== query.category) continue;
-    if (query.withData && !knownKeys(r)) continue;
+    const k = knownKeys(r);
+    if (query.withData && !k) continue;
     let score = 0;
     if (tokens.length) {
       let ok = true;
@@ -387,24 +427,29 @@ export function queryCatalogPage(cat: Catalog, query: ObjectQuery): ObjectPage {
       if (!ok) continue;
     }
     if (bbox && !(r.lon >= bbox[0] && r.lat >= bbox[1] && r.lon <= bbox[2] && r.lat <= bbox[3])) { outside++; continue; }
-    scored.push({ r, score, d: rank ? metres(rank, r) : 0 });
+    scored.push({ r, score, d: rank ? metres(rank, r) : 0, k });
   }
-  const promoted = (x: { r: Rec; d: number }) => !!x.r.partner?.promoted && (!rank || x.d <= PROMOTION_RADIUS);
+  // A visible map area already limits how far away a promoted partner can be.
+  const promoted = (x: { r: Rec; d: number }) => !!x.r.partner?.promoted && (!rank || !!bbox || x.d <= PROMOTION_RADIUS);
   // With a text query: relevance, then distance. Without: objects with more known facts first, then distance,
-  // so "no data" entries do not crowd the top. Within a visible map area the area already scopes the list, so
-  // places with facts come first and then simply the nearest to the map centre (as on a map app).
-  // Promoted partners always lead within the matched set (flagged).
-  const byData = (a: { r: Rec }, b: { r: Rec }) => knownKeys(b.r) - knownKeys(a.r);
-  const hasData = (a: { r: Rec }, b: { r: Rec }) => Number(knownKeys(b.r) > 0) - Number(knownKeys(a.r) > 0);
+  // so "no data" entries do not crowd the top. Browsing a visible map area: the best places spread over the
+  // whole area (spreadOrder), places with facts before those without. Promoted partners always lead (flagged).
+  const byData = (a: { k: number }, b: { k: number }) => b.k - a.k;
   const byDistance = (a: { d: number }, b: { d: number }) => (rank ? a.d - b.d : 0);
+  const browsing = !!bbox && !tokens.length;
   scored.sort((a, b) => Number(promoted(b)) - Number(promoted(a))
     || (tokens.length ? b.score - a.score || byDistance(a, b) || byData(a, b)
-      : bbox ? hasData(a, b) || byDistance(a, b) || byData(a, b) : byData(a, b) || byDistance(a, b))
-    || (a.r.name ?? '').localeCompare(b.r.name ?? '', 'pl')
+      : browsing ? byData(a, b) || b.r.sources.length - a.r.sources.length || Number(!a.r.name) - Number(!b.r.name) : byData(a, b) || byDistance(a, b))
+    || (browsing ? 0 : (a.r.name ?? '').localeCompare(b.r.name ?? '', 'pl'))
     || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
-  const objects = scored.slice(offset, offset + limit).map(x => { const { conflicts: _c, ...s } = summaryOf(x.r, locale, origin); return s; });
+  let ordered = scored;
+  if (browsing) {
+    const tier = (x: { r: Rec; d: number; k: number }) => (promoted(x) ? 0 : x.k ? 1 : 2);
+    ordered = [0, 1, 2].flatMap(n => spreadOrder(scored.filter(x => tier(x) === n).map(x => ({ ...x, lat: x.r.lat, lon: x.r.lon })), bbox));
+  }
+  const objects = ordered.slice(offset, offset + limit).map(x => { const { conflicts: _c, ...s } = summaryOf(x.r, locale, origin); return s; });
   const next = offset + limit;
-  return { objects, total: scored.length, nextOffset: next < scored.length ? next : null, ...(bbox ? { outside } : {}) };
+  return { objects, total: ordered.length, nextOffset: next < ordered.length ? next : null, ...(bbox ? { outside } : {}) };
 }
 
 // ---------- Accessible toilets for the journey planner ----------

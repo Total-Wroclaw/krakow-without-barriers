@@ -483,11 +483,14 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
   }, [onPick]);
 
   /** Anchors the card to the clicked point; read every frame so it follows the map. */
+  // The last clicked point, so a closing card fades out where it was instead of jumping to the corner.
+  const lastPick = useRef<Pick | null>(null);
   const pickAnchor = useRef({
     getBoundingClientRect: () => {
       const instance = map.current;
-      const point = pickRef.current;
-      if (!instance || !point) return new DOMRect();
+      const point = pickRef.current ?? lastPick.current;
+      if (pickRef.current) lastPick.current = pickRef.current;
+      if (!instance || !point) return new DOMRect(-1000, -1000, 0, 0);
       const rect = instance.getContainer().getBoundingClientRect();
       const { x, y } = instance.project([point.lon, point.lat]);
       // The top of the pin, so the card sits above it.

@@ -34,13 +34,13 @@ Otwórz [localhost:3030/city](http://localhost:3030/city) i zaloguj się tym has
 **Trasa**
 1. **Wyszukiwanie jak w Jakdojade/Google Maps.** Adresy z numerami, ulice, miejsca i przystanki ZTP z lokalnego indeksu (także bez polskich znaków), „Moja lokalizacja”, godzina wyjazdu.
 2. **Czym jedziesz:** komunikacja (tramwaje i autobusy ZTP z przesiadkami), taksówka (od drzwi do drzwi, cena szacunkowa wg maksymalnej taryfy miejskiej, przyciski Uber/Bolt/FreeNow) albo samochód (dojazd na parking, potem dojście). Na wózku samochód kieruje tylko na parkingi z miejscami dla osób z niepełnosprawnościami.
-3. **Jak się poruszasz:** pieszo, o kulach, na wózku, z wózkiem dziecięcym. Odpoczynek co 5–20 minut (ławki przy każdym odcinku), dostępne toalety na trasie. Na wózku znikają schody, wysokie krawężniki, wąskie przejścia; bruk i strome odcinki są karane i opisane.
+3. **Jak się poruszasz:** pieszo, o kulach, na wózku, z wózkiem dziecięcym. Odpoczynek co 5–20 minut (ławki przy każdym odcinku), toalety przystosowane na trasie. Na wózku znikają schody, wysokie krawężniki, wąskie przejścia; bruk i strome odcinki są karane i opisane.
 4. **Lista wariantów** z paskiem przebiegu, na którym bariery stoją tam, gdzie wystąpią; krótkie powody, gdy wariant nie pasuje.
-5. **Mapa (standardowa lub satelitarna GUGiK) i lista kroków**: oś czasu, wskazówki, przystanki, parking, schody i krawężniki wpięte w kroki. Udostępnianie trasy linkiem (np. opiekunowi).
+5. **Mapa (standardowa lub satelitarna GUGiK) i lista kroków**: oś czasu z ikonami manewrów, przystanki, parking, schody (w górę/w dół) i krawężniki wpięte w kroki; pozostałe warianty wyblakłe na mapie. Start i cel można też wskazać kliknięciem w mapę. Udostępnianie trasy linkiem (np. opiekunowi), z datą i godziną.
 
 **Odkrywaj**
-6. **Muzea, zabytki, kultura, urzędy, toalety, noclegi, zdrowie, parki** (3 080 miejsc z OSM, 886 z danymi o dostępności, 20 budynków z zestawienia UMK). Konkretne fakty: wejście bez stopni, stopnie, podjazd, winda, schodołaz, szerokość drzwi, toaleta, obsługa w języku migowym; każdy ze źródłem, datą pobrania, datą edycji i statusem. Braki są pokazane jako „brak danych”, sprzeczne źródła jako ostrzeżenie.
-7. **Okolica z lotu ptaka:** AI opisuje wycinek ortofotomapy GUGiK (co widać, czego nie da się ocenić z góry, co sprawdzić na miejscu). Bez pomiarów i bez oceny dostępności.
+6. **Muzea, zabytki, kultura, urzędy, toalety, noclegi, zdrowie, parki** (3 080 miejsc z OSM, 886 z danymi o dostępności, 20 budynków z zestawienia UMK). Konkretne fakty: wejście bez stopni, stopnie, podjazd, winda, schodołaz, szerokość drzwi, toaleta, obsługa w języku migowym; każdy ze źródłem, datą pobrania, datą edycji i statusem. Braki są pokazane jako „brak danych”, sprzeczne źródła obok siebie; ogólna data sprawdzenia w OSM nie udaje potwierdzenia dostępności. Lista podąża za mapą (widoczny obszar, wyniki rozłożone po całym kadrze, wcześniejsze wyniki zostają do czasu wczytania nowych).
+7. **Okolica z lotu ptaka:** ortofotomapa GUGiK z numerowanymi punktami z map (wejścia tego budynku, przystanki, parkingi, toalety, schody, bruk). AI w ~3 s podpowiada, jak dojść i wejść (domyślnie od przystanku), opierając się tylko na tych punktach; obserwacje ze zdjęcia są potwierdzane na zbliżeniach 50 m albo odrzucane (dokładność w [VALIDATION.md](docs/VALIDATION.md)). Bez pomiarów i bez obietnic dostępności.
 8. **Partnerzy:** właściciel obiektu, hotel lub organizator dodaje dane o dostępności (deklaracja właściciela z datą), wybiera wpis bezpłatny albo pakiet partnera z oznaczeniem „Promowane” i dostaje kod widżetu „Jak do nas dotrzeć bez barier” (`/embed?to=lat,lon&name=…`). Promocja nie zmienia danych o dostępności. Przykładowy partner jest jawnie oznaczony jako dane demonstracyjne.
 
 **Wspólne**
@@ -49,12 +49,14 @@ Otwórz [localhost:3030/city](http://localhost:3030/city) i zaloguj się tym has
 11. **Panel miasta** (`/city`): przegląd zgłoszeń, filtry, mapa, statusy z historią zmian, publiczna odpowiedź, eksport CSV.
 12. **Potrzeby własnymi słowami** zamieniane przez AI na ustawienia.
 13. **Języki:** polski, angielski, niemiecki — interfejs, wskazówki z serwera i odpowiedzi AI.
+14. **Prywatność:** bez kont i diagnoz; okno „O danych” wyjaśnia, co zostaje w przeglądarce, a co i kiedy trafia na serwer lub do AI, pokazuje daty danych i pozwala usunąć dane z tej przeglądarki. Przed pierwszym zgłoszeniem zdjęciem — krótka informacja o AI i publiczności zgłoszenia. Szczegóły: [docs/PRIVACY-SECURITY.md](docs/PRIVACY-SECURITY.md).
+15. **Telefon:** panel jako przeciągany arkusz nad pełnoekranową mapą (trzy wysokości, obsługa klawiaturą).
 
 Routing jest deterministyczny (graf pieszy i drogowy OSM, rozkład GTFS). AI (`gpt-5.6-luna`) nie wyznacza tras.
 
 ## Wdrożenie
 
-Produkcja: [kazdy-krok.antek.page](https://kazdy-krok.antek.page) — Dokploy (Compose), obraz z `Dockerfile` budowany przy każdym pushu na `main`. Rozkład ZTP jest pobierany podczas budowania obrazu; zgłoszenia, zdjęcia i cache kafelków satelitarnych leżą na wolumenie `krok-data` (`/data`). Zmienne środowiskowe ustawione w Dokploy: `OPENAI_API_KEY`, `OPENAI_MODEL`, `CITY_DASHBOARD_PASSWORD`, `CITY_DASHBOARD_SECRET`. Panel miasta: `/city`.
+Produkcja: [kazdy-krok.antek.page](https://kazdy-krok.antek.page) — Dokploy (Compose), obraz z `Dockerfile` budowany przy każdym pushu na `main`. Rozkład ZTP jest pobierany podczas budowania obrazu; zgłoszenia, zdjęcia i cache kafelków satelitarnych leżą na wolumenie `krok-data` (`/data`). Zmienne środowiskowe ustawione w Dokploy: `OPENAI_API_KEY`, `OPENAI_MODEL`, `CITY_DASHBOARD_PASSWORD`, `CITY_DASHBOARD_SECRET`. Panel miasta: `/city`. Stan usługi i wiek danych: [`/api/health`](https://kazdy-krok.antek.page/api/health) (używany też przez `HEALTHCHECK` obrazu). Odświeżanie migawek: `npm run data:refresh` albo workflow GitHub „Refresh data” (otwiera pull request po testach).
 
 ## Sprawdzenie
 

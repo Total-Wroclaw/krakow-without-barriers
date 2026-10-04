@@ -110,6 +110,10 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
   const title = option.kind === 'walk' ? t('option.walkOnly') : option.kind === 'taxi' ? t('option.taxi') : option.kind === 'car' ? t('option.car') : null;
   const notFit = !option.fits && option.issues.length > 0;
   const issues = option.issues.join(', ');
+  const times = option.departure !== null && option.arrival !== null ? `${clock(option.departure)}–${clock(option.arrival)}` : title;
+  const total = duration(option.departure !== null && option.arrival !== null ? option.arrival - option.departure : option.duration, locale);
+  // In the details view the card is a summary; tapping it is only a pointer shortcut for the List/Map switch next to it.
+  const Summary = onPick ? 'button' : 'div';
   return (
     <div
       className={cn(
@@ -117,28 +121,28 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
         selected ? 'border-primary ring-2 ring-primary/30' : 'border-border hover:border-primary/60',
       )}
     >
-    <button
-      type="button"
+    <Summary
+      {...(onPick ? { type: 'button' as const, 'aria-current': selected ? ('true' as const) : undefined, 'aria-describedby': `${option.id}-hint` } : {})}
       onClick={onOpen}
-      aria-current={selected ? 'true' : undefined}
-      aria-describedby={`${option.id}-hint`}
       className="flex w-full flex-col gap-1 px-3 pt-2 pb-2 text-left"
     >
       <div className="flex items-start justify-between gap-3">
         <p className="min-w-0 leading-5">
           {option.departure !== null && option.arrival !== null ? (
-            <span className="mr-2 text-base/5 font-bold whitespace-nowrap tabular-nums">
+            <span className="mr-1 text-base/5 font-bold whitespace-nowrap tabular-nums">
               {clock(option.departure)}
               <span className="px-0.5 font-normal text-muted-foreground">–</span>
               {clock(option.arrival)}
             </span>
           ) : (
-            <span className="mr-2 text-base/5 font-bold">{title}</span>
+            <span className="mr-1 text-base/5 font-bold">{title}</span>
           )}
+          {/* A real space keeps "05:08" and "Tramwaj 12" apart in the accessible name too. */}
+          {' '}
           <span className="text-[0.8125rem] text-muted-foreground">{option.label}</span>
         </p>
         <span className="shrink-0 text-base/5 font-bold whitespace-nowrap tabular-nums">
-          {duration(option.departure !== null && option.arrival !== null ? option.arrival - option.departure : option.duration, locale)}
+          {total}
         </span>
       </div>
 
@@ -224,13 +228,16 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
           <span className="truncate">{t('option.notFitShort', { issues })}</span>
         </p>
       ) : null}
-    </button>
+    </Summary>
       {onPick ? (
         <div className="flex items-center justify-between gap-2 border-t px-1.5 py-0.5">
+          {/* Which route these two buttons act on, for anyone reaching them without reading the card. */}
+          <span id={`${option.id}-name`} hidden>{[times, total, option.label].filter(Boolean).join(', ')}</span>
           <button
             type="button"
             id={`${option.id}-hint`}
             onClick={onOpen}
+            aria-describedby={`${option.id}-name`}
             className="inline-flex min-h-10 min-w-0 items-center gap-0.5 rounded-lg px-1.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
           >
             {t('option.details')}
@@ -240,6 +247,7 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
             type="button"
             onClick={onPick}
             aria-pressed={selected}
+            aria-describedby={`${option.id}-name`}
             className={cn(
               'inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border px-3 text-sm font-semibold whitespace-nowrap transition-colors',
               selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground hover:border-primary',
@@ -249,9 +257,7 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
             {selected ? t('option.picked') : t('option.pick')}
           </button>
         </div>
-      ) : (
-        <span id={`${option.id}-hint`} hidden />
-      )}
+      ) : null}
     </div>
   );
 }

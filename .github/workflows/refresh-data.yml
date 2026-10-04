@@ -1,0 +1,38 @@
+# Weekly data refresh: rebuilds the OSM and UMK snapshots, runs the tests on them and opens a pull request.
+# Merging the pull request redeploys the app, which also downloads a fresh ZTP timetable.
+# Runs only on demand for now; to run it every week, uncomment the schedule below.
+name: Refresh data
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '0 3 * * 1' # Mondays 03:00 UTC, after Geofabrik's nightly extract
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.13' }
+      - run: pip install osmium==4.3.1
+      - run: npm ci
+      - name: Refresh snapshots (a failed source keeps its previous snapshot)
+        id: refresh
+        run: scripts/refresh-data.sh "$RUNNER_TEMP/malopolskie.osm.pbf"
+        continue-on-error: true
+      - run: npm test
+      - name: Open a pull request with the new snapshots
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: data/refresh
+          commit-message: 'data: weekly refresh of OSM and UMK snapshots'
+          title: 'Odświeżenie danych (OSM, UMK)'
+          body: |
+            Automatyczne odświeżenie migawek w `data/`. Testy przeszły na nowych danych.
+            Wynik pobierania: ${{ steps.refresh.outcome }} (przy błędzie źródła zostaje jego poprzednia migawka).
+          add-paths: data/

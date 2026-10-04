@@ -376,15 +376,17 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
           placed.push({ el, lat: leg.parking.lat, lon: leg.parking.lon, rank: 1 });
         }
       }
-      placed.sort((a, b) => a.rank - b.rank);
-      routeMarkers.current = () => declutter(instance, placed, instance.getZoom() < 15);
-      routeMarkers.current();
       for (const report of reports) {
         if (!report.location) continue;
         const el = markerElement(t('report.markerLabel', { title: reportTitle(report) }), icons.report, '#6d28d9', 28);
         el.addEventListener('click', () => latest.current.onReport(report));
         add(el, report.location.lat, report.location.lon);
+        // Reports close together (e.g. the Explore reports list) must not overlap: the rest show once zoomed in.
+        placed.push({ el, lat: report.location.lat, lon: report.location.lon, rank: 3 });
       }
+      placed.sort((a, b) => a.rank - b.rank);
+      routeMarkers.current = () => declutter(instance, placed, instance.getZoom() < 15);
+      routeMarkers.current();
       (instance.getSource('objects') as GeoJSONSource | undefined)?.setData({
         type: 'FeatureCollection',
         features: objects.map(o => ({

@@ -21,24 +21,35 @@ function format(template: string, vars?: Vars) {
   return template.replace(/\{(\w+)\}/g, (_, name) => (name in vars ? String(vars[name]) : `{${name}}`));
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
+/** An explicit page locale (embedded widgets) takes precedence over saved/browser preferences. */
+export function preferredLocale(initial: Locale | undefined, saved: unknown, browserLanguage: string): Locale {
+  if (initial) return initial;
+  if (isLocale(saved)) return saved;
+  if (browserLanguage.startsWith('de')) return 'de';
+  if (browserLanguage && !browserLanguage.startsWith('pl')) return 'en';
+  return defaultLocale;
+}
+
+export function I18nProvider({ children, initialLocale }: { children: ReactNode; initialLocale?: Locale }) {
+  const scoped = useContext(I18nContext) !== null;
+  const [locale, setLocaleState] = useState<Locale>(initialLocale ?? defaultLocale);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (isLocale(saved)) setLocaleState(saved);
-    else if (navigator.language.startsWith('de')) setLocaleState('de');
-    else if (!navigator.language.startsWith('pl') && navigator.language) setLocaleState('en');
-  }, []);
+    let saved: unknown;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch {}
+    setLocaleState(preferredLocale(initialLocale, saved, navigator.language));
+  }, [initialLocale]);
 
   useEffect(() => {
-    document.documentElement.lang = locale;
-    document.title = messages[locale]['meta.title'];
-  }, [locale]);
+    if (!scoped) {
+      document.documentElement.lang = locale;
+      document.title = messages[locale]['meta.title'];
+    }
+  }, [locale, scoped]);
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
-    localStorage.setItem(STORAGE_KEY, next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch {}
   }, []);
 
   const t = useCallback((key: MessageKey, vars?: Vars) => format(messages[locale][key] ?? messages.pl[key] ?? key, vars), [locale]);
@@ -47,7 +58,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [locale],
   );
   const value = useMemo(() => ({ locale, setLocale, t, tp }), [locale, setLocale, t, tp]);
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+  return <I18nContext.Provider value={value}>{scoped ? <div lang={locale} className="contents">{children}</div> : children}</I18nContext.Provider>;
 }
 
 export function useI18n() {

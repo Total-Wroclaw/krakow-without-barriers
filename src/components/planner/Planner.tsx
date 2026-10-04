@@ -8,12 +8,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CityFact, CityPlace } from '@/lib/city-types';
 import type { MapViewport, PlaceObject, PlaceObjectSummary } from '@/lib/explore-types';
-import { errorText } from '@/lib/client';
+import { errorText, postJson } from '@/lib/client';
 import { warsawNow } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
-import type { JourneyOption, JourneyResult, TransportMode } from '@/lib/journey-types';
+import type { JourneyResult, TransportMode } from '@/lib/journey-types';
 import { defaultPreferences, preferencesSchema, type Preferences, type Report } from '@/lib/schemas';
 import { cn } from '@/lib/utils';
+import { nearRoute } from '@/lib/route-proximity';
+import { decodePlace, readDeparture, writeTrip, type When } from '@/lib/trip-sharing';
 import { About } from './About';
 import { Explore } from './Explore';
 import { FactSheet } from './FactSheet';
@@ -26,7 +28,7 @@ import { DistanceControl, PreferencesBar, PreferencesPanel } from './Preferences
 import { ReportChooser } from './ReportChooser';
 import { RouteDetails } from './RouteDetails';
 import { ReportFab, ReportPanel, useReportCapture, type CaptureTarget } from './Reports';
-import { TimeChooser, type When } from './TimeChooser';
+import { TimeChooser } from './TimeChooser';
 import { TransportPicker } from './TransportPicker';
 import { useBottomSheet } from './useBottomSheet';
 
@@ -42,21 +44,6 @@ const EXAMPLE: { from: CityPlace; to: CityPlace } = {
   from: { id: 'example:dworzec', name: 'Dworzec Główny', lat: 50.06583, lon: 19.94756, source: 'example' },
   to: { id: 'example:wawel', name: 'Wawel, Smok Wawelski', lat: 50.05302, lon: 19.93359, source: 'example' },
 };
-
-function nearRoute(report: Report, option: JourneyOption | undefined) {
-  if (!option || !report.location) return false;
-  const { lat, lon } = report.location;
-  const k = Math.cos((lat * Math.PI) / 180);
-  return option.legs.some(leg => leg.type === 'walk' && leg.geometry.some(([a, b]) => Math.hypot((a - lat) * 111_000, (b - lon) * 111_000 * k) < 40));
-}
-
-const encodePlace = (p: CityPlace) => `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${p.name}`;
-function decodePlace(value: string | null): CityPlace | null {
-  if (!value) return null;
-  const [lat, lon, ...name] = value.split(',');
-  const place = { id: `point:${lat}:${lon}`, name: name.join(',') || '—', lat: Number(lat), lon: Number(lon), source: 'link' };
-  return Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.lat > 49.94 && place.lat < 50.2 && place.lon > 19.75 && place.lon < 20.25 ? place : null;
-}
 
 function loadPreferences(): Preferences | null {
   try {
@@ -115,13 +102,14 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   useEffect(() => {
     const saved = loadPreferences();
     if (saved) setPreferences(saved);
-    // A shared link (?from=lat,lon,name&to=…&mode=…) opens the same trip; needs stay the recipient's own.
+    // Shared endpoints, transport and departure open the same trip; needs stay the recipient's own.
     if (!embed) {
       const params = new URLSearchParams(window.location.search);
       const sharedFrom = decodePlace(params.get('from'));
       const sharedTo = decodePlace(params.get('to'));
       if (sharedFrom) setFrom(sharedFrom);
       if (sharedTo) setTo(sharedTo);
+      setWhen(readDeparture(params));
       const mode = params.get('mode');
       if (mode === 'walk' || mode === 'taxi' || mode === 'car' || mode === 'transit') setTransport(mode);
     }
@@ -150,15 +138,8 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
       const date = when.mode === 'now' ? now.date : when.date;
       const time = when.mode === 'now' ? now.time : when.time;
       try {
-        const res = await fetch('/api/journey', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from, to, preferences, date, time, transport, locale }),
-          signal: controller.signal,
-        });
-        // Proxies may answer with HTML (e.g. 502); never show parser errors to people.
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data) throw new Error(typeof data?.error === 'string' ? data.error : '');
+        const data = await postJson('/api/journey', { from, to, preferences, date, time, transport, locale }, 35000, {}, controller.signal);
+        if (controller.signal.aborted) return;
         const next = data as JourneyResult;
         setResult(next);
         setSelectedId(current => (next.options.some(o => o.id === current) ? current : (next.options.find(o => o.fits) ?? next.options[0])?.id ?? null));
@@ -186,7 +167,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
     const c = mapCenter.current;
     return { place: { id: `point:${c.lat}:${c.lon}`, name: t('report.mapPoint'), lat: c.lat, lon: c.lon, source: 'map' }, source: 'map' };
   }, [fact, t]);
-  const onSaved = useCallback((r: Report) => setReports(old => [r, ...old]), []);
+  const onSaved = useCallback((r: Report) => setReports(old => [r, ...old.filter(existing => existing.id !== r.id)]), []);
   const onOpen = useCallback((report: Report, editing: boolean) => setOpenReport({ report, editing }), []);
   const { capture, busy } = useReportCapture({ fallback, onSaved, onOpen });
 
@@ -234,12 +215,9 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   useEffect(() => {
     if (!hydrated || embed) return;
     const url = new URL(window.location.href);
-    for (const key of ['from', 'to', 'mode']) url.searchParams.delete(key);
-    if (from) url.searchParams.set('from', encodePlace(from));
-    if (to) url.searchParams.set('to', encodePlace(to));
-    if (transport !== 'transit') url.searchParams.set('mode', transport);
+    writeTrip(url.searchParams, { from, to, transport, when });
     window.history.replaceState(window.history.state, '', url);
-  }, [from, to, transport, hydrated, embed]);
+  }, [from, to, transport, when, hydrated, embed]);
 
   // The place card's way-in advice starts from a stop, or from a car park when the person drives.
   useEffect(() => {
@@ -284,9 +262,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   async function share() {
     if (!from || !to) return;
     const url = new URL(window.location.origin);
-    url.searchParams.set('from', encodePlace(from));
-    url.searchParams.set('to', encodePlace(to));
-    url.searchParams.set('mode', transport);
+    writeTrip(url.searchParams, { from, to, transport, when });
     const text = t('share.text', { from: from.name, to: to.name });
     try {
       if (navigator.share) await navigator.share({ title: t('app.name'), text, url: url.toString() });

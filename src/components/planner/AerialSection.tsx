@@ -507,7 +507,7 @@ function PinList({ overlay, bbox }: { overlay: AerialOverlay; bbox: Bbox }) {
                 <span className="block text-muted-foreground">
                   {[...details(pin), where(pin), inFrame(project(pin, bbox)) ? '' : t('aerial.outside')].filter(Boolean).join(' · ')}
                   {' · '}
-                  {sourceLink(pin.sourceUrl, source(pin.kind, pin.editedAt, overlay))}
+                  {pin.sourceUrl ? sourceLink(pin.sourceUrl, source(pin.kind, pin.editedAt, overlay, pin)) : source(pin.kind, pin.editedAt, overlay, pin)}
                 </span>
               </span>
             </li>

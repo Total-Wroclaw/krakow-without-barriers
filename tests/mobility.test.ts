@@ -301,7 +301,7 @@ test("transport 'walk' returns only walking options, keeps long walks and their 
   const benches = Array.from({ length: n - 1 }, (_, i) => node(`bench${i}`, 50 + i * 0.001 + 0.0005, 19.0001, { amenity: 'bench', backrest: 'yes' }));
   const data = { ...dataset(nodes, [way('long', nodes.map(x => x.id), { highway: 'footway', surface: 'asphalt' })]), features: benches };
   const g = buildGraph(data);
-  const toilet = { objectId: 'osm-node-1', name: 'WC', lat: 50.02, lon: 19.0005, value: 'yes' as const, sourceUrl: 'https://www.openstreetmap.org/node/1', editedAt: null, obtainedAt: '2026-10-03' };
+  const toilet = { objectId: 'osm-node-1', name: 'WC', lat: 50.02, lon: 19.0005, value: 'yes' as const, sourceUrl: 'https://www.openstreetmap.org/node/1', sourceLabel: 'OpenStreetMap', status: 'osm' as const, editedAt: null, confirmedAt: null, obtainedAt: '2026-10-03' };
   const roads = () => {
     throw new Error('road graph must not load for walking requests');
   };
@@ -314,4 +314,22 @@ test("transport 'walk' returns only walking options, keeps long walks and their 
   assert.ok((result.options[0].legs[0] as WalkLeg).facts.some(f => f.kind === 'toilet'), 'toilets still listed');
   assert.ok(result.options[0].issues.includes('Over your limit of 1 km'));
   assert.deepEqual(result.errors, []);
+});
+
+test('ramps do not erase other hard restrictions on a stair way in fallback assessment', () => {
+  for (const [tags, issue] of [
+    [{ wheelchair: 'no' }, serverMessages('en').issues.noWheelchair],
+    [{ width: '0.7' }, serverMessages('en').issues.narrow],
+    [{ smoothness: 'impassable' }, serverMessages('en').issues.impassable],
+  ] as const) {
+    const d = dataset([node('a', 50, 19), node('b', 50.0001, 19)], [way('ramp', ['a', 'b'], { highway: 'steps', 'ramp:wheelchair': 'yes', ...tags })]);
+    const g = buildGraph(d);
+    assert.equal(route(g, wheelchair), undefined);
+    const option = walkingOptions(g, place(d, 'a'), place(d, 'b'), wheelchair, 0, 'en').options[0];
+    assert.equal(option.fits, false, JSON.stringify(tags));
+    assert.ok(option.issues.includes(issue), issue);
+    assert.equal(option.stairs.unknown, 1);
+  }
+  const d = dataset([node('a', 50, 19), node('b', 50.0001, 19)], [way('ramp', ['a', 'b'], { highway: 'steps', ramp: 'yes', smoothness: 'impassable' })]);
+  assert.equal(walkingOptions(buildGraph(d), place(d, 'a'), place(d, 'b'), stroller, 0).options[0].fits, false);
 });

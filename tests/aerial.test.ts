@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 process.env.KROK_STORAGE_DIR = mkdtempSync(path.join(os.tmpdir(), 'krok-aerial-test-'));
 const { aerialBbox, AERIAL_WIDTHS, compass, distance, fitWidth, frameCorners, inFrame, project, roundPoint, unproject } = await import('../src/lib/aerial-geo');
-const { analysisHash, applyRefinement, arrivalKinds, buildOverlay, cachedAnalysis, cleanSentence, needsStepFree, preferencesForPrompt, preferencesKey, reportsDigest, reportsNear, sanitiseAnalysis, sanitiseObservations, storeAnalysis } = await import('../src/lib/aerial');
+const { analysisHash, applyRefinement, arrivalKinds, buildOverlay, cachedAnalysis, cleanSentence, needsStepFree, overlayEvidence, preferencesForPrompt, preferencesKey, reportsDigest, reportsNear, sanitiseAnalysis, sanitiseObservations, storeAnalysis } = await import('../src/lib/aerial');
 const { aerialQuerySchema, autoWidth, overlaySummary, widthSchema } = await import('../src/lib/aerial-types');
 const { conditionOf, parseOpenMeteo, weatherBucket } = await import('../src/lib/weather');
 const { defaultPreferences } = await import('../src/lib/schemas');
@@ -127,6 +128,19 @@ test('with no stop nearby the nearest one within 500 m is still listed (outside 
   assert.equal(inFrame(project(stops[0], aerialBbox(place, 320))), false);
 });
 
+test('aerial toilet pins preserve partner and city provenance', () => {
+  for (const status of ['partner', 'city'] as const) {
+    const fixture = inputs();
+    fixture.toilets = [{ objectId: `${status}-wc`, name: 'WC', ...offset(15, 0), sourceUrl: '', editedAt: null, value: 'limited', status, sourceLabel: 'Source declaration', obtainedAt: '2026-10-03', confirmedAt: null }];
+    const toilet = buildOverlay(place, fixture).pins.find(p => p.kind === 'toilet')!;
+    assert.equal(toilet.sourceStatus, status);
+    assert.equal(toilet.sourceLabel, 'Source declaration');
+    assert.equal(toilet.sourceUrl, '');
+    assert.equal(toilet.wheelchair, 'limited');
+    assert.equal(toilet.obtainedAt, '2026-10-03');
+  }
+});
+
 test('summary counts what is in the current frame', () => {
   const overlay = { ...buildOverlay(place, inputs()), osmObtainedAt: null, transitObtainedAt: null };
   const s = overlaySummary(overlay, aerialBbox(place, 130));
@@ -187,7 +201,7 @@ test('recommendation: entrance and arrival pins must exist and have the right ki
   const ok = sanitiseAnalysis(raw(), pins).recommendation!;
   assert.equal(ok.entrance, 1);
   assert.equal(ok.approachFrom, 3);
-  assert.equal(ok.why, 'Jedyne wejście oznaczone w mapach jako bez stopni.');
+  assert.equal(ok.why, 'OpenStreetMap oznacza wejście [1] jako dostępne dla wózków. To deklaracja z mapy; potwierdź warunki na miejscu.');
   assert.equal(ok.steps.length, 2);
   // A stop given as the entrance, an entrance given as the arrival point, a pin that doesn't exist.
   const wrong = sanitiseAnalysis(raw({ entrance: 3, approachFrom: 1 }), pins).recommendation!;
@@ -217,6 +231,36 @@ test('recommendation: public transport by default, a car park only for people wh
   assert.deepEqual(car.steps, ['Zaparkuj na parkingu [4] przy wejściu.', 'Wejdź wejściem [1] od ulicy.']);
   // Taxi or walking: neither.
   assert.equal(sanitiseAnalysis(raw({ approachFrom: 3 }), pins, { arrival: 'taxi' }).recommendation!.approachFrom, null);
+});
+
+test('entrance accessibility explanations use the selected source record, never an AI claim', () => {
+  const claim = 'Entrance [1] is the only entrance marked as step-free in the available map data.';
+  const pins = pinsOf(['entrance', 'unknown']);
+  for (const [locale, unknown] of [['pl', 'Brak danych'], ['en', 'not recorded'], ['de', 'keine Angaben']] as const) {
+    const r = sanitiseAnalysis(raw({ why: claim, approachFrom: null, steps: [claim, 'Idź do wejścia [1].'] }), pins, { locale, stepFree: true, arrival: 'car' }).recommendation!;
+    assert.match(r.why, new RegExp(unknown));
+    assert.ok(!r.why.includes('step-free'));
+    assert.deepEqual(r.steps, ['Idź do wejścia [1].']);
+    assert.equal(r.entrance, 1, 'an unknown entrance may be suggested, with explicit uncertainty');
+  }
+  const yes = sanitiseAnalysis(raw({ why: claim }), pinsOf(['entrance', 'yes']), { locale: 'en' }).recommendation!;
+  assert.match(yes.why, /OpenStreetMap marks entrance \[1\] as wheelchair accessible/);
+  assert.match(yes.why, /confirm conditions on site/);
+  assert.ok(!yes.why.includes('step-free'), 'wheelchair=yes does not prove absence of steps');
+  const limited = sanitiseAnalysis(raw({ why: claim }), pinsOf(['entrance', 'limited']), { locale: 'en' }).recommendation!;
+  assert.match(limited.why, /limited wheelchair access/);
+  const no = sanitiseAnalysis(raw({ why: claim }), pinsOf(['entrance', 'no']), { locale: 'en' }).recommendation!;
+  assert.match(no.why, /inaccessible to wheelchairs/);
+});
+
+test('model cannot move unsupported accessibility assertions into another advice field', () => {
+  const assertions = ['Wejście [1] jest bez stopni.', 'Use the step-free entrance [1].', 'Eingang [1] ist barrierefrei.', 'Wheelchairs can use entrance [1] unaided.', 'Use entrance [1]; its threshold is flush.', 'Wejście [1] ma płaski próg.'];
+  const r = sanitiseAnalysis(raw({ steps: assertions, avoid: assertions, ask: assertions }, { today: assertions }), pinsOf(['entrance', 'unknown']), { locale: 'en' });
+  assert.deepEqual(r.recommendation!.steps, []);
+  assert.deepEqual(r.recommendation!.avoid, []);
+  assert.deepEqual(r.recommendation!.ask, []);
+  assert.deepEqual(r.today, []);
+  assert.match(r.recommendation!.why, /not recorded/);
 });
 
 test('recommendation without mapped entrances: the way to the place, no entrance', () => {
@@ -301,8 +345,22 @@ test('close-up check moves confirmed observations, drops the rest and re-letters
 
 const keyFor = (over: Partial<AnalysisKey> = {}): AnalysisKey => ({ ...place, widthM: 130, name: 'Test', locale: 'pl', objectId: null, preferences: 'none', arrival: 'transit', weather: 'none', reports: 'none', ...over });
 
+test('changed source records invalidate previously grounded advice', () => {
+  const overlay = { ...buildOverlay(place, inputs()), osmObtainedAt: null, transitObtainedAt: null };
+  const before = overlayEvidence(overlay);
+  overlay.pins[0].wheelchair = 'unknown';
+  const after = overlayEvidence(overlay);
+  assert.notEqual(before, after);
+  assert.notEqual(analysisHash(keyFor({ evidence: before })), analysisHash(keyFor({ evidence: after })));
+});
+
 test('analysis cache round-trips per place, frame, language, needs, weather and reports', async () => {
   const key = keyFor();
+  const legacyHash = createHash('sha256').update(JSON.stringify([10, key.lat, key.lon, key.widthM, key.name, key.locale, key.objectId, key.preferences, key.arrival, key.weather, key.reports])).digest('hex').slice(0, 24);
+  const cacheDir = path.join(process.env.KROK_STORAGE_DIR!, 'aerial', 'analysis');
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(path.join(cacheDir, `${legacyHash}.json`), JSON.stringify({ recommendation: { why: 'Unsupported step-free claim' } }));
+  assert.notEqual(analysisHash(key), legacyHash, 'old unsupported advice is not reused');
   assert.equal(await cachedAnalysis(key), null);
   const analysis = { recommendation: { entrance: 1, approachFrom: 3, why: '', steps: ['Od przystanku [3] prosto.'], avoid: [], ask: [] }, today: [], observations: [], widthM: 130, basedOn: { mobility: null, weather: null, reports: 0 }, createdAt: '2026-10-03T00:00:00.000Z' };
   await storeAnalysis(key, analysis);

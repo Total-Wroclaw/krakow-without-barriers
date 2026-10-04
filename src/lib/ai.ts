@@ -86,7 +86,6 @@ const wayInSchema = z.object({
   recommendation: z.object({
     entrance: z.number().int().nullable(),
     approachFrom: z.number().int().nullable(),
-    why: z.string().max(200),
     steps: z.array(z.string().max(200)).max(5),
     avoid: z.array(z.string().max(140)).max(4),
     ask: z.array(z.string().max(160)).max(4),
@@ -142,8 +141,8 @@ export async function describeWayIn(jpeg: Buffer, ctx: AerialPrompt, locale: Loc
   const lang = languageName[locale];
   const entrance = ctx.hasEntrances
     ? `recommendation.entrance: numer punktu-wejścia (to wejścia do budynku tego miejsca), które polecasz dla tych potrzeb, albo null. Na wózku lub z wózkiem dziecięcym wybieraj wejście oznaczone jako dostępne lub bez stopni, nigdy oznaczone jako niedostępne; gdy brak danych, wybierz najbliższe wejście bez znanych schodów i zaznacz w ask, co sprawdzić.\n` +
-      `recommendation.why: jedno krótkie zdanie ${lang}, dlaczego to wejście, oparte na danych z map (np. "Jedyne wejście oznaczone w mapach jako bez stopni."). Pusty tekst, gdy entrance = null.\n`
-    : `Wejścia tego miejsca nie są zmapowane (częste przy małych lokalach z drzwiami od ulicy). recommendation.entrance = null, recommendation.why = "". Nie wskazuj żadnych drzwi ani wejść na zdjęciu i nie pisz, że wejść brakuje: skup się na tym, jak dojść do samego miejsca (jest w środku zdjęcia; w tekście nazywaj je po nazwie albo „lokal”, „miejsce”) — którą stroną ulicy iść, gdzie przejść przez jezdnię, na jakie krawężniki, bruk i tory uważać — a w ask na tym, co sprawdzić przy drzwiach (próg, stopień, dzwonek, pomoc obsługi).\n`;
+      `Uzasadnienie dostępności wybranego wejścia zostanie utworzone przez serwer z jego danych. Nie dopisuj go w steps, avoid, ask ani today.\n`
+    : `Wejścia tego miejsca nie są zmapowane (częste przy małych lokalach z drzwiami od ulicy). recommendation.entrance = null. Nie wskazuj żadnych drzwi ani wejść na zdjęciu i nie pisz, że wejść brakuje: skup się na tym, jak dojść do samego miejsca (jest w środku zdjęcia; w tekście nazywaj je po nazwie albo „lokal”, „miejsce”) — którą stroną ulicy iść, gdzie przejść przez jezdnię, na jakie krawężniki, bruk i tory uważać — a w ask na tym, co sprawdzić przy drzwiach (próg, stopień, dzwonek, pomoc obsługi).\n`;
   return structured(
     wayInSchema,
     'aerial_way_in',
@@ -160,7 +159,7 @@ export async function describeWayIn(jpeg: Buffer, ctx: AerialPrompt, locale: Loc
       `recommendation.avoid: 0–3 krótkie hasła ${lang}, czego unikać po drodze dla tej osoby (np. "schody od strony rynku", "bruk na dziedzińcu", "przechodzenie przez torowisko poza przejściem"). Tylko fizyczne przeszkody lub odcinki z danych albo widoczne na zdjęciu.\n` +
       `recommendation.ask: 0–3 krótkie rzeczy ${lang} do zapytania lub sprawdzenia na miejscu (np. "Zapytaj obsługę o dzwonek przy drzwiach.", "Sprawdź, czy przy drzwiach nie ma progu."). Konkretne, nie ogólniki.\n` +
       `today: 0–2 zdania ${lang} na dziś: skutki pogody dla tej osoby (np. mokry bruk, ryzyko oblodzenia na schodach i rampach) oraz najważniejsze z wcześniejszych zgłoszeń (np. "Użytkownicy zgłaszali tu …"). Pusta lista, gdy nie ma nic istotnego; nie pisz, że czegoś brak.\n` +
-      `Odwołuj się do punktów jako [n] zgodnie z ich rodzajem (przystanek to tylko przystanek, wejście to tylko wejście, parking to tylko parking). Nie cytuj tagów (np. wheelchair=yes), pisz zwykłymi słowami. Bez liczb poza [n]: bez wymiarów, odległości, czasu, temperatur, dat, liczby stopni i nachyleń. Nie oceniaj, czy miejsce jest dostępne, i niczego nie gwarantuj (bez "na pewno", "bez problemu", "w pełni dostępne"). Zdjęcie może być sprzed kilku lat.`,
+      `Odwołuj się do punktów jako [n] zgodnie z ich rodzajem (przystanek to tylko przystanek, wejście to tylko wejście, parking to tylko parking). Nie cytuj tagów (np. wheelchair=yes), pisz zwykłymi słowami. Bez liczb poza [n]: bez wymiarów, odległości, czasu, temperatur, dat, liczby stopni i nachyleń. Nie przypisuj wejściom, dojściom ani parkingom dostępności, bezstopniowości ani braku krawężnika. Brak danych nie oznacza braku przeszkód. wheelchair=yes to deklaracja w mapie, a nie dowód braku stopni. Nie oceniaj, czy miejsce jest dostępne, i niczego nie gwarantuj (bez "na pewno", "bez problemu", "w pełni dostępne"). Zdjęcie może być sprzed kilku lat.`,
     `data:image/jpeg;base64,${jpeg.toString('base64')}`,
     locale,
     // No reasoning: the advice follows the rules above and arrives in ~3 s instead of ~5–7 s with the same

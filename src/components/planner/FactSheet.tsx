@@ -85,6 +85,8 @@ export function FactSheet({ fact, reports, onClose, onReport, onOpenReport }: {
   rows.push([t('fact.surface'), surface ? (surfaceKey[surface] ? t(surfaceKey[surface]) : surface) : t('fact.unknownF')]);
   const linked = reports.filter(r => r.locationId === fact.id);
   const conflicts = conflictingReports(fact, reports);
+  const sourceTone = fact.status === 'osm' ? 'map' : fact.status === 'unverified' ? 'report' : fact.status;
+  const sourceStatus = fact.status === 'osm' ? t('fact.osmStatus') : t(`status.${fact.status}`);
 
   return (
     <Panel open onOpenChange={open => !open && onClose()} title={factTitle(fact, t, tp)}>
@@ -105,8 +107,9 @@ export function FactSheet({ fact, reports, onClose, onReport, onOpenReport }: {
           </p>
         ) : null}
 
-        <StatusRow tone="map" label={t('fact.osmStatus')}>
-          {t('fact.osmDetail', {
+        <StatusRow tone={sourceTone} label={sourceStatus}>
+          {fact.sourceLabel ? <p>{fact.sourceLabel}</p> : null}
+          {t(fact.status === 'osm' ? 'fact.osmDetail' : 'fact.sourceDetail', {
             obtained: formatDate(fact.obtainedAt, locale),
             edited: formatDate(fact.editedAt, locale, t('common.unknownDate')),
             confirmed: fact.confirmedAt ? formatDate(fact.confirmedAt, locale) : t('fact.none'),
@@ -130,13 +133,13 @@ export function FactSheet({ fact, reports, onClose, onReport, onOpenReport }: {
             <Camera />
             {t('fact.photo')}
           </Button>
-          <Button variant="outline" className="h-11" asChild>
+          {fact.sourceUrl ? <Button variant="outline" className="h-11" asChild>
             <a href={fact.sourceUrl} target="_blank" rel="noreferrer">
-              {t('fact.osm')}
+              {t(fact.status === 'osm' ? 'fact.osm' : 'fact.source')}
               <ExternalLink />
               <span className="sr-only">{t('fact.newTab')}</span>
             </a>
-          </Button>
+          </Button> : null}
         </div>
       </div>
     </Panel>

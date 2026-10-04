@@ -42,3 +42,45 @@ Czas (5 miejsc: Teatr Słowackiego, Camelot Cafe, Bar Kawowy Rio, Galeria Kazimi
 | z pamięci podręcznej, w przeglądarce | ok. 0,4 s | ok. 0,4 s |
 
 Dokładność (te same 12 miejsc co wyżej, 4 przebiegi z ustawieniami produkcyjnymi): mediana błędu 1,7–2,3 m, > 20 m od obiektu 4–9 z ~45 (łącznie 25/180 = 14%; przedtem 24/209 = 11,5%), na dachu 0–3 (przedtem 3–8), przejścia/schody/parkingi/tory w 8 m: 77% (przedtem 69%). Wstępne obserwacje bez rozumowania (`effort: none`) wypadły wyraźnie gorzej (mediana dla przejść i schodów ~20 m przed sprawdzeniem), więc zostają na `low`.
+
+## Poprawki po przeglądzie desktop/mobile (4 października 2026)
+
+Zakres: 15 usterek z pełnego przeglądu. Prace i weryfikacja podzielone między agentów domeny tras, desktopu i urządzeń mobilnych; integracja na lokalnym serwerze produkcyjnym `:3133`, z oddzielnym magazynem zgłoszeń. Zachowano równoległą zmianę panelu telefonu (`5318d2a`). Końcowy build QA ukończono o 03:59:50 czasu lokalnego; niezależne zmiany prywatności/pochodzenia danych dodane później nie należą do opisanych tu re-testów.
+
+| ID | Poprawka i regresja |
+| --- | --- |
+| QA-01 | `/city` czeka na żądanie przed sprawdzeniem konfiguracji. Build z pustym hasłem + hasło dopiero przy uruchomieniu: formularz logowania, logowanie 204, panel i API 200. |
+| QA-02 | TypeScript pomija `artifacts/` i `.runtime/`; istniejące pliki robocze pozostają na dysku i nie blokują buildu. |
+| QA-03 | Każde niezerowe dojście do/z samochodu lub taksówki podlega ocenie grafu. Testy krótkich schodów i nieznanej drogi zachowują ostrzeżenia. |
+| QA-04 | Odtwarzanie trasy, podpis i ranking używają tej samej przefiltrowanej tablicy GTFS co wyszukiwanie. Test wybiera dostępny kurs po odrzuconym niedostępnym. |
+| QA-05 | Odpoczynki przed pierwszym pojazdem są uwzględniane przed zatwierdzeniem połączenia; wyszukiwanie może wybrać późniejszy kurs. Regresja rzeczywistych danych 08:06, 10:02, 14:02: żaden wariant nie wymaga wcześniejszego wyjścia niż zadano. |
+| QA-06 | Przykładowe deklaracje toalet nie trafiają do planowania ani mapy lotniczej. Rzeczywiste źródło, status i daty są zachowane; test także po załadowaniu hotelu demo w Odkrywaj. |
+| QA-07 | Zgłoszenia przy trasie są wyszukiwane względem całych odcinków, nie tylko wierzchołków. Regresje długiego odcinka i powtórzonych punktów. |
+| QA-08 | Rampa przy schodach nie usuwa ograniczeń szerokości, przejezdności ani `wheelchair=no` z oceny wariantu zastępczego. |
+| QA-09 | Model wybiera numer wejścia, a uzasadnienie dostępności tworzy serwer z rekordu tego wejścia w PL/EN/DE. Brak informacji pozostaje brakiem informacji. Cache v10 jest pomijany; zmiana danych mapy również zmienia klucz. Żywy odczyt Wawelu zwraca informację o braku danych zamiast niepopartej deklaracji braku stopni. |
+| QA-10 | Link i historia zachowują datę oraz godzinę wyjazdu. Walidowane są prawdziwe daty i godziny; ponowne otwarcie formularza pokazuje zapisany termin. |
+| QA-11 | Autor może poprawić komentarz i cel niezależnie od opisu zdjęcia. Widok publiczny, panel miasta i CSV pokazują poprawione słowa. |
+| QA-12 | Częściowy zapis zdjęć pokazuje błąd i zachowuje kolejkę po zamknięciu panelu. Ponowienie z tymi samymi identyfikatorami nie tworzy kopii zgłoszenia ani zdjęcia; testy obejmują utratę odpowiedzi i próbę użycia cudzego identyfikatora. |
+| QA-13 | Język widżetu ma pierwszeństwo przed zapisaną preferencją i językiem przeglądarki, także w początkowym HTML. |
+| QA-14 | Przyciski mapy na telefonie mieszczą się w jednym rzędzie nad panelem, także w poziomie; cele dotykowe mają co najmniej 44 px. |
+| QA-15 | Błąd sieci planera używa tłumaczonego komunikatu, zachowując obsługę anulowania żądania i ponowienia. |
+
+Uzasadnienie dostępności wejścia jest deterministyczne. Pozostałe wskazówki i obserwacje modelu nadal są interpretacją danych i zdjęcia, a nie potwierdzeniem warunków w terenie. Filtr tekstu jest dodatkowym zabezpieczeniem, nie dowodem poprawności każdej wypowiedzi modelu. Niewysłane zdjęcia pozostają w pamięci otwartej aplikacji; zamknięcie całej karty może je utracić (przeglądarka otrzymuje ostrzeżenie przed opuszczeniem).
+
+Końcowe kontrole:
+
+| Kontrola | Wynik |
+| --- | --- |
+| `npm test` | **161/161**, bez pominięć. Równoległy build obciążył wcześniejszy przebieg: istniejący test szybkości podpowiedzi przekroczył 20 ms/zapytanie; samodzielny przebieg przeszedł (7 zapytań w ok. 19 ms łącznie). |
+| `npm run typecheck`, `npm run build`, `git diff --check` | przeszły |
+| Macierz API | 48/48 kombinacji 4 środków transportu × 4 profili × PL/EN/DE: HTTP 200, niepuste warianty; nieprawidłowe dane 400, obcy Origin 403 |
+| AI | test modelu, preferencji i syntetycznego zdjęcia przeszedł; świeży odczyt Wawelu ok. 9 s, wejście jawnie z nieznaną dostępnością |
+| Desktop Chromium | poprawa słów i eksport CSV, częściowa wysyłka, zamknięcie/otwarcie panelu, ponowienie bez kopii: przeszły; zero błędów strony i naruszeń axe w poprawionych panelach |
+| Odzyskiwanie formularza zgłoszenia | bez `crypto.randomUUID` działa UUID v4 z CSPRNG; awaria losowości lub zapisu tokena nie wysyła zgłoszenia i przywraca przyciski. Trzy scenariusze w przeglądarce: przeszły. |
+| Responsywność i stan planera | szerokości 320/390 oraz 844×390, udostępnienie i odtworzenie terminu, język widżetu oraz błąd offline i ponowienie: przeszły |
+| iPhone 18 Pro, iOS 27 Simulator, Safari | mapa i trasy działają; termin 8 października 09:30 odtworzony. Końcowy zrzut potwierdza, że pola daty i czasu mieszczą się w popoverze po poprawce szerokości. |
+| Android Emulator, Chrome | planowanie i szczegóły trasy działają. Obraz mapy pozostaje niezweryfikowany: także oficjalny przykład MapLibre wyświetla pusty canvas na tym samym emulatorze (ANGLE/SwiftShader), mimo działającego WebGL2 i odpowiedzi sieciowych 200. |
+
+Nie wykonano weryfikacji na fizycznym telefonie ani testów VoiceOver/TalkBack w tej rundzie.
+
+Dowody lokalne: `artifacts/qa-fixes-2026-10-04/` (poza Gitem); pierwotny raport pozostaje w `artifacts/qa-2026-10-04/` jako zapis stanu sprzed poprawek.

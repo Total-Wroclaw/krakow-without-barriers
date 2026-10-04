@@ -103,7 +103,7 @@ export function authorCanDelete(id: string) {
   return !!report && (report.cityStatus ?? 'new') === 'new';
 }
 
-export async function saveAutoReport(input: AutoReportInput, editTokenHash: string | null = null, id = randomUUID()): Promise<Report> {
+export async function saveAutoReport(input: AutoReportInput, editTokenHash: string | null = null, id: string = randomUUID()): Promise<Report> {
   const photo = input.photo ? await photoBytes(input.photo) : null;
   let observation: Observation;
   let analysis: Report['analysis'];
@@ -240,7 +240,7 @@ export function updateReport(id: string, observation: unknown, location?: unknow
   const destination = corrected.destination === undefined ? report.destination : corrected.destination || undefined;
   // A text-only report derives its observation from these words. Photo/AI observations remain independent.
   const commentOnly = report.analysis === 'comment' && observation === undefined;
-  if (commentOnly && (comment?.length ?? 0) < 3 && photoCount(report) === 0) throw new Error('comment_required');
+  if (commentOnly && corrected.comment !== undefined && (comment?.length ?? 0) < 3 && photoCount(report) === 0) throw new Error('comment_required');
   const next: Report = {
     ...report,
     comment,

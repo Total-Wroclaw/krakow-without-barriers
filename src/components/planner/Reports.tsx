@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, LoaderCircle, MapPin, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Field as FormField, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,12 +40,13 @@ const TOKENS_KEY = 'krok-report-tokens-v1';
 
 /** Edit tokens are returned once when a report is created; only their author can change or delete it. */
 export function rememberToken(id: string, token: unknown) {
-  if (typeof token !== 'string') return;
+  if (typeof token !== 'string') return false;
   try {
     const all = JSON.parse(localStorage.getItem(TOKENS_KEY) ?? '{}');
     all[id] = token;
     localStorage.setItem(TOKENS_KEY, JSON.stringify(all));
-  } catch {}
+    return true;
+  } catch { return false; }
 }
 
 export function reportToken(id: string): string | null {
@@ -200,6 +203,9 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
   const reportTitle = useReportTitle();
   const [editing, setEditing] = useState(startEditing);
   const [draft, setDraft] = useState<Observation | null>(report?.observation ?? null);
+  const [draftComment, setDraftComment] = useState(report?.comment ?? '');
+  const [draftDestination, setDraftDestination] = useState(report?.destination ?? '');
+  const [wordsError, setWordsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -207,6 +213,9 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
     setConfirmDelete(false);
     setEditing(startEditing);
     setDraft(report?.observation ?? null);
+    setDraftComment(report?.comment ?? '');
+    setDraftDestination(report?.destination ?? '');
+    setWordsError(false);
   }, [report, startEditing]);
 
   if (!report || !draft) return null;
@@ -214,17 +223,26 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
   const token = reportToken(report.id);
   const mine = !!token;
   const hiddenPhotos = report.photos?.filter(p => p.hidden).length ?? 0;
+  const hasPublicWords = report.type === 'blocked' || !!report.comment || !!report.destination;
+  const hasPhotoDescription = report.analysis !== 'comment';
 
   async function save() {
     if (!report || !draft) return;
     const parsed = observationSchema.safeParse(draft);
-    if (!parsed.success) {
+    if (hasPhotoDescription && !parsed.success) {
       toast.error(t('report.short'));
+      return;
+    }
+    if (!hasPhotoDescription && draftComment.trim().length < 3 && !(report.photos?.length || report.photoPath)) {
+      setWordsError(true);
+      document.getElementById('r-comment')?.focus();
       return;
     }
     setBusy(true);
     try {
-      const res = await fetch(`/api/reports/${report.id}?locale=${locale}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-report-token': token ?? '' }, body: JSON.stringify({ observation: parsed.data, locale }) });
+      const changedObservation = hasPhotoDescription && parsed.success && JSON.stringify(parsed.data) !== JSON.stringify(report.observation);
+      if (!hasPublicWords && !changedObservation) { setEditing(false); return; }
+      const res = await fetch(`/api/reports/${report.id}?locale=${locale}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-report-token': token ?? '' }, body: JSON.stringify({ ...(changedObservation && parsed.success ? { observation: parsed.data } : {}), ...(hasPublicWords ? { comment: draftComment, destination: draftDestination } : {}), locale }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onChange(data.report);
@@ -270,6 +288,21 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
 
         {editing ? (
           <div className="flex flex-col gap-4">
+            {hasPublicWords ? (
+              <FieldGroup>
+                <FormField data-invalid={wordsError || undefined}>
+                  <FieldLabel htmlFor="r-comment">{t('report.comment')}</FieldLabel>
+                  <Textarea id="r-comment" value={draftComment} maxLength={800} aria-invalid={wordsError || undefined} aria-describedby={wordsError ? 'r-comment-error' : undefined} onChange={e => { setDraftComment(e.target.value); setWordsError(false); }} />
+                  {wordsError ? <p id="r-comment-error" role="alert" className="text-sm text-destructive">{t('report.needComment')}</p> : null}
+                </FormField>
+                <FormField>
+                  <FieldLabel htmlFor="r-destination">{t('report.destination')}</FieldLabel>
+                  <Input id="r-destination" value={draftDestination} maxLength={200} onChange={e => setDraftDestination(e.target.value)} />
+                </FormField>
+              </FieldGroup>
+            ) : null}
+            {hasPhotoDescription ? <>
+            {hasPublicWords ? <p className="font-semibold">{t('report.photoDescription')}</p> : null}
             <Field label={t('report.kind')} id="r-kind">
               <Select value={draft.kind} onValueChange={v => set('kind', v as Observation['kind'])}>
                 <SelectTrigger id="r-kind" className="h-11 w-full"><SelectValue /></SelectTrigger>
@@ -301,11 +334,12 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
             <Field label={t('report.description')} id="r-desc">
               <Textarea id="r-desc" value={draft.description} maxLength={800} onChange={e => set('description', e.target.value)} className="min-h-24 text-base" />
             </Field>
+            </> : null}
             <div className="flex gap-2">
               <Button className="h-11 flex-1" onClick={save} disabled={busy}>
                 {busy ? <LoaderCircle className="animate-spin" /> : null}{t('report.save')}
               </Button>
-              <Button variant="outline" className="h-11" onClick={() => { setDraft(report.observation); setEditing(false); }}>
+              <Button variant="outline" className="h-11" onClick={() => { setDraft(report.observation); setDraftComment(report.comment ?? ''); setDraftDestination(report.destination ?? ''); setWordsError(false); setEditing(false); }}>
                 {t('report.cancel')}
               </Button>
             </div>
@@ -321,7 +355,7 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
             </dl>}
             {mine ? (
               <Button variant="outline" className="h-11 self-start" onClick={() => setEditing(true)}>
-                {t('report.edit')}
+                {t(hasPublicWords ? 'report.editReport' : 'report.edit')}
               </Button>
             ) : null}
           </div>
@@ -336,6 +370,7 @@ export function ReportPanel({ report, editing: startEditing, onClose, onChange, 
           </div>
         ) : null}
         {report.comment ? <p className="rounded-lg bg-muted/70 p-3 text-sm">{report.comment}</p> : null}
+        {report.destination ? <p className="text-sm"><span className="font-medium">{t('report.destination')}: </span>{report.destination}</p> : null}
         {hiddenPhotos ? <p className="rounded-lg bg-muted/70 p-3 text-sm">{t('report.photoPending', { n: hiddenPhotos })}</p> : null}
         {mine && (report.photos?.length ?? (report.photoPath ? 1 : 0)) < 4 ? (
           <AddPhoto reportId={report.id} onAdded={onChange} />

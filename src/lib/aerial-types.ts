@@ -20,6 +20,11 @@ export type AerialPin = {
   compass: Compass;
   sourceUrl: string;
   editedAt: string | null;
+  /** Non-OSM toilet provenance; other map pins retain their OSM/GTFS attribution. */
+  sourceStatus?: 'osm' | 'city' | 'partner' | 'unverified';
+  sourceLabel?: string;
+  obtainedAt?: string;
+  confirmedAt?: string | null;
   /** Entrance: wheelchair tag; toilet: yes/limited as stated by the source. */
   wheelchair?: Wheelchair;
   steps?: number;
@@ -83,7 +88,7 @@ export type AerialRecommendation = {
   entrance: number | null;
   /** Where to arrive from (a stop or parking pin), or null. */
   approachFrom: number | null;
-  /** One short sentence: why this entrance (as mapped), e.g. "marked step-free in OSM". */
+  /** Accessibility evidence composed by the server from this entrance's map record, including unknowns. */
   why: string;
   /** 2–4 short imperative steps from arrival to the door. */
   steps: string[];

@@ -275,12 +275,14 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
           </h3>
           <Textarea
             aria-labelledby="pref-ai-label"
+            aria-describedby="pref-ai-note"
             value={text}
             maxLength={1500}
             onChange={e => setText(e.target.value)}
             placeholder={t('prefs.aiPlaceholder')}
             className="min-h-20 text-base"
           />
+          <p id="pref-ai-note" className="text-xs text-muted-foreground">{t('prefs.aiNote')}</p>
           <Button variant="secondary" disabled={busy || text.trim().length < 2} onClick={fromText} className="h-11 self-start">
             {busy ? <LoaderCircle className="animate-spin" /> : <Sparkles />}
             {t('prefs.aiButton')}

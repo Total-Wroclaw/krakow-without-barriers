@@ -149,14 +149,14 @@ function fromOsm(o: OsmRecord, obtainedAt: string): Rec {
     id: objectId(o.id), name: o.n, names: { ...(o.t['name:en'] ? { en: o.t['name:en'] } : {}), ...(o.t['name:de'] ? { de: o.t['name:de'] } : {}) }, aliases: [],
     category: o.c, lat: o.la, lon: o.lo, address: osmAddress(o.t), website: o.t.website ?? o.t['contact:website'], openingHours: o.t.opening_hours,
     osmIds: [o.id, ...(o.also ?? [])],
-    sources: [{ id: sid, kind: 'osm', label: LABELS.osm.pl, labelKey: 'osm', url: osmUrl(o.id), obtainedAt, editedAt: o.ts, confirmedAt: o.t['check_date:wheelchair'] ?? o.t.check_date ?? null, status: 'map' }],
+    sources: [{ id: sid, kind: 'osm', label: LABELS.osm.pl, labelKey: 'osm', url: osmUrl(o.id), obtainedAt, editedAt: o.ts, confirmedAt: o.t['check_date:wheelchair'] ?? null, checkedAt: o.t.check_date ?? null, status: 'map' }],
     features: osmObjectFeatures(o.t, o.c, sid), searchName: [], searchExtra: [],
   };
   for (const e of o.e) {
     const esid = `osm:${e.id}`;
     const facts = osmEntranceFeatures(e, esid);
     if (!facts.length) continue;
-    rec.sources.push({ id: esid, kind: 'osm', label: LABELS.osmEntrance.pl, labelKey: 'osmEntrance', url: osmUrl(e.id), obtainedAt, editedAt: e.ts, confirmedAt: e.t['check_date'] ?? null, status: 'map' });
+    rec.sources.push({ id: esid, kind: 'osm', label: LABELS.osmEntrance.pl, labelKey: 'osmEntrance', url: osmUrl(e.id), obtainedAt, editedAt: e.ts, confirmedAt: e.t['check_date:wheelchair'] ?? null, checkedAt: e.t.check_date ?? null, status: 'map' });
     rec.features.push(...facts);
   }
   return rec;

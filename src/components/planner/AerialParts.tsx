@@ -108,8 +108,10 @@ export function useDescribe() {
     ...(line.ramp ? [t('aerial.ramp')] : []),
     t('aerial.direction'),
   ];
-  const source = (kind: AerialPin['kind'] | 'stairs', editedAt: string | null, overlay: AerialOverlay) =>
-    kind === 'stop'
+  const source = (kind: AerialPin['kind'] | 'stairs', editedAt: string | null, overlay: AerialOverlay, pin?: AerialPin) =>
+    pin?.sourceStatus && pin.sourceStatus !== 'osm'
+      ? [pin.sourceLabel, t(`status.${pin.sourceStatus}`), formatDate(editedAt ?? pin.obtainedAt ?? null, locale, t('common.unknownDate'))].filter(Boolean).join(' · ')
+      : kind === 'stop'
       ? t('aerial.source.ztp', { date: formatDate(overlay.transitObtainedAt, locale, t('common.unknownDate')) })
       : t('aerial.source.osm', { date: formatDate(editedAt, locale, t('common.unknownDate')) });
   return { where, details, stairs, source };
@@ -239,8 +241,11 @@ export function PointCard({ point, overlay }: { point: MapPoint; overlay: Aerial
   const kindLabel = isPin ? t(`aerial.kind.${point.pin.kind}`) : t('aerial.stairs');
   const name = isPin ? point.pin.name : undefined;
   const url = isPin ? point.pin.sourceUrl : `https://www.openstreetmap.org/${point.line.id.replace(':', '/')}`;
-  const sourceName = isPin && point.pin.kind === 'stop' ? 'ZTP GTFS' : 'OpenStreetMap';
-  const sourceDate = isPin && point.pin.kind === 'stop' ? overlay.transitObtainedAt : isPin ? point.pin.editedAt : point.line.editedAt;
+  const sourceStatus = isPin ? point.pin.sourceStatus : undefined;
+  const sourceName = isPin && sourceStatus && sourceStatus !== 'osm'
+    ? [point.pin.sourceLabel, t(`status.${sourceStatus}`)].filter(Boolean).join(' · ')
+    : isPin && point.pin.kind === 'stop' ? 'ZTP GTFS' : 'OpenStreetMap';
+  const sourceDate = isPin && point.pin.kind === 'stop' ? overlay.transitObtainedAt : isPin ? point.pin.editedAt ?? point.pin.obtainedAt : point.line.editedAt;
   const target = isPin ? point.pin : lineMiddle(point.line, place);
   return (
     <div className="flex flex-col gap-2.5">
@@ -277,12 +282,12 @@ export function PointCard({ point, overlay }: { point: MapPoint; overlay: Aerial
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t pt-2">
         <Direction from={place} to={target} />
-        <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline">
+        {url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline">
           {sourceName}
           {sourceDate ? <span className="text-muted-foreground">· {formatDate(sourceDate, locale)}</span> : null}
           <ExternalLink className="size-3" aria-hidden />
           <span className="sr-only">{t('fact.newTab')}</span>
-        </a>
+        </a> : <span className="text-xs text-muted-foreground">{sourceName}{sourceDate ? ` · ${formatDate(sourceDate, locale)}` : ''}</span>}
       </div>
     </div>
   );

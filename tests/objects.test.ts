@@ -72,7 +72,9 @@ test('city venue merges into a nearby OSM object with a similar name; conflicts 
   });
   const merged = getFromCatalog(cat, 'osm-way-1')!;
   assert.deepEqual(merged.sources.map(s => [s.kind, s.status]), [['osm', 'map'], ['city', 'city']]);
-  assert.equal(merged.sources[0].confirmedAt, '2025-05-01', 'check_date is the only confirmation date');
+  // A general check_date is a survey of the place, not of its accessibility: kept apart from confirmation.
+  assert.equal(merged.sources[0].confirmedAt, null, 'only check_date:wheelchair confirms accessibility');
+  assert.equal(merged.sources[0].checkedAt, '2025-05-01');
   assert.equal(merged.sources[0].editedAt, '2025-01-01T00:00:00Z');
   assert.equal(merged.sources[0].url, 'https://www.openstreetmap.org/way/1');
   assert.deepEqual(merged.conflicts, ['step_free_entrance']);

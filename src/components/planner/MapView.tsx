@@ -524,8 +524,8 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
           )}
         </PopoverContent>
       </Popover>
-      {/* Map controls in the app's own style; one column, top-right, 44 px targets. */}
-      <div className="absolute right-2.5 top-2.5 z-10 flex flex-col items-end gap-2">
+      {/* A single row fits the exposed map above a phone sheet, including landscape. */}
+      <div className="absolute right-2.5 top-2.5 z-10 flex items-start gap-2 lg:flex-col lg:items-end">
         <ToggleGroup
           type="single"
           value={base}
@@ -533,20 +533,20 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
           aria-label={t('map.style')}
           className="rounded-lg border bg-card p-0.5 shadow-sm"
         >
-          <ToggleGroupItem value="standard" className="h-10 gap-1 px-2.5 text-sm" aria-label={t('map.standard')}>
+          <ToggleGroupItem value="standard" className="h-11 min-w-11 gap-1 px-2.5 text-sm" aria-label={t('map.standard')}>
             <MapIcon aria-hidden />
             <span className="hidden sm:inline">{t('map.standard')}</span>
           </ToggleGroupItem>
-          <ToggleGroupItem value="satellite" className="h-10 gap-1 px-2.5 text-sm" aria-label={t('map.satellite')}>
+          <ToggleGroupItem value="satellite" className="h-11 min-w-11 gap-1 px-2.5 text-sm" aria-label={t('map.satellite')}>
             <Satellite aria-hidden />
             <span className="hidden sm:inline">{t('map.satellite')}</span>
           </ToggleGroupItem>
         </ToggleGroup>
-        <div className="hidden flex-col overflow-hidden rounded-lg border bg-card shadow-sm sm:flex" role="group" aria-label={t('map.zoom')}>
+        <div className="hidden overflow-hidden rounded-lg border bg-card shadow-sm sm:flex lg:flex-col" role="group" aria-label={t('map.zoom')}>
           <button type="button" className={control} onClick={() => map.current?.zoomIn()} aria-label={t('map.zoomIn')}>
             <Plus className="size-5" aria-hidden />
           </button>
-          <span className="h-px bg-border" aria-hidden />
+          <span className="w-px bg-border lg:h-px lg:w-auto" aria-hidden />
           <button type="button" className={control} onClick={() => map.current?.zoomOut()} aria-label={t('map.zoomOut')}>
             <Minus className="size-5" aria-hidden />
           </button>

@@ -3,8 +3,11 @@
  * `error` text when there is one, and an empty string otherwise (offline, timeout, HTML proxy
  * error pages), so callers can show their own translated fallback.
  */
-export async function postJson(url: string, body: unknown, timeout = 35000, headers: Record<string, string> = {}) {
+export async function postJson(url: string, body: unknown, timeout = 35000, headers: Record<string, string> = {}, signal?: AbortSignal) {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: controller.signal });
@@ -16,6 +19,7 @@ export async function postJson(url: string, body: unknown, timeout = 35000, head
     throw new RequestError('', 0);
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -27,5 +31,6 @@ export class RequestError extends Error {
 
 /** The user-facing text of an error, or the given fallback when there is none. */
 export function errorText(e: unknown, fallback: string) {
+  if (e instanceof TypeError || e instanceof SyntaxError || e instanceof DOMException) return fallback;
   return e instanceof Error && e.message ? e.message : fallback;
 }

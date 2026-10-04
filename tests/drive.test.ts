@@ -15,7 +15,7 @@ const LON = 19.5;
 const cls = (name: (typeof ROAD_CLASSES)[number]) => ROAD_CLASSES.indexOf(name);
 
 /** 5 × 5 street grid, ~111 m blocks; row 0 is one-way eastbound. A house sits 80 m north of the grid, reached by a footway. */
-function fixture() {
+function fixture(houseOffset = 0.00072, accessTags: Record<string, string> = {}) {
   const coords: [number, number][] = [];
   const id = (r: number, c: number) => r * 5 + c;
   for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) coords.push([LAT + r * 0.001, LON + c * 0.0015]);
@@ -43,10 +43,10 @@ function fixture() {
   });
 
   const nodes: OsmNode[] = coords.map((c, i) => ({ id: `n${i}`, lat: c[0], lon: c[1], tags: {}, editedAt: null }));
-  const house = { id: 'house', lat: LAT + 4 * 0.001 + 0.00072, lon: LON + 4 * 0.0015, tags: {}, editedAt: null };
+  const house = { id: 'house', lat: LAT + 4 * 0.001 + houseOffset, lon: LON + 4 * 0.0015, tags: {}, editedAt: null };
   nodes.push(house);
   const ways: Way[] = roadWays.map((w, i) => ({ id: `w${i}`, nodes: w.nodes.map(n => `n${n}`), tags: { highway: 'residential', name: 'Ulica' }, editedAt: null }));
-  ways.push({ id: 'path', nodes: [`n${id(4, 4)}`, 'house'], tags: { highway: 'footway' }, editedAt: null });
+  ways.push({ id: 'path', nodes: [`n${id(4, 4)}`, 'house'], tags: { highway: 'footway', ...accessTags }, editedAt: null });
   const data: Dataset = { obtainedAt: 'fixture', url: 'fixture', bbox: [], context: [], features: [], ways, nodes: Object.fromEntries(nodes.map(n => [n.id, n])) };
   return { roads, walk: buildGraph(data), house, corner: { lat: coords[0][0], lon: coords[0][1] }, id };
 }
@@ -139,4 +139,36 @@ test('planJourney lists drive options first and still returns walking for compar
   const missing = planJourney({ from: place('Dom', f.house), to: place('Róg', f.corner), preferences: free, date: '2026-10-03', time: '10:00', transport: 'car', locale: 'en' }, f.walk, () => null);
   assert.ok(missing.errors.includes('Road data is unavailable. Showing public transport and walking routes.'));
   assert.ok(missing.options.every(o => o.kind === 'walk'));
+});
+
+test('short taxi and car access retains mapped stairs and the real kerb pickup', () => {
+  const f = fixture(0.0002, { highway: 'steps', step_count: '10' });
+  const p = { ...free, mobility: 'wheelchair' as const };
+  for (const mode of ['taxi', 'car'] as const) {
+    const [option] = driveOptions(f.walk, f.roads, place('House', f.house), place('Corner', f.corner), p, 36000, mode, 'en');
+    const access = option.legs[0] as WalkLeg;
+    assert.equal(access.type, 'walk');
+    assert.ok(access.distance > 20 && access.distance < 40);
+    assert.equal(option.fits, false);
+    assert.ok(option.issues.includes('Stairs on the route'));
+    const drive = option.legs[1] as DriveLeg;
+    assert.deepEqual(drive.from, access.to);
+    if (mode === 'taxi') {
+      const pickup = JSON.parse(new URL(option.rideLinks![0].url).searchParams.get('pickup')!);
+      assert.notEqual(pickup.latitude, f.house.lat, 'request the taxi at the road, not beyond the stairs');
+    }
+  }
+  const [reverse] = driveOptions(f.walk, f.roads, place('Corner', f.corner), place('House', f.house), p, 36000, 'taxi', 'en');
+  assert.equal(reverse.legs.at(-1)!.type, 'walk');
+  assert.equal(reverse.fits, false);
+});
+
+test('short unmapped taxi access is retained with its unknown-path instruction', () => {
+  const f = fixture(0.0002);
+  const empty = buildGraph({ obtainedAt: 'fixture', url: 'fixture', bbox: [], context: [], features: [], ways: [], nodes: {} });
+  const [option] = driveOptions(empty, f.roads, place('House', f.house), place('Corner', f.corner), free, 36000, 'taxi', 'en');
+  const access = option.legs[0] as WalkLeg;
+  assert.equal(access.type, 'walk');
+  assert.ok(access.distance > 0 && access.distance < 40);
+  assert.match(access.steps[0].instruction, /path unknown/);
 });

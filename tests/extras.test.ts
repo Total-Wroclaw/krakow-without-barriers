@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildGraph, metres, shortestPath, type WalkGraph } from '../src/lib/routing';
 import { walkingOptions } from '../src/lib/walking';
 import { addRestStops, addToilets, applyExtras } from '../src/lib/journey-extras';
-import { buildCatalog, accessibleToiletsOf, queryCatalogPage, type OsmRecord } from '../src/lib/objects';
+import { buildCatalog, accessibleToiletsOf, queryCatalogPage, DEMO_PARTNER, type OsmRecord } from '../src/lib/objects';
 import { KRAKOW_TAXI_TARIFF, rideLinks, taxiFare, tariffPrice } from '../src/lib/taxi';
 import { defaultPreferences, preferencesSchema, type Preferences } from '../src/lib/schemas';
 import type { Dataset, OsmNode, Way } from '../src/lib/data';
@@ -123,6 +123,9 @@ test('rest stops: best bench near each mark, +2 min each, notes for marks withou
   assert.equal(option.arrival, 36000 + walked + 240);
   assert.deepEqual(option.issues, ['Brak ławki ok. 10. minuty', 'Brak ławki ok. 20. minuty']);
   assert.equal(option.fits, true);
+  const rested = JSON.stringify(option);
+  addRestStops(option, g, p, 'pl');
+  assert.equal(JSON.stringify(option), rested, 'a timetable-planned rest is not applied again by extras');
 
   // restEvery = 0: nothing changes.
   const [plain] = walkingOptions(g, place(d, 'a'), place(d, 'b'), free, 36000).options;
@@ -237,4 +240,41 @@ test('explore paging: stable total order, no overlaps or gaps, nextOffset null o
 test('metres helper sanity for fixtures', () => {
   assert.ok(Math.abs(metres({ lat: 50, lon: 19 }, { lat: 50 + 100 * M_LAT, lon: 19 }) - 100) < 0.5);
   assert.ok(Math.abs(metres({ lat: 50, lon: 19 }, { lat: 50, lon: 19 + 100 * M_LON }) - 100) < 0.5);
+});
+
+test('operational toilets exclude examples and retain map, city and owner provenance', () => {
+  const cat = buildCatalog({
+    osm: {obtainedAt:OBTAINED,sourceDate:null,objects:[rec('node:11',{n:'Mapped WC',la:50+300*M_LAT,lo:19,t:{wheelchair:'yes','check_date:wheelchair':'2026-09-01'}})]},
+    city: {
+      v:1,source:{url:'https://www.krakow.pl/fixture',title:'City list',obtainedAt:OBTAINED,sha256:'fixture',publisher:'UMK'},unresolved:[],
+      venues:[{id:'office',name:'City office',address:'Fixture 1',lat:50+700*M_LAT,lon:19,adaptations:['WC'],features:[{key:'accessible_toilet',value:'yes',detail:'WC'}],unmapped:[],geocode:{status:'resolved',match:'Fixture 1',osmRef:'node:20'}}],
+    },
+    partners: [
+      DEMO_PARTNER,
+      {...DEMO_PARTNER,id:'real-owner',name:'Actual owner declaration',example:false,lat:50+1000*M_LAT,lon:19,website:undefined,obtainedAt:OBTAINED},
+    ],
+  });
+  const toilets = accessibleToiletsOf(cat);
+  assert.ok(!toilets.some(t=>t.objectId==='partner-demo-hotel'));
+  assert.deepEqual(toilets.map(t=>t.status).sort(),['city','osm','partner']);
+  const d = line();
+  const g = buildGraph(d);
+  for (const toilet of toilets) {
+    const option = walkingOptions(g,place(d,'a'),place(d,'b'),free,0).options[0];
+    addToilets(option,[toilet],'en');
+    const fact = (option.legs[0] as WalkLeg).facts.find(f=>f.kind==='toilet')!;
+    assert.equal(fact.status,toilet.status);
+    assert.equal(fact.sourceLabel,toilet.sourceLabel);
+    assert.equal(fact.obtainedAt,OBTAINED);
+    if (toilet.status==='partner') {
+      assert.equal(fact.sourceUrl,'','no website is not evidence from OpenStreetMap');
+      assert.equal(fact.confirmedAt,null);
+      assert.match(fact.sourceLabel!,/właściciela/);
+    } else if (toilet.status==='city') {
+      assert.equal(fact.sourceUrl,'https://www.krakow.pl/fixture');
+    } else {
+      assert.equal(fact.sourceUrl,'https://www.openstreetmap.org/node/11');
+      assert.equal(fact.confirmedAt,'2026-09-01');
+    }
+  }
 });

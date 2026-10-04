@@ -119,6 +119,14 @@ test('cross-city journey: up to 4 timed transit options by departure, very long 
   for (const option of transit) assertTransitShape(option, 14 * 3600);
 });
 
+test('current timetable includes access rests without moving departure before the request', { skip: !hasTransit }, () => {
+  const result = planJourney({ from: initialFrom, to: initialTo, preferences: { ...defaultPreferences, restEvery: 5 }, date: '2026-10-04', time: '10:02' });
+  const options = result.options.filter(o => o.kind === 'transit');
+  assert.ok(options.length > 0, 'a reachable later service remains available');
+  assert.ok(options.some(o => (o.restStops ?? 0) > 0));
+  for (const option of options) assertTransitShape(option, 10 * 3600 + 2 * 60);
+});
+
 test('options that fit today come first; transfer journeys include walking transfers between platforms', { skip: !hasTransit }, () => {
   const short = planJourney({ from: rynek, to: wawel, preferences: defaultPreferences, date: '2026-10-03', time: '14:00' });
   const firstUnfit = short.options.findIndex(o => !o.fits);

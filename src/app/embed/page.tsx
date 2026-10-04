@@ -6,6 +6,7 @@ import { placeSchema } from '@/lib/city-types';
 import { isLocale } from '@/lib/i18n/locales';
 import { acceptLanguage } from '@/lib/i18n/request-locale';
 import { serverMessages } from '@/lib/i18n/server-messages';
+import { I18nProvider } from '@/lib/i18n/client';
 
 export const metadata: Metadata = { title: 'Jak do nas dotrzeć — Każdy Krok', robots: { index: false } };
 
@@ -32,5 +33,5 @@ export default async function EmbedPage({ searchParams }: { searchParams: Promis
       </main>
     );
   }
-  return <Planner embed={place.data} />;
+  return <I18nProvider initialLocale={locale}><Planner embed={place.data} /></I18nProvider>;
 }

@@ -324,6 +324,8 @@ function Provenance({ o }: { o: PlaceObject }) {
   const groups = groupSources(o.sources);
   if (!groups.length) return null;
   const confirmed = groups.map(g => g.confirmedAt).filter(Boolean).sort().pop();
+  // A general OSM survey date says someone looked at the place, not that its accessibility was checked.
+  const checked = groups.map(g => g.checkedAt).filter(Boolean).sort().pop();
   return (
     <Collapsible className="rounded-xl bg-muted/70 text-sm">
       <CollapsibleTrigger className="group flex min-h-11 w-full items-start gap-3 rounded-xl p-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring">
@@ -333,7 +335,11 @@ function Provenance({ o }: { o: PlaceObject }) {
             {t('explore.sources')}: {[...new Set(groups.map(g => t(`explore.src.${g.status}`)))].join(', ')}
           </span>
           <span className="block text-muted-foreground">
-            {confirmed ? t('explore.confirmed', { date: formatDate(confirmed, locale) }) : t('explore.notConfirmed')}
+            {confirmed
+              ? t('explore.confirmed', { date: formatDate(confirmed, locale) })
+              : checked
+                ? t('explore.checked', { date: formatDate(checked, locale) })
+                : t('explore.notConfirmed')}
           </span>
         </span>
         <ChevronDown className="mt-0.5 size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" aria-hidden />
@@ -361,6 +367,7 @@ function Provenance({ o }: { o: PlaceObject }) {
                 <span className="block text-muted-foreground">
                   {t('explore.obtained', { date: formatDate(g.main.obtainedAt, locale) })}
                   {g.editedAt ? ` · ${t('explore.edited', { date: formatDate(g.editedAt, locale) })}` : ''}
+                  {g.confirmedAt ? ` · ${t('explore.confirmed', { date: formatDate(g.confirmedAt, locale) })}` : g.checkedAt ? ` · ${t('explore.checked', { date: formatDate(g.checkedAt, locale) })}` : ''}
                 </span>
               </span>
             </li>

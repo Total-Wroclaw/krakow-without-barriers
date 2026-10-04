@@ -8,6 +8,8 @@ const common = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()' },
+  // Browsers only honour it over HTTPS, so local http:// development is unaffected.
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
 ];
 
 const config: NextConfig = {

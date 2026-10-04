@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { aerialBbox, inFrame, project, roundPoint, unproject } from '@/lib/aerial-geo';
 import {
-  analysisHash, applyRefinement, cachedAnalysis, linesForPrompt, needsStepFree, objectForPrompt, overlayAt, pinsForPrompt, preferencesForPrompt, preferencesKey, weatherForPrompt,
+  analysisHash, applyRefinement, cachedAnalysis, linesForPrompt, needsStepFree, objectForPrompt, overlayAt, overlayEvidence, pinsForPrompt, preferencesForPrompt, preferencesKey, weatherForPrompt,
   reportsDigest, reportsNear, sanitiseAnalysis, sanitiseObservations, storeAnalysis, type AnalysisKey,
 } from '@/lib/aerial';
 import { autoWidth, type AerialAnalysis, type AerialObservation } from '@/lib/aerial-types';
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   const widthM = autoWidth(overlay);
   const key: AnalysisKey = {
     ...place, widthM, name: input.name, locale: input.locale, objectId: input.objectId ?? null,
-    preferences: preferencesKey(preferences), arrival: input.arrival, weather: weatherBucket(weather), reports: reportsDigest(reports, place),
+    preferences: preferencesKey(preferences), arrival: input.arrival, weather: weatherBucket(weather), reports: reportsDigest(reports, place), evidence: overlayEvidence(overlay),
   };
   const cached = await cachedAnalysis(key);
   if (cached) return ndjson([{ analysis: cached, final: true, cached: true }]);
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     })();
     // The advice and the observations are two calls side by side, so the advice is not held up by the close-ups.
     const advice = prepared.then(async ({ image, ctx }): Promise<AerialAnalysis> => ({
-      ...sanitiseAnalysis(await describeWayIn(image, ctx, input.locale), overlay.pins, { stepFree: needsStepFree(preferences), arrival: input.arrival }),
+      ...sanitiseAnalysis(await describeWayIn(image, ctx, input.locale), overlay.pins, { stepFree: needsStepFree(preferences), arrival: input.arrival, locale: input.locale }),
       observations: [],
       widthM,
       basedOn,

@@ -3,17 +3,18 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Camera, ImagePlus, LoaderCircle, Route, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import type { CityPlace } from '@/lib/city-types';
-import { errorText, postJson } from '@/lib/client';
+import { errorText } from '@/lib/client';
 import { useI18n } from '@/lib/i18n/client';
+import { prepareReportSubmission, sendReportSubmission, type ReportSubmission } from '@/lib/report-submission';
 import type { Report } from '@/lib/schemas';
 import { Panel } from './Panel';
 import { LocationPicker, gpsPlace } from './LocationPicker';
-import { rememberToken, reportToken, shrink, type CaptureTarget } from './Reports';
+import { rememberToken, shrink, type CaptureTarget } from './Reports';
 
 const MAX_PHOTOS = 4;
 
@@ -39,16 +40,27 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
   const [photos, setPhotos] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [commentError, setCommentError] = useState(false);
+  const [submission, setSubmission] = useState<ReportSubmission | null>(null);
+  const [submissionError, setSubmissionError] = useState('');
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || submission) return;
     setMode('choose');
     // Start from what the person is looking at (a place or barrier), else the map centre; they confirm or move it.
     setPlace((selected ?? mapPoint()).place);
     setTarget(destination ?? '');
     setComment('');
     setPhotos([]);
-  }, [open, selected, destination]);
+    setCommentError(false);
+    setSubmissionError('');
+  }, [open, selected, destination, submission]);
+
+  useEffect(() => {
+    if (!submission) return;
+    const preventLoss = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', preventLoss);
+    return () => window.removeEventListener('beforeunload', preventLoss);
+  }, [submission]);
 
   async function addFiles(files: FileList | null) {
     if (!files) return;
@@ -70,54 +82,43 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (comment.trim().length < 3 && !photos.length) {
+    if (!submission && comment.trim().length < 3 && !photos.length) {
       setCommentError(true);
       document.getElementById('blocked-comment')?.focus();
       return;
     }
     setBusy(true);
+    setSubmissionError('');
     const id = toast.loading(t('report.sending'));
+    let current = submission;
     try {
       const at = place ?? mapPoint().place;
-      const gpsUsed = at.source === 'GPS';
       const fromSelected = !!selected && at.lat === selected.place.lat && at.lon === selected.place.lon;
-      const data = await postJson(
-        '/api/reports/auto',
-        {
-          type: 'blocked',
-          comment: comment.trim() || undefined,
-          destination: target.trim() || undefined,
-          location: at,
-          locationSource: gpsUsed ? 'gps' : fromSelected ? 'fact' : 'map',
-          ...(fromSelected && selected?.factId ? { factId: selected.factId } : {}),
-          ...(photos[0] ? { photo: photos[0] } : {}),
-          locale,
-        },
-        60000,
-      );
-      let report = data.report as Report;
-      rememberToken(report.id, data.editToken);
-      // Further photos are attached one by one; each is analysed separately.
-      for (const photo of photos.slice(1)) {
-        try {
-          const more = await postJson(`/api/reports/${report.id}/photos?locale=${locale}`, { photo, locale }, 60000, { 'x-report-token': reportToken(report.id) ?? '' });
-          if (more.report) report = more.report as Report;
-        } catch {}
-      }
-      onSaved(report);
+      current ??= prepareReportSubmission({
+        type: 'blocked', comment: comment.trim() || undefined, destination: target.trim() || undefined,
+        location: at, locationSource: at.source === 'GPS' ? 'gps' : fromSelected ? 'fact' : 'map',
+        ...(fromSelected && selected?.factId ? { factId: selected.factId } : {}), locale,
+      }, photos);
+      setSubmission(current);
+      // Save authorship before the first request: even a lost creation response must remain recoverable.
+      if (!rememberToken(current.id, current.token)) throw new Error();
+      const active = current;
+      await sendReportSubmission(active, report => { onSaved(report); setSubmission({ ...active }); });
       toast.success(t('report.sent'), { id });
       onOpenChange(false);
+      setSubmission(null);
     } catch (err) {
-      toast.error(errorText(err, t('report.failed')), { id });
+      if (current) setSubmission({ ...current });
+      const message = current?.report ? t('report.partial', { n: current.pending.length }) : errorText(err, t(current ? 'report.retryUnconfirmed' : 'report.failed'));
+      setSubmissionError(message);
+      toast.error(message, { id });
     } finally {
       setBusy(false);
     }
   }
 
-  const selectedName = selected?.place.name;
-
   return (
-    <Panel open={open} onOpenChange={onOpenChange} title={mode === 'blocked' ? t('report.blockedTitle') : t('report.chooserTitle')} description={mode === 'choose' ? t('report.chooserDesc') : t('report.blockedOptionDesc')}>
+    <Panel open={open} onOpenChange={next => !busy && onOpenChange(next)} title={mode === 'blocked' ? t('report.blockedTitle') : t('report.chooserTitle')} description={mode === 'choose' ? t('report.chooserDesc') : t('report.blockedOptionDesc')}>
       {mode === 'choose' ? (
         <div className="flex flex-col gap-3 pt-2">
           <ChoiceButton icon={Camera} title={t('report.photoOption')} description={t('report.photoOptionDesc')} onClick={() => { onOpenChange(false); onPhoto(); }} />
@@ -125,6 +126,22 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
         </div>
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-4 pt-2">
+          {submission ? (
+            <>
+              <Alert role={submissionError ? 'alert' : 'status'}>
+                <AlertDescription>{submissionError || t(submission.report ? 'report.uploadingPhotos' : 'report.sending')}</AlertDescription>
+              </Alert>
+              <div className="flex flex-wrap gap-2">
+                {submission.pending.map((photo, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={photo.id} src={photo.photo} width={80} height={80} alt={t('report.pendingPhoto', { n: i + 1 })} className="size-20 rounded-lg object-cover" />
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground">{t('report.retryHint')}</p>
+              <Button type="submit" size="lg" disabled={busy}>{busy ? <LoaderCircle className="animate-spin" /> : null}{t('report.retry')}</Button>
+            </>
+          ) : <>
+          {submissionError ? <Alert role="alert"><AlertDescription>{submissionError}</AlertDescription></Alert> : null}
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 font-semibold">{t('report.where')}</legend>
             {place ? (
@@ -178,6 +195,7 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
             {busy ? <LoaderCircle className="animate-spin" /> : null}
             {t('report.send')}
           </Button>
+          </>}
         </form>
       )}
     </Panel>

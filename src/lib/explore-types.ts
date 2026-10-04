@@ -40,8 +40,10 @@ export type ObjectSource = {
   label: string;
   url?: string;
   obtainedAt: string;
-  /** Date the information was last confirmed on site, if anyone did. */
+  /** Date the accessibility information was confirmed on site, if anyone did (OSM: check_date:wheelchair). */
   confirmedAt: string | null;
+  /** A general survey date (OSM check_date): the place was checked, not necessarily its accessibility. */
+  checkedAt?: string | null;
   /** Last edit at the source (e.g. OSM edit time); not a field confirmation. */
   editedAt?: string | null;
   status: SourceStatus;

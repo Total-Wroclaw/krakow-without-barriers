@@ -17,6 +17,7 @@ import type { TransportMode } from './journey-types';
 import type { PlaceObject } from './explore-types';
 import type { WalkGraph } from './routing';
 import type { Preferences, Report } from './schemas';
+import type { Locale } from './i18n/locales';
 
 /** Limits keep the photo readable: the nearest few of each kind. */
 const LIMITS = { entrance: 6, stop: 6, parking: 4, toilet: 2, bench: 40, kerb: 40, step: 20, line: 70 } as const;
@@ -35,7 +36,7 @@ export type OverlayInputs = {
   entrances: { id: string; lat: number; lon: number; tags: Record<string, string>; editedAt: string | null }[];
   stops: (Stop & { lines?: string[] })[];
   parking: { id: string; name: string | null; lat: number; lon: number; disabledSpaces: number | null; editedAt: string | null; fee?: 'yes' | 'no' | 'unknown'; capacity?: number | null }[];
-  toilets: { objectId: string; name: string | null; lat: number; lon: number; sourceUrl: string; editedAt: string | null; value?: 'yes' | 'limited' }[];
+  toilets: { objectId: string; name: string | null; lat: number; lon: number; sourceUrl: string; editedAt: string | null; value?: 'yes' | 'limited'; status?: AerialPin['sourceStatus']; sourceLabel?: string; obtainedAt?: string; confirmedAt?: string | null }[];
   markers: AerialMarker[];
   lines: AerialLine[];
 };
@@ -96,7 +97,7 @@ export function buildOverlay(place: Point, input: OverlayInputs): Omit<AerialOve
     add({ kind: 'parking', lat: p.lat, lon: p.lon, name: p.name, sourceUrl: osmUrl(p.id), editedAt: p.editedAt, disabledSpaces: p.disabledSpaces, fee: p.fee ?? 'unknown', capacity: p.capacity ?? null });
   }
   for (const { item: t } of nearestFirst(place, input.toilets, OVERLAY_RADIUS, LIMITS.toilet)) {
-    add({ kind: 'toilet', lat: t.lat, lon: t.lon, name: t.name, sourceUrl: t.sourceUrl, editedAt: t.editedAt, wheelchair: t.value ?? 'yes' });
+    add({ kind: 'toilet', lat: t.lat, lon: t.lon, name: t.name, sourceUrl: t.sourceUrl, editedAt: t.editedAt, wheelchair: t.value ?? 'yes', sourceStatus: t.status, sourceLabel: t.sourceLabel, obtainedAt: t.obtainedAt, confirmedAt: t.confirmedAt });
   }
 
   const markers = (['bench', 'kerb', 'step'] as const).flatMap(kind => nearestFirst(place, input.markers.filter(m => m.kind === kind), OVERLAY_RADIUS, LIMITS[kind]).map(x => x.item));
@@ -272,7 +273,7 @@ export function pinsForPrompt(overlay: AerialOverlay, bbox: Bbox) {
     } else if (pin.kind === 'parking') {
       facts.push(`parking z miejscami dla osób z niepełnosprawnością${pin.disabledSpaces ? ` (${pin.disabledSpaces})` : ''}`, `fee=${pin.fee ?? 'unknown'}`);
     } else {
-      facts.push('dostępna toaleta');
+      facts.push(`toaleta, dostępność wg źródła=${pin.wheelchair ?? 'unknown'}`, `źródło=${pin.sourceStatus ?? 'osm'}: ${JSON.stringify(pin.sourceLabel ?? 'OpenStreetMap')}`);
     }
     return `[${pin.n}] ${facts.join(', ')}; ${at(pin, bbox, overlay.place)}`;
   });
@@ -406,10 +407,37 @@ export function cleanSentence(text: string, pinKinds: AerialPin['kind'][]) {
 }
 
 export type RawAnalysis = {
-  recommendation: { entrance: number | null; approachFrom: number | null; why: string; steps: string[]; avoid: string[]; ask: string[] };
+  // `why` is accepted only for replaying older responses; it is never trusted or displayed.
+  recommendation: { entrance: number | null; approachFrom: number | null; why?: string; steps: string[]; avoid: string[]; ask: string[] };
   today: string[];
 };
 export type RawObservation = { x: number; y: number; kind: string; label: string };
+
+/** Accessibility explanations are composed from the selected map record, never model prose or the photo. */
+const entranceEvidence: Record<Locale, Record<Wheelchair, (n: number) => string>> = {
+  pl: {
+    yes: n => `OpenStreetMap oznacza wejście [${n}] jako dostępne dla wózków. To deklaracja z mapy; potwierdź warunki na miejscu.`,
+    limited: n => `OpenStreetMap oznacza ograniczoną dostępność wejścia [${n}] dla wózków. Sprawdź, jakie ograniczenia występują.`,
+    no: n => `OpenStreetMap oznacza wejście [${n}] jako niedostępne dla wózków.`,
+    unknown: n => `Brak danych o dostępności wejścia [${n}] w OpenStreetMap. Przed skorzystaniem sprawdź stopnie i próg.`,
+  },
+  en: {
+    yes: n => `OpenStreetMap marks entrance [${n}] as wheelchair accessible. This is a map declaration; confirm conditions on site.`,
+    limited: n => `OpenStreetMap records limited wheelchair access at entrance [${n}]. Check which restrictions apply.`,
+    no: n => `OpenStreetMap marks entrance [${n}] as inaccessible to wheelchairs.`,
+    unknown: n => `Accessibility of entrance [${n}] is not recorded in OpenStreetMap. Check steps and thresholds before using it.`,
+  },
+  de: {
+    yes: n => `OpenStreetMap kennzeichnet Eingang [${n}] als rollstuhlgerecht. Das ist eine Kartenangabe; prüfe die Bedingungen vor Ort.`,
+    limited: n => `OpenStreetMap verzeichnet eingeschränkte Rollstuhlzugänglichkeit für Eingang [${n}]. Prüfe die Einschränkungen vor Ort.`,
+    no: n => `OpenStreetMap kennzeichnet Eingang [${n}] als nicht rollstuhlzugänglich.`,
+    unknown: n => `Zur Zugänglichkeit von Eingang [${n}] liegen in OpenStreetMap keine Angaben vor. Prüfe Stufen und Schwellen vor Ort.`,
+  },
+};
+
+// Defence in depth: keep accessibility assertions out of the model's other prose fields as well.
+// The corresponding source-grounded statement is supplied above, so no model paraphrase is needed.
+const accessibilityProse = /dostępn|bez\s+(?:stopni|schod|prog|krawęż|pomocy)|bezstopni|płaski\s+próg|próg\s+(?:jest\s+)?płaski|accessible|accessibility|step[ -]?free|barrier[ -]?free|(?:wheelchairs?|pushchairs?|strollers?)\s+can|unaided|threshold\s+(?:is\s+)?(?:flush|flat|level)|(?:flush|flat|level)\s+threshold|without\s+(?:any\s+)?(?:steps|stairs|kerbs|curbs|thresholds|help|assistance)|no\s+(?:steps|stairs|kerbs|curbs|thresholds)|barrierefrei|rollstuhl(?:gerecht|zugänglich)|zugänglichkeit|stufenlos|ohne\s+(?:stufen|treppen|schwellen|bordstein|hilfe)/i;
 
 /** Needs for which an entrance tagged "not accessible" must never be recommended. */
 export const needsStepFree = (p: Preferences | null) => !!p && (p.mobility === 'wheelchair' || p.mobility === 'stroller');
@@ -426,7 +454,7 @@ export const arrivalKinds = (arrival: TransportMode): AerialPin['kind'][] => (ar
 export function sanitiseAnalysis(
   raw: RawAnalysis,
   pins: Pick<AerialPin, 'kind' | 'wheelchair'>[],
-  options: { stepFree?: boolean; arrival?: TransportMode } = {},
+  options: { stepFree?: boolean; arrival?: TransportMode; locale?: Locale } = {},
 ): Pick<AerialAnalysis, 'recommendation' | 'today'> {
   const kinds = pins.map(p => p.kind);
   const arrival = arrivalKinds(options.arrival ?? 'transit');
@@ -445,13 +473,13 @@ export function sanitiseAnalysis(
   });
   const usable = (s: string) => ![...s.matchAll(reference)].some(m => rejected.has(Number(m[1])));
   const sentences = (list: string[], max: number, min = 8) =>
-    [...new Set(list.map(s => cleanSentence(s, kinds)).filter(s => s.length >= min && usable(s)))].slice(0, max);
+    [...new Set(list.map(s => cleanSentence(s, kinds)).filter(s => s.length >= min && usable(s) && !accessibilityProse.test(s)))].slice(0, max);
 
   const r = raw.recommendation;
   const entrance = pinOf(r.entrance, ['entrance']) && !rejected.has(r.entrance!) ? r.entrance : null;
   const approachFrom = pinOf(r.approachFrom, arrival) ? r.approachFrom : null;
   const steps = sentences(r.steps, 4);
-  const why = entrance !== null ? (sentences([r.why], 1)[0] ?? '') : '';
+  const why = entrance !== null ? entranceEvidence[options.locale ?? 'pl'][pins[entrance - 1].wheelchair ?? 'unknown'](entrance) : '';
   const recommendation = entrance === null && !steps.length ? null : { entrance, approachFrom, why, steps, avoid: sentences(r.avoid, 3, 4), ask: sentences(r.ask, 3, 4) };
   return { recommendation, today: sentences(raw.today, 2) };
 }
@@ -491,12 +519,17 @@ export function applyRefinement(observations: AerialObservation[], found: (Point
 
 // ---------- Analysis cache ----------
 /** Bump when the prompt or the validation changes, so old readings are not served. */
-const ANALYSIS_VERSION = 10;
-export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; arrival: TransportMode; weather: string; reports: string };
+const ANALYSIS_VERSION = 11;
+export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; arrival: TransportMode; weather: string; reports: string; evidence?: string };
+
+/** Updated map records must invalidate even same-version accessibility explanations. */
+export function overlayEvidence(overlay: AerialOverlay) {
+  return createHash('sha256').update(JSON.stringify([overlay.pins, overlay.lines, overlay.markers, overlay.osmObtainedAt, overlay.transitObtainedAt])).digest('hex').slice(0, 24);
+}
 
 /** File name for a reading: everything that changes the text is part of the hash. */
 export function analysisHash(key: AnalysisKey) {
-  return createHash('sha256').update(JSON.stringify([ANALYSIS_VERSION, key.lat, key.lon, key.widthM, key.name, key.locale, key.objectId, key.preferences, key.arrival, key.weather, key.reports])).digest('hex').slice(0, 24);
+  return createHash('sha256').update(JSON.stringify([ANALYSIS_VERSION, key.lat, key.lon, key.widthM, key.name, key.locale, key.objectId, key.preferences, key.arrival, key.weather, key.reports, key.evidence ?? ''])).digest('hex').slice(0, 24);
 }
 
 async function analysisFile(key: AnalysisKey) {

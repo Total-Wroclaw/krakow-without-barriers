@@ -78,7 +78,7 @@ export function groupFacts(features: AccessFeature[], sources: ObjectSource[]): 
 }
 
 /** Sources gathered for the provenance area: map data in one entry (place + entrances), every other source as is. */
-export type SourceGroup = { status: SourceStatus; main: ObjectSource; entrances: ObjectSource[]; editedAt: string | null; confirmedAt: string | null };
+export type SourceGroup = { status: SourceStatus; main: ObjectSource; entrances: ObjectSource[]; editedAt: string | null; confirmedAt: string | null; checkedAt: string | null };
 export function groupSources(sources: ObjectSource[]): SourceGroup[] {
   const out: SourceGroup[] = [];
   const latest = (a: string | null, b: string | null | undefined) => (!b ? a : !a || b > a ? b : a);
@@ -89,9 +89,10 @@ export function groupSources(sources: ObjectSource[]): SourceGroup[] {
       if (s.part === 'entrance') osm.entrances.push(s);
       osm.editedAt = latest(osm.editedAt, s.editedAt);
       osm.confirmedAt = latest(osm.confirmedAt, s.confirmedAt);
+      osm.checkedAt = latest(osm.checkedAt, s.checkedAt);
       continue;
     }
-    out.push({ status: s.status, main: s, entrances: s.part === 'entrance' ? [s] : [], editedAt: s.editedAt ?? null, confirmedAt: s.confirmedAt });
+    out.push({ status: s.status, main: s, entrances: s.part === 'entrance' ? [s] : [], editedAt: s.editedAt ?? null, confirmedAt: s.confirmedAt, checkedAt: s.checkedAt ?? null });
   }
   return out.sort((a, b) => PRIORITY[a.status] - PRIORITY[b.status]);
 }

@@ -11,7 +11,7 @@ Stan na 4 października 2026. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` 
 | podjazdy, windy, schodołazy | ✅ | Odkrywaj (ok. 3 080 miejsc z OSM, zestawienie UMK, deklaracje partnerów) i odczyt z lotu ptaka z ortofotomapy GUGiK (przejścia, schody, parkingi, tory; dokładność w `VALIDATION.md`) |
 | szerokość wejścia | 🟡 | `door_width`, gdy jest w OSM lub u partnera; w OSM rzadkie |
 | nawierzchnia | ✅ | Trasy (bruk, żwir — kary i uwagi „Bruk na 71 m”) |
-| toaleta | ✅ | Kategoria Toalety (284, 160 z danymi) i cecha „Toaleta dostępna” |
+| toaleta | ✅ | Kategoria Toalety (284, 160 z danymi) i cecha „Toaleta przystosowana” |
 | miejsca odpoczynku | ✅ | Ławki na trasie, przerzedzone co ≥150 m |
 | Źródło, data aktualizacji, poziom wiarygodności | ✅ | Kropka statusu + panel: źródło, pobrano, edycja u źródła, potwierdzenie na miejscu |
 | Dane z dostępnych źródeł, bez ręcznej bazy Miasta | ✅ | OSM (Geofabrik), ZTP GTFS, strona UMK, GUGiK, partnerzy, użytkownicy |

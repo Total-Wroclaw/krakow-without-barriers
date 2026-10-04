@@ -33,6 +33,8 @@ const trip = (from, to, extra = '') => `${BASE}/?from=${from}&to=${to}&date=${DA
 
 /** Persona for the story: on crutches after a knee operation; stairs down hurt, up is fine. Needs, not diagnosis. */
 const PERSONA = { avoidStairs: false, avoidDown: true, avoidUp: false, preferHandrails: true, preferRest: true, maxDistance: 1500, mobility: 'crutches', restEvery: 10, showToilets: true };
+/** Wheelchair profile for the lift scene. */
+const WHEELCHAIR = { ...PERSONA, avoidStairs: true, avoidDown: true, avoidUp: true, mobility: 'wheelchair' };
 const NEEDS_TEXT = 'Chodzę dziś o kulach. Schodzenie po schodach boli, pod górę dam radę. Chcę odpocząć co 10 minut i mieć przystosowaną toaletę po drodze.';
 
 const DEVICES = {
@@ -288,6 +290,31 @@ const scenes = {
     await p.getByRole('button', { name: 'Kliknij ponownie, aby usunąć' }).click();
     await p.getByText('Zgłoszenie usunięte.').waitFor();
   },
+  /** Wheelchair walk at Rondo Mogilskie: the "Inny przebieg" option passes a lift ("Winda · dostępna dla wózków"). */
+  async lift(p, d) {
+    await p.goto(`${BASE}/?from=50.06647%2C19.96&to=50.06407%2C19.96&date=${DATE}&time=${TIME}&mode=walk`, { waitUntil: 'networkidle' });
+    await waitRoutes(p);
+    const alt = p.locator('li', { hasText: 'Inny przebieg' }).first();
+    await alt.getByRole('button', { name: /Szczegóły trasy/ }).first().click()
+      .catch(() => alt.getByRole('button').first().click());
+    await p.getByRole('heading', { name: 'Krok po kroku' }).waitFor();
+    await settleMap(p, 1200);
+    await sheet(p, 'full');
+    const lift = p.getByText(/Winda · dostępna dla wózków/).first();
+    await scrollPanelTo(p, lift, 120);
+    await shot(p, d, 'lift');
+  },
+  /** Explore → purple "Zgłoszenia" category: public reports with their status. */
+  async reports(p, d) {
+    await p.goto(`${BASE}/?category=reports`, { waitUntil: 'networkidle' });
+    await p.getByRole('tab', { name: 'Odkrywaj' }).click().catch(() => {});
+    await p.waitForTimeout(1500);
+    const citywide = p.getByRole('button', { name: 'Szukaj w całym Krakowie' });
+    if (await citywide.isVisible().catch(() => false)) await citywide.click();
+    await sheet(p, 'half');
+    await settleMap(p, 1500);
+    await shot(p, d, 'reports');
+  },
   /** Partner widget on a (clearly fictional) hotel page. */
   async embed(p, d) {
     await p.goto(`${BASE}/embed?to=50.05411,19.93541&name=Wawel`, { waitUntil: 'networkidle' });
@@ -387,7 +414,7 @@ async function runShots() {
       if (ONLY && !ONLY.has(name)) continue;
       console.log(device, name);
       // The needs scene starts from the default settings so the AI visibly changes them.
-      const ctx = await context(browser, device, { prefs: name === 'needs' ? null : PERSONA });
+      const ctx = await context(browser, device, { prefs: name === 'needs' ? null : name === 'lift' ? WHEELCHAIR : PERSONA });
       const p = await ctx.newPage();
       try {
         await scene(p, device);

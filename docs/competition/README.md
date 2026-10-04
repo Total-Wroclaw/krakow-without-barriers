@@ -11,20 +11,25 @@ Wszystkie zrzuty i nagrania pochodzą z działającej aplikacji (Next.js 16, Map
 
 ## Slajdy
 
-1. Czy dam radę przejść tę trasę dzisiaj? (tytuł)
+Wersja z 4.10.2026: jeden nagłówek i najwyżej trzy krótkie punkty albo jedna duża liczba na slajd, duże zrzuty z aktualnej aplikacji (telefon: panel przesuwany nad mapą) w ramkach urządzeń.
+
+1. Czy dam radę przejść tę trasę dzisiaj? (tytuł; trasy i winda „dostępna dla wózków” na Rondzie Mogilskim)
 2. „Dostępne / niedostępne” nie mówi, czy dam radę dzisiaj (problem i użytkownicy)
-3. Anna, o kulach: z Dworca Głównego na Wawel i z powrotem (scenariusz: potrzeby → trasa → bariery → kierunek schodów)
-4. Każdy fakt ma źródło i datę. Brak danych zostaje brakiem (wiarygodność danych)
-5. Z lotu ptaka: jak dojść i wejść, zanim wyjdziesz z domu (efekt WOW, zmierzona dokładność)
-6. Zgłoszenie jednym zdjęciem wraca do mapy jako poprawka (społeczność i panel miasta)
-7. Pozyskanie danych oddzielone od prezentacji (architektura, odświeżanie, awarie, nowe miasto, wdrożenie)
-8. Bezpłatne dla ludzi. Płacą obiekty, miasto i platformy (model biznesowy — hipotezy)
-9. Projektowane pod WCAG 2.2 AA. Bez kont, bez diagnozy (dostępność cyfrowa i prywatność, z tym, czego jeszcze nie sprawdzono)
-10. 10 tygodni na Starym Mieście i Kazimierzu (pilotaż, mierniki, prośba)
+3. Anna o kulach: z Dworca na Wawel i z powrotem (scenariusz w 4 zrzutach)
+4. Każdy fakt ma źródło i datę. Brak danych zostaje brakiem (~3 080 miejsc, pochodzenie danych)
+5. Z lotu ptaka: jak dojść i wejść (efekt WOW, zmierzona dokładność)
+6. Zgłoszenie jednym zdjęciem wraca do mapy (kategoria „Zgłoszenia” w Odkrywaj, panel miasta)
+7. Pozyskanie danych oddzielone od prezentacji (architektura w 5 krokach)
+8. Bezpłatne dla ludzi. Płacą obiekty, miasto i platformy (3 ceny i koszt działania — hipotezy)
+9. Projektowane pod WCAG 2.2 AA. Bez kont, bez diagnozy (dostępność cyfrowa i prywatność)
+10. 10 tygodni na Starym Mieście i Kazimierzu (pilotaż: 3 cele, prośba)
 
 Liczby na slajdach pochodzą z `docs/VALIDATION.md`, `docs/ARCHITECTURE.md`, `docs/DATA-SOURCES.md` i `PROJECT.md`; ceny, koszty i cele pilotażu są tam oznaczone jako hipotezy i tak samo opisane na slajdach.
 
 ## Film (kolejność)
+
+Aktualne demo nagrywa zespół samodzielnie; `demo.mp4` i `demo.srt` w repozytorium pochodzą z wcześniejszego nagrania skryptem i pokazują starszy układ interfejsu.
+
 
 Potrzeby opisane własnymi słowami → poprawka kierunku schodów → warianty Dworzec Główny → Wawel z paskiem barier → krok po kroku (schody w górę 25 stopni z poręczą, ławka po 10 min, toalety) → źródło i daty faktu → droga powrotna: te same schody w dół, wariant „nie pasuje” → miejsce z różnymi wejściami i „brak danych” o parkingu, pochodzenie danych → Filharmonia bez danych → widok z lotu ptaka i wskazówki AI → zgłoszenie zdjęciem testowym (zapisane i od razu usunięte tokenem autora) → widżet na przykładowej stronie hotelu → panel miasta (dane testowe) → karta końcowa.
 
@@ -38,9 +43,9 @@ CITY_DASHBOARD_PASSWORD=pokaz-lokalny KROK_STORAGE_DIR=/tmp/kk-comp-runtime npx 
 
 # 1. zrzuty ekranu (telefon 390×844 i desktop 1440×900, 2×) → artifacts/competition/assets/
 CITY_URL=http://localhost:3140 CITY_PASSWORD=pokaz-lokalny node scripts/capture-competition.mjs shots http://localhost:3030
-#    pojedyncze sceny: ONLY=routes,place,aerial …
+#    pojedyncze sceny: ONLY=routes,place,aerial,lift,reports …
 
-# 2. prezentacja → docs/competition/kazdy-krok.pdf
+# 2. prezentacja → docs/competition/kazdy-krok.pdf (DECK_OUT=… buduje obok, do sprawdzenia przed podmianą)
 python3 scripts/build-competition.py
 
 # 3. surowe nagranie (telefon + desktop) → artifacts/competition/video/raw/, potem montaż → demo.mp4 + demo.srt

@@ -169,7 +169,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   }, [fact, t]);
   const onSaved = useCallback((r: Report) => setReports(old => [r, ...old.filter(existing => existing.id !== r.id)]), []);
   const onOpen = useCallback((report: Report, editing: boolean) => setOpenReport({ report, editing }), []);
-  const { capture, busy } = useReportCapture({ fallback, onSaved, onOpen });
+  const { capture, busy, notice: photoNotice } = useReportCapture({ fallback, onSaved, onOpen });
 
   // What "selected place" means for a report: an open barrier, an open place card, or the trip destination.
   const reportTarget = useMemo((): CaptureTarget | null => {
@@ -500,6 +500,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
       </div>
 
 
+      {photoNotice}
       <PreferencesPanel open={prefsOpen} onOpenChange={setPrefsOpen} preferences={preferences} onChange={setPreferences} />
       <FactSheet
         fact={fact}

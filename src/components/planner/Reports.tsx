@@ -95,6 +95,8 @@ export type CaptureTarget = { place: CityPlace; source: 'map' | 'fact'; factId?:
  * One-tap photo report: camera → AI analysis → saved as an unverified report.
  * The location comes from GPS, or from the fact/place/map point the user is looking at.
  */
+const NOTICE_KEY = 'krok-photo-notice-v1';
+
 export function useReportCapture({ fallback, onSaved, onOpen }: {
   fallback: () => CaptureTarget;
   onSaved: (r: Report) => void;
@@ -168,12 +170,48 @@ export function useReportCapture({ fallback, onSaved, onOpen }: {
     };
   }, [fallback, onSaved, onOpen, t, locale, reportTitle]);
 
+  // The first photo report explains what happens to the photo before anything is sent; then it is remembered.
+  const [asking, setAsking] = useState(false);
   function capture(at?: CaptureTarget) {
     target.current = at ?? null;
-    input.current?.click();
+    let seen = false;
+    try {
+      seen = localStorage.getItem(NOTICE_KEY) === '1';
+    } catch {}
+    if (seen) input.current?.click();
+    else setAsking(true);
   }
+  const notice = (
+    <Panel open={asking} onOpenChange={setAsking} title={t('report.noticeTitle')} description={t('report.noticeDesc')}>
+      <div className="flex flex-col gap-4 px-6 pb-6 pt-2 text-sm leading-relaxed max-md:px-4">
+        <ul className="flex list-disc flex-col gap-1.5 pl-5">
+          <li>{t('report.noticeAi')}</li>
+          <li>{t('report.noticePublic')}</li>
+          <li>{t('report.noticePhoto')}</li>
+          <li>{t('report.noticeEdit')}</li>
+        </ul>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="h-11"
+            onClick={() => {
+              try {
+                localStorage.setItem(NOTICE_KEY, '1');
+              } catch {}
+              setAsking(false);
+              // Still inside the click, so the browser lets the camera open.
+              input.current?.click();
+            }}
+          >
+            <Camera />
+            {t('report.noticeOk')}
+          </Button>
+          <Button variant="ghost" className="h-11" onClick={() => setAsking(false)}>{t('report.noticeCancel')}</Button>
+        </div>
+      </div>
+    </Panel>
+  );
 
-  return { capture, busy };
+  return { capture, busy, notice };
 }
 
 export function ReportFab({ busy, onClick }: { busy: boolean; onClick: () => void }) {

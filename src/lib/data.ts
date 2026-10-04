@@ -1,4 +1,4 @@
-// Generic OSM dataset types and display helpers. Client-safe: no Node or data imports.
+// Generic OSM dataset types and tag helpers. Client-safe: no Node or data imports.
 export type Point = { lat: number; lon: number };
 export type OsmNode = Point & { id: string; tags: Record<string, string>; editedAt: string | null };
 export type Way = { id: string; nodes: string[]; tags: Record<string, string>; editedAt: string | null };
@@ -17,10 +17,4 @@ export function handrail(tags: Record<string, string>): 'yes' | 'no' | 'unknown'
   if (keys.some(k => tags[k] === 'yes')) return 'yes';
   if (tags.handrail === 'no') return 'no';
   return 'unknown';
-}
-
-export function date(value: string | null | undefined) {
-  return value
-    ? new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value))
-    : 'Nieznana';
 }

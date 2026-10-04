@@ -19,10 +19,10 @@ export function bearing(a: Point, b: Point) {
   return (Math.atan2(y, x) / r + 360) % 360;
 }
 
-export type Direction = 'up' | 'down' | 'unknown';
+type Direction = 'up' | 'down' | 'unknown';
 
 /** Materialised edge, created only for edges on a returned path. */
-export type Edge = {
+type Edge = {
   index: number;
   from: string;
   to: string;
@@ -42,7 +42,7 @@ const HANDRAIL = 32;
 
 const pedestrianHighways = new Set(['footway', 'path', 'steps', 'pedestrian', 'living_street']);
 
-export type Mobility = Preferences['mobility'];
+type Mobility = Preferences['mobility'];
 
 /** Per-way surface/passage properties relevant to wheels (wheelchair, pushchair). */
 export const ROUGH = 1;
@@ -123,7 +123,7 @@ export function wayMobility(tags: Record<string, string>) {
   return bits;
 }
 
-export function nodeBarrier(tags: Record<string, string>) {
+function nodeBarrier(tags: Record<string, string>) {
   let bits = 0;
   const kerb = tags.kerb;
   if (kerb === 'raised' || kerb === 'normal') bits |= KERB_RAISED;
@@ -538,7 +538,7 @@ export function wantsRest(p: Preferences) {
 }
 
 /** Routing cost of an edge, Infinity when excluded. Cost is never below its length. */
-export function edgeCost(g: WalkGraph, e: number, p: Preferences | null, penalise?: Uint8Array) {
+function edgeCost(g: WalkGraph, e: number, p: Preferences | null, penalise?: Uint8Array) {
   const length = g.edgeLength[e];
   let cost = length;
   if (p) {

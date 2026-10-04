@@ -452,7 +452,7 @@ function pathLength(g: WalkGraph, edges: number[]) {
 }
 
 /** Share of the shorter path's length that also appears in the other path (either direction). */
-export function overlap(g: WalkGraph, a: number[], b: number[]) {
+function overlap(g: WalkGraph, a: number[], b: number[]) {
   const n = g.ids.length;
   const pairs = new Set<number>();
   for (const e of b) {

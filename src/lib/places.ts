@@ -7,6 +7,7 @@ import { gunzipSync } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 import type { PlaceSuggestion } from './journey-types';
 import type { Point } from './city-types';
+import { distance as metres } from './aerial-geo';
 
 type RawIndex = {
   areas: [string, number, number][];
@@ -72,11 +73,6 @@ export function words(text: string) {
 }
 const isNumeric = (token: string) => /^\d/.test(token);
 const inEnvelope = (lat: number, lon: number) => lat >= ENVELOPE.minLat && lat <= ENVELOPE.maxLat && lon >= ENVELOPE.minLon && lon <= ENVELOPE.maxLon;
-function metres(a: Point, b: Point) {
-  const x = ((b.lon - a.lon) * Math.PI / 180) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
-  const y = (b.lat - a.lat) * Math.PI / 180;
-  return 6371000 * Math.hypot(x, y);
-}
 const cellKey = (lat: number, lon: number) => Math.floor(lat / CELL) * 100000 + Math.floor(lon / CELL);
 const cityCellKey = (y: number, x: number) => y * 100000 + x;
 

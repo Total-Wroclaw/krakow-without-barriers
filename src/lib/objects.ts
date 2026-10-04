@@ -14,6 +14,7 @@ import type { Report } from './schemas';
 import type { CityFact } from './city-types';
 import { publicPhotoPath } from './report-photos';
 import { fold, words } from './places';
+import { distance as metres } from './aerial-geo';
 
 // ---------- Types of raw inputs ----------
 type OsmEntrance = { id: string; d: number; ts: string | null; t: Record<string, string> };
@@ -132,11 +133,6 @@ type Rec = {
 };
 const osmUrl = (id: string) => `https://www.openstreetmap.org/${id.replace(':', '/')}`;
 export const objectId = (osmId: string) => `osm-${osmId.replace(':', '-')}`;
-function metres(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const x = ((b.lon - a.lon) * Math.PI / 180) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
-  const y = (b.lat - a.lat) * Math.PI / 180;
-  return 6371000 * Math.hypot(x, y);
-}
 function osmAddress(t: Record<string, string>) {
   const street = t['addr:street'] ?? t['addr:place'];
   if (!street || !t['addr:housenumber']) return undefined;

@@ -160,7 +160,6 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
       map.current = null;
     };
     // The map is created once per place (the parent keys this component by place).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Initial fit: zoom to the auto frame once it is known, unless the person has already moved the map.
@@ -287,7 +286,6 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
   return (
     <div ref={root} className={cn('relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-muted', styles.map)} style={{ ['--scan' as string]: 0, ['--scan-a' as string]: 0, ['--scan-out' as string]: 1 }} data-vaul-no-drag>
       {placeholder && !tilesShown ? (
-        // eslint-disable-next-line @next/next/no-img-element -- decorative placeholder; the map has its own label
         <img src={placeholder} alt="" className="absolute inset-0 size-full object-cover" />
       ) : null}
       {!placeholder && !tilesShown ? <div className="absolute inset-0 bg-muted motion-safe:animate-pulse" aria-hidden /> : null}

@@ -27,7 +27,7 @@ export function tileAllowed(z: number, x: number, y: number) {
   return x >= lon2x(BOUNDS.west, z) && x <= lon2x(BOUNDS.east, z) && y >= lat2y(BOUNDS.north, z) && y <= lat2y(BOUNDS.south, z);
 }
 
-export function tileBbox(z: number, x: number, y: number) {
+function tileBbox(z: number, x: number, y: number) {
   const size = (2 * R) / 2 ** z;
   const minX = -R + x * size;
   const maxY = R - y * size;

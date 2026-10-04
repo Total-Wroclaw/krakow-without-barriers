@@ -8,7 +8,7 @@ export const keyFactKeys: FeatureKey[] = ['step_free_entrance', 'accessible_toil
 /** Card order of the other facts. */
 const ORDER: FeatureKey[] = ['step_free_entrance', 'entrance_steps', 'accessible_toilet', 'lift', 'ramp', 'stair_lift', 'door_width', 'difficult_building', 'automatic_door', 'disabled_parking', 'staff_assistance', 'sign_language', 'hearing_loop', 'seating', 'surface'];
 /** For these keys "yes" is the barrier (e.g. steps at the entrance). */
-export const barrierWhenYes = new Set<FeatureKey>(['entrance_steps', 'difficult_building']);
+const barrierWhenYes = new Set<FeatureKey>(['entrance_steps', 'difficult_building']);
 const PRIORITY: Record<SourceStatus, number> = { city: 0, map: 1, partner: 2, example: 2, unverified: 3 };
 
 export type Tone = 'good' | 'warn' | 'bad' | 'unknown';
@@ -78,7 +78,7 @@ export function groupFacts(features: AccessFeature[], sources: ObjectSource[]): 
 }
 
 /** Sources gathered for the provenance area: map data in one entry (place + entrances), every other source as is. */
-export type SourceGroup = { status: SourceStatus; main: ObjectSource; entrances: ObjectSource[]; editedAt: string | null; confirmedAt: string | null; checkedAt: string | null };
+type SourceGroup = { status: SourceStatus; main: ObjectSource; entrances: ObjectSource[]; editedAt: string | null; confirmedAt: string | null; checkedAt: string | null };
 export function groupSources(sources: ObjectSource[]): SourceGroup[] {
   const out: SourceGroup[] = [];
   const latest = (a: string | null, b: string | null | undefined) => (!b ? a : !a || b > a ? b : a);

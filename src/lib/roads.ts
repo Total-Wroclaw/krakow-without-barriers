@@ -11,7 +11,7 @@ export const ROAD_CLASSES = ['motorway', 'motorway_link', 'trunk', 'trunk_link',
   'tertiary', 'tertiary_link', 'unclassified', 'residential', 'living_street', 'service'] as const;
 
 /** Assumed limit (km/h) when `maxspeed` is not tagged. */
-export const DEFAULT_SPEED: Record<(typeof ROAD_CLASSES)[number], number> = {
+const DEFAULT_SPEED: Record<(typeof ROAD_CLASSES)[number], number> = {
   motorway: 120, motorway_link: 60, trunk: 90, trunk_link: 50, primary: 50, primary_link: 40, secondary: 50, secondary_link: 40,
   tertiary: 50, tertiary_link: 30, unclassified: 40, residential: 30, living_street: 15, service: 15,
 };
@@ -25,8 +25,8 @@ export function urbanFactor(limit: number) {
 }
 
 /** Extra seconds when passing a node with traffic signals / a junction of three or more road arms. */
-export const SIGNAL_DELAY = 15;
-export const JUNCTION_DELAY = 4;
+const SIGNAL_DELAY = 15;
+const JUNCTION_DELAY = 4;
 /** `access=destination|customers` roads are allowed but only used near the ends of a trip. */
 const DESTINATION_FACTOR = 4;
 const DESTINATION_PENALTY = 60;

@@ -29,7 +29,7 @@ export const autoReportSchema = z
     destination: optionalText(200),
   })
   .refine(v => !!v.photo || v.type === 'blocked' || (v.comment?.length ?? 0) >= 3, { message: 'photo_or_comment', path: ['photo'] });
-export type AutoReportInput = z.infer<typeof autoReportSchema>;
+type AutoReportInput = z.infer<typeof autoReportSchema>;
 
 export const addPhotoSchema = z.object({ photo: photoString, locale: z.enum(locales).default('pl'), uploadId: z.uuid().optional() });
 export const reportCorrectionSchema = z.object({
@@ -86,7 +86,7 @@ export function newEditToken() {
   return { token, hash: hashToken(token) };
 }
 
-export type ReportAccess = 'ok' | 'not_found' | 'forbidden';
+type ReportAccess = 'ok' | 'not_found' | 'forbidden';
 /** Checks the author's token against the stored hash in constant time. */
 export function checkEditToken(id: string, token: string | null | undefined): ReportAccess {
   const row = db().prepare('SELECT edit_hash FROM reports WHERE id=?').get(id) as { edit_hash: string | null } | undefined;
@@ -167,11 +167,11 @@ export async function saveAutoReportOnce(input: AutoReportInput, submission: z.i
   }
 }
 
-export function photoCount(report: Report) {
+function photoCount(report: Report) {
   return report.photos?.length ?? (report.photoPath ? 1 : 0);
 }
 
-export type AddPhotoResult = { report: Report; photo: ReportPhoto } | { error: 'not_found' | 'limit' };
+type AddPhotoResult = { report: Report; photo: ReportPhoto } | { error: 'not_found' | 'limit' };
 
 /** Adds one photo (max MAX_PHOTOS per report), analysed by AI. The report's observation only changes if it had none from a photo. */
 export async function addReportPhoto(reportId: string, input: z.infer<typeof addPhotoSchema>): Promise<AddPhotoResult> {

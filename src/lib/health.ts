@@ -5,7 +5,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { apiKey, runtimeDir } from './server';
 
-export type SourceHealth = {
+type SourceHealth = {
   id: 'osm' | 'places' | 'roads' | 'objects' | 'cityVenues' | 'transit';
   /** When we downloaded it. */
   obtainedAt: string | null;

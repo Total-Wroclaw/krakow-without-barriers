@@ -11,7 +11,7 @@ import { serverMessages } from './i18n/server-messages';
 import type { Locale } from './i18n/locales';
 import type { Preferences } from './schemas';
 import type { CityPlace, Point, Stop } from './city-types';
-import type { JourneyOption, Leg, LegPoint, RideLeg, WalkLeg } from './journey-types';
+import type { JourneyOption, Leg, LegPoint, RideLeg } from './journey-types';
 
 /** Straight-line radius for candidate access/egress stops. */
 const STOP_RADIUS = 900;
@@ -28,7 +28,7 @@ const MAX_SCAN_RUNS = 14;
 const SAME_PLACE = 15;
 const WINDOW_SECONDS = 5 * 3600;
 
-export class TransitUnavailableError extends Error {}
+class TransitUnavailableError extends Error {}
 
 type Calendar = { service: string; start: string; end: string; days: string };
 

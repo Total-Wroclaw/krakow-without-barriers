@@ -21,7 +21,7 @@ import { PlaceInput } from './PlaceInput';
 const editable: FeatureKey[] = ['step_free_entrance', 'entrance_steps', 'ramp', 'lift', 'door_width', 'automatic_door', 'accessible_toilet', 'disabled_parking', 'seating', 'staff_assistance'];
 type Row = { value: FeatureValue | 'none'; detail: string };
 
-export function embedCode(origin: string, place: { lat: number; lon: number; name: string }) {
+function embedCode(origin: string, place: { lat: number; lon: number; name: string }) {
   const src = `${origin}/embed?to=${place.lat.toFixed(5)},${place.lon.toFixed(5)}&name=${encodeURIComponent(place.name)}`;
   return `<iframe src="${src}" title="${place.name.replace(/"/g, '&quot;')}" width="100%" height="680" style="border:0" loading="lazy" allow="geolocation"></iframe>`;
 }
@@ -82,7 +82,6 @@ export function PartnerForm({ open, existing, edit, onClose, onSaved }: {
         onClose();
       });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, existing, edit?.id, edit?.token, locale]);
 
   async function submit(e: FormEvent) {

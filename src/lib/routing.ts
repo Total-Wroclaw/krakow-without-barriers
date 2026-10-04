@@ -19,10 +19,10 @@ export function bearing(a: Point, b: Point) {
   return (Math.atan2(y, x) / r + 360) % 360;
 }
 
-export type Direction = 'up' | 'down' | 'unknown';
+type Direction = 'up' | 'down' | 'unknown';
 
 /** Materialised edge, created only for edges on a returned path. */
-export type Edge = {
+type Edge = {
   index: number;
   from: string;
   to: string;
@@ -42,7 +42,7 @@ const HANDRAIL = 32;
 
 const pedestrianHighways = new Set(['footway', 'path', 'steps', 'pedestrian', 'living_street']);
 
-export type Mobility = Preferences['mobility'];
+type Mobility = Preferences['mobility'];
 
 /** Per-way surface/passage properties relevant to wheels (wheelchair, pushchair). */
 export const ROUGH = 1;
@@ -52,16 +52,16 @@ export const NARROW = 8;
 export const STEEP = 16;
 export const NO_WHEELCHAIR = 32;
 /** Steps with an integrated wheelchair ramp (`ramp:wheelchair=yes`). */
-export const RAMP_WHEELCHAIR = 64;
+const RAMP_WHEELCHAIR = 64;
 /** Steps with some ramp or rails (`ramp=yes`): usable with a pushchair, not proven for a wheelchair. */
-export const RAMP_ANY = 128;
+const RAMP_ANY = 128;
 export const SETT = 256;
 /** Stairs with more than LONG_FLIGHT_STEPS steps (`step_count`): tiring on crutches. */
-export const LONG_FLIGHT = 512;
+const LONG_FLIGHT = 512;
 export const LONG_FLIGHT_STEPS = 15;
 /** Stairs with a known `step_count` of at most SHORT_FLIGHT_STEPS: a pushchair can be lifted over them. */
-export const SHORT_FLIGHT = 1024;
-export const SHORT_FLIGHT_STEPS = 2;
+const SHORT_FLIGHT = 1024;
+const SHORT_FLIGHT_STEPS = 2;
 
 /** Per-node barriers met when passing through the node. */
 export const KERB_RAISED = 1;
@@ -123,7 +123,7 @@ export function wayMobility(tags: Record<string, string>) {
   return bits;
 }
 
-export function nodeBarrier(tags: Record<string, string>) {
+function nodeBarrier(tags: Record<string, string>) {
   let bits = 0;
   const kerb = tags.kerb;
   if (kerb === 'raised' || kerb === 'normal') bits |= KERB_RAISED;
@@ -467,7 +467,7 @@ const wheelCosts = {
 } as const;
 
 /** Pushchair lifted over a short flight without a ramp: +liftFixed m once per flight and +lift × length. */
-export const strollerLiftCosts = { lift: 3, liftFixed: 40 } as const;
+const strollerLiftCosts = { lift: 3, liftFixed: 40 } as const;
 
 /** True when edge e starts at an end node of its way (entering the flight), so fixed costs count once per flight. */
 function entersWay(g: WalkGraph, e: number) {
@@ -510,7 +510,7 @@ function wheelCost(g: WalkGraph, e: number, mobility: 'wheelchair' | 'stroller',
  * without a known handrail and on long flights; rough surfaces and raised kerbs cost a little;
  * detours along footpaths are worth less than for walking (shorter is better).
  */
-export const crutchCosts = { stairs: 1, noHandrail: 6, noHandrailFixed: 20, longFlight: 4, longFlightFixed: 30, rough: 1, veryRough: 2, steep: 1, kerbRaised: 15, step: 25, street: 0.1 } as const;
+const crutchCosts = { stairs: 1, noHandrail: 6, noHandrailFixed: 20, longFlight: 4, longFlightFixed: 30, rough: 1, veryRough: 2, steep: 1, kerbRaised: 15, step: 25, street: 0.1 } as const;
 
 function crutchCost(g: WalkGraph, e: number, flags: number, length: number) {
   const c = crutchCosts;
@@ -538,7 +538,7 @@ export function wantsRest(p: Preferences) {
 }
 
 /** Routing cost of an edge, Infinity when excluded. Cost is never below its length. */
-export function edgeCost(g: WalkGraph, e: number, p: Preferences | null, penalise?: Uint8Array) {
+function edgeCost(g: WalkGraph, e: number, p: Preferences | null, penalise?: Uint8Array) {
   const length = g.edgeLength[e];
   let cost = length;
   if (p) {

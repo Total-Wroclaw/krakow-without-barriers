@@ -9,7 +9,7 @@ type Handrail = 'yes' | 'no' | 'unknown';
 const pluralRules = new Map<Locale, Intl.PluralRules>();
 
 /** CLDR plural category (pl: one, few, many, other; en/de: one, other). */
-export function plural(locale: Locale, n: number, forms: PluralForms) {
+function plural(locale: Locale, n: number, forms: PluralForms) {
   let rules = pluralRules.get(locale);
   if (!rules) pluralRules.set(locale, (rules = new Intl.PluralRules(locale)));
   const category = rules.select(n) as keyof PluralForms;

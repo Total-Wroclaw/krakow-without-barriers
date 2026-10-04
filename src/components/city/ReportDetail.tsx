@@ -202,7 +202,6 @@ function Detail({ report: r, onSaved, onUnauthorized }: { report: Report; onSave
               {photos.map((p, i) => (
                 <li key={p.id} className="grid min-w-0 content-start gap-2 rounded-lg border bg-card p-2">
                   <a href={p.path} target="_blank" rel="noreferrer" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={p.path} alt={`Zdjęcie ${i + 1}${p.analysis ? `: ${p.analysis.description}` : ''} (otwórz w pełnym rozmiarze)`} loading="lazy" className="aspect-[4/3] w-full rounded-md bg-muted object-cover" />
                   </a>
                   <p className="text-xs text-muted-foreground">

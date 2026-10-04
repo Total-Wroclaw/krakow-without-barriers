@@ -7,6 +7,7 @@ import { gunzipSync } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 import type { PlaceSuggestion } from './journey-types';
 import type { Point } from './city-types';
+import { distance as metres } from './aerial-geo';
 
 type RawIndex = {
   areas: [string, number, number][];
@@ -72,11 +73,6 @@ export function words(text: string) {
 }
 const isNumeric = (token: string) => /^\d/.test(token);
 const inEnvelope = (lat: number, lon: number) => lat >= ENVELOPE.minLat && lat <= ENVELOPE.maxLat && lon >= ENVELOPE.minLon && lon <= ENVELOPE.maxLon;
-function metres(a: Point, b: Point) {
-  const x = ((b.lon - a.lon) * Math.PI / 180) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
-  const y = (b.lat - a.lat) * Math.PI / 180;
-  return 6371000 * Math.hypot(x, y);
-}
 const cellKey = (lat: number, lon: number) => Math.floor(lat / CELL) * 100000 + Math.floor(lon / CELL);
 const cityCellKey = (y: number, x: number) => y * 100000 + x;
 
@@ -255,7 +251,7 @@ function match(doc: Doc, tokens: string[], soft: boolean[] = []): Match | null {
  * Folded query tokens. "ul." is dropped and "os."/"al."/"pl." expanded (soft) anywhere in the query, also mid-query
  * ("dluga ul. 10"); a bare "os"/"al"/"pl"/"ul" as the last token without a dot may still be a word being typed.
  */
-export function queryTokens(query: string): { tokens: string[]; soft: boolean[] } {
+function queryTokens(query: string): { tokens: string[]; soft: boolean[] } {
   const raw = fold(query).split(/(?=[^\p{L}\p{N}])|(?<=[^\p{L}\p{N}])/u);
   const parts: { word: string; dot: boolean }[] = [];
   raw.forEach((piece, i) => {

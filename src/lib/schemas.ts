@@ -53,5 +53,4 @@ export type ReportPhoto={id:string;path?:string;createdAt:string;analysis?:Obser
   reviewedAt?:string;
   hidden?:true; reason?:'privacy'};
 /** photo: set when the entry records a photo decision instead of a status/note change. */
-export type CityHistoryEntry={at:string;status:CityStatus;note:string;photo?:{id:string;visibility:PhotoVisibility}};
-export const emptyObservation:Observation = {kind:'stairs',description:'',direction:'unknown',handrail:'unknown',surface:'unknown',uncertainty:'Brak pomiarów i weryfikacji terenowej.'};
+type CityHistoryEntry={at:string;status:CityStatus;note:string;photo?:{id:string;visibility:PhotoVisibility}};

@@ -30,7 +30,7 @@ export function readDeparture(params: URLSearchParams): When {
   return validDeparture(date, time) ? { mode: 'at', date, time } : { mode: 'now' };
 }
 
-export const encodePlace = (p: CityPlace) => `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${p.name}`;
+const encodePlace = (p: CityPlace) => `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${p.name}`;
 export function decodePlace(value: string | null): CityPlace | null {
   if (!value) return null;
   const [lat, lon, ...name] = value.split(',');

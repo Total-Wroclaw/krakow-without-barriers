@@ -4,7 +4,7 @@
 // fully open (up). On desktop (lg) none of this applies: the panel is a side column.
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 
-export type Snap = 'peek' | 'half' | 'full';
+type Snap = 'peek' | 'half' | 'full';
 const order: Snap[] = ['peek', 'half', 'full'];
 /** Collapsed height when the peek element can't be measured: handle plus the first row of the panel. */
 const PEEK = 112;

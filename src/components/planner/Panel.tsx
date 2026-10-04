@@ -13,7 +13,7 @@ let outsideOpener: Element | null = null;
  * Panels are often opened from state (a map marker, a list item) rather than a Radix trigger,
  * so return focus to whatever opened them; fall back to Radix' default when it's gone.
  */
-export function useRestoreFocus(open: boolean) {
+function useRestoreFocus(open: boolean) {
   const opener = useRef<Element | null>(null);
   const fallback = useRef<Element | null>(null);
   const wasOpen = useRef(false);

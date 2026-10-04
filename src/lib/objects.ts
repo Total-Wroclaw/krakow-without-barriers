@@ -14,19 +14,20 @@ import type { Report } from './schemas';
 import type { CityFact } from './city-types';
 import { publicPhotoPath } from './report-photos';
 import { fold, words } from './places';
+import { distance as metres } from './aerial-geo';
 
 // ---------- Types of raw inputs ----------
-export type OsmEntrance = { id: string; d: number; ts: string | null; t: Record<string, string> };
+type OsmEntrance = { id: string; d: number; ts: string | null; t: Record<string, string> };
 export type OsmRecord = { id: string; also?: string[]; c: ObjectCategory; k: string; n: string | null; la: number; lo: number; ts: string | null; t: Record<string, string>; e: OsmEntrance[] };
-export type OsmFile = { obtainedAt: string; sourceDate: string | null; objects: OsmRecord[] };
-export type PartnerFeatureInput = { key: FeatureKey; value: FeatureValue; detail?: string };
+type OsmFile = { obtainedAt: string; sourceDate: string | null; objects: OsmRecord[] };
+type PartnerFeatureInput = { key: FeatureKey; value: FeatureValue; detail?: string };
 /** Stored partner submission. contactEmail is private: it never leaves this module. */
 export type PartnerRecord = {
   id: string; name: string; category: ObjectCategory; lat: number; lon: number; address?: string; website?: string;
   contactEmail: string; features: PartnerFeatureInput[]; description?: string; promote: boolean; plan: 'free' | 'partner';
   existingObjectId?: string; obtainedAt: string; /** Set when the owner corrected the declaration. */ editedAt?: string; example?: boolean; tagline?: string;
 };
-export type CatalogInput = { osm?: OsmFile | null; city?: CityVenuesFile | null; partners?: PartnerRecord[]; reports?: Report[] };
+type CatalogInput = { osm?: OsmFile | null; city?: CityVenuesFile | null; partners?: PartnerRecord[]; reports?: Report[] };
 
 // ---------- Labels ----------
 const CATEGORY_LABELS: Record<ObjectCategory, Record<Locale, string>> = {
@@ -78,7 +79,7 @@ export function widthCm(raw: string | undefined): number | null {
   return cm >= 40 && cm <= 600 ? Math.round(cm) : null;
 }
 /** Polish door clear width requirement for accessible buildings is 90 cm; 80–89 cm passes many but not all wheelchairs. */
-export function doorWidthValue(cm: number): FeatureValue { return cm >= 90 ? 'yes' : cm >= 80 ? 'limited' : 'no'; }
+function doorWidthValue(cm: number): FeatureValue { return cm >= 90 ? 'yes' : cm >= 80 ? 'limited' : 'no'; }
 const stepsPl = (n: number) => `${n} ${n === 1 ? 'stopień' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'stopnie' : 'stopni'}`;
 const description = (t: Record<string, string>, key = 'wheelchair:description') => t[`${key}:pl`] ?? t[key] ?? t[`${key}:en`];
 
@@ -132,11 +133,6 @@ type Rec = {
 };
 const osmUrl = (id: string) => `https://www.openstreetmap.org/${id.replace(':', '/')}`;
 export const objectId = (osmId: string) => `osm-${osmId.replace(':', '-')}`;
-function metres(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const x = ((b.lon - a.lon) * Math.PI / 180) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
-  const y = (b.lat - a.lat) * Math.PI / 180;
-  return 6371000 * Math.hypot(x, y);
-}
 function osmAddress(t: Record<string, string>) {
   const street = t['addr:street'] ?? t['addr:place'];
   if (!street || !t['addr:housenumber']) return undefined;
@@ -165,7 +161,7 @@ function fromOsm(o: OsmRecord, obtainedAt: string): Rec {
 const GENERIC_NAME_WORDS = new Set(['urzad', 'miasta', 'krakowa', 'krakow', 'wydzial', 'zarzad', 'miejski', 'miejskie', 'w', 'i', 'im', 'dla', 'oddzial', 'krakowie', 'budynek', 'ul', 'ulica']);
 const significant = (name: string) => words(name).filter(w => w.length >= 3 && !GENERIC_NAME_WORDS.has(w));
 /** Names share a distinctive word, or one contains the other. */
-export function similarNames(a: string, b: string) {
+function similarNames(a: string, b: string) {
   const fa = fold(a), fb = fold(b);
   if (fa.includes(fb) || fb.includes(fa)) return true;
   const sb = new Set(significant(b));
@@ -179,13 +175,13 @@ function addressKey(address: string) {
   return number && street ? `${street} ${number}` : null;
 }
 /** Same street (last name word) and same first house number, ignoring "ulica"/"al." prefixes and first names. */
-export const sameAddress = (a?: string, b?: string) => !!a && !!b && addressKey(a) !== null && addressKey(a) === addressKey(b);
+const sameAddress = (a?: string, b?: string) => !!a && !!b && addressKey(a) !== null && addressKey(a) === addressKey(b);
 
 // ---------- Catalogue ----------
 type Grid = Map<number, number[]>;
 const CELL = 0.002;
 const cellKey = (lat: number, lon: number) => Math.floor(lat / CELL) * 100000 + Math.floor(lon / CELL);
-export type Catalog = { recs: Rec[]; byId: Map<string, Rec>; byOsm: Map<string, Rec>; grid: Grid };
+type Catalog = { recs: Rec[]; byId: Map<string, Rec>; byOsm: Map<string, Rec>; grid: Grid };
 function nearby(cat: Catalog, p: { lat: number; lon: number }, radius: number) {
   const out: { rec: Rec; d: number }[] = [];
   const cy = Math.floor(p.lat / CELL), cx = Math.floor(p.lon / CELL);
@@ -301,7 +297,7 @@ export function buildCatalog(input: CatalogInput): Catalog {
 const RANK: FeatureKey[] = ['step_free_entrance', 'entrance_steps', 'accessible_toilet', 'lift', 'ramp', 'stair_lift', 'door_width', 'difficult_building', 'automatic_door', 'disabled_parking', 'staff_assistance', 'sign_language', 'hearing_loop', 'seating', 'surface'];
 const SOURCE_PRIORITY: Record<string, number> = { city: 0, map: 1, partner: 2, example: 2, unverified: 3 };
 const known = (f: AccessFeature) => f.value !== 'unknown';
-export function conflictsOf(features: AccessFeature[]): FeatureKey[] {
+function conflictsOf(features: AccessFeature[]): FeatureKey[] {
   const values = new Map<FeatureKey, Set<FeatureValue>>();
   for (const f of features) { if (!known(f)) continue; const s = values.get(f.key) ?? new Set(); s.add(f.value); values.set(f.key, s); }
   return RANK.filter(k => { const s = values.get(k); return !!s && s.has('yes') && s.has('no'); });
@@ -598,7 +594,7 @@ async function catalog(): Promise<Catalog> {
 export async function listObjects(query: ObjectQuery): Promise<PlaceObjectSummary[]> { return queryCatalog(await catalog(), query); }
 export async function listObjectPage(query: ObjectQuery): Promise<ObjectPage> { return queryCatalogPage(await catalog(), query); }
 export async function getObject(id: string, locale: Locale = 'pl'): Promise<PlaceObject | null> { return getFromCatalog(await catalog(), id, locale); }
-export type PartnerSaved = { object: PlaceObject; editToken: string; partnerId: string };
+type PartnerSaved = { object: PlaceObject; editToken: string; partnerId: string };
 /**
  * Validate and store a partner submission. Returns the public object (contact e-mail is never included) and, once,
  * the edit token: only its SHA-256 hash is stored, so the owner's browser is the only place that can correct or

@@ -87,7 +87,6 @@ export function ExploreReports({ reports, q, bbox, center, viewUpdate, onCity, o
                   className="flex min-h-11 w-full gap-3 rounded-xl border bg-card p-3.5 text-left hover:border-report/60"
                 >
                   {r.photoPath ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={r.photoPath} alt="" loading="lazy" className="size-16 shrink-0 rounded-lg bg-muted object-cover" />
                   ) : (
                     <span aria-hidden className="grid size-16 shrink-0 place-items-center rounded-lg bg-report/10 text-report">

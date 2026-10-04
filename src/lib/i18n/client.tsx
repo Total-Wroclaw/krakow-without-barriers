@@ -68,7 +68,7 @@ export function useI18n() {
 }
 
 /** Plural form index for Polish (one, few, many) and English/German (one, other). */
-export function pluralIndex(locale: Locale, n: number): 0 | 1 | 2 {
+function pluralIndex(locale: Locale, n: number): 0 | 1 | 2 {
   if (locale !== 'pl') return n === 1 ? 0 : 2;
   if (n === 1) return 0;
   const tens = n % 100;

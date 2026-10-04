@@ -1,17 +1,5 @@
 // Connection scan over a timetable window. Pure functions, no I/O.
 
-/** Raw GTFS connection row as stored in transit.sqlite. */
-export type Connection = {
-  trip: string;
-  from_id: string;
-  to_id: string;
-  departure: number;
-  arrival: number;
-  sequence: number;
-  pickup: number;
-  dropoff: number;
-};
-
 export function activeServices(calendars: { service: string; start: string; end: string; days: string }[], exceptions: { service: string; type: number }[], date: string) {
   const day = (new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T12:00:00Z`).getUTCDay() + 6) % 7;
   const active = new Set(calendars.filter(c => c.start <= date && c.end >= date && c.days.split(',')[day] === '1').map(c => c.service));
@@ -77,7 +65,7 @@ export function connectionTable(rows: { trip: number; from: number; to: number; 
 }
 
 /** Copy of a table keeping only connections where `keep(i)` is true (order preserved). */
-export function filterConnections(table: ConnectionTable, keep: (i: number) => boolean): ConnectionTable {
+function filterConnections(table: ConnectionTable, keep: (i: number) => boolean): ConnectionTable {
   const indices: number[] = [];
   for (let i = 0; i < table.count; i++) if (keep(i)) indices.push(i);
   const pick = <T extends Int32Array | Uint8Array>(source: T, target: T) => {
@@ -113,7 +101,7 @@ export function emptyFootpaths(stopCount: number): Footpaths {
   return { offsets: new Int32Array(stopCount + 1), targets: new Int32Array(0), seconds: new Int32Array(0) };
 }
 
-export type JourneyPart =
+type JourneyPart =
   | { kind: 'ride'; board: number; alight: number }
   | { kind: 'walk'; from: number; to: number; seconds: number };
 

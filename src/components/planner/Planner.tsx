@@ -72,7 +72,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const [detail, setDetail] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [fact, setFact] = useState<CityFact | null>(null);
-  const [openReport, setOpenReport] = useState<{ report: Report; editing: boolean | 'place' } | null>(null);
+  const [openReport, setOpenReport] = useState<{ report: Report; editing: boolean } | null>(null);
   // Explore's "Reports" category: the reports listed (drawn on the map) and the one opened from the list (the map pans to it).
   const [exploreReports, setExploreReports] = useState<Report[] | null>(null);
   const [reportFocus, setReportFocus] = useState<{ lat: number; lon: number } | null>(null);
@@ -174,7 +174,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
     return { place: { id: `point:${c.lat}:${c.lon}`, name: t('report.mapPoint'), lat: c.lat, lon: c.lon, source: 'map' }, source: 'map' };
   }, [fact, t]);
   const onSaved = useCallback((r: Report) => setReports(old => [r, ...old.filter(existing => existing.id !== r.id)]), []);
-  const onOpen = useCallback((report: Report, editing: boolean | 'place') => setOpenReport({ report, editing }), []);
+  const onOpen = useCallback((report: Report, editing: boolean) => setOpenReport({ report, editing }), []);
   const { capture, busy, notice: photoNotice } = useReportCapture({ fallback, onSaved, onOpen });
 
   // What "selected place" means for a report: an open barrier, an open place card, or the trip destination.
@@ -288,7 +288,6 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
       if (detail) closeDetail();
     },
     // closeDetail only reads history and setters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [detail],
   );
 

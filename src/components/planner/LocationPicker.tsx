@@ -12,7 +12,7 @@ import { gpsPoint, inKrakow } from './Reports';
 
 maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
-export type Preset = { key: string; label: string; place: CityPlace | (() => Promise<CityPlace | null>) };
+type Preset = { key: string; label: string; place: CityPlace | (() => Promise<CityPlace | null>) };
 
 /**
  * Confirm or correct where a report belongs: the map moves under a fixed centre pin, the nearest
@@ -60,7 +60,6 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
       map.current = null;
     };
     // The map is created once; later value changes come from presets via jumpTo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => setLabel(value.name), [value.name]);

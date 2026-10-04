@@ -221,7 +221,7 @@ function crutchSurfaceKind(bits: number): BarrierKind | null {
 /** Stretches shorter than this are not shown unless they block a wheelchair. */
 const MIN_SURFACE = 10;
 
-export type WalkLegOptions = {
+type WalkLegOptions = {
   departure: number | null;
   /** True when the leg ends at the journey's final destination (entrances are shown). */
   destination: boolean;
@@ -452,7 +452,7 @@ function pathLength(g: WalkGraph, edges: number[]) {
 }
 
 /** Share of the shorter path's length that also appears in the other path (either direction). */
-export function overlap(g: WalkGraph, a: number[], b: number[]) {
+function overlap(g: WalkGraph, a: number[], b: number[]) {
   const n = g.ids.length;
   const pairs = new Set<number>();
   for (const e of b) {
@@ -492,7 +492,7 @@ export function straightWalk(from: LegPoint, to: LegPoint, departure: number | n
   };
 }
 
-export function legDuration(leg: Leg) {
+function legDuration(leg: Leg) {
   return leg.type === 'ride' ? leg.arrival - leg.departure : leg.seconds;
 }
 

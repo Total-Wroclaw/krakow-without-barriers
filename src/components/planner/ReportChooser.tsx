@@ -133,7 +133,6 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
               </Alert>
               <div className="flex flex-wrap gap-2">
                 {submission.pending.map((photo, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img key={photo.id} src={photo.photo} width={80} height={80} alt={t('report.pendingPhoto', { n: i + 1 })} className="size-20 rounded-lg object-cover" />
                 ))}
               </div>
@@ -173,7 +172,6 @@ export function ReportChooser({ open, onOpenChange, onPhoto, selected, mapPoint,
             <div className="flex flex-wrap gap-2" aria-labelledby="blocked-photos">
               {photos.map((src, i) => (
                 <div key={i} className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={src} alt="" className="size-20 rounded-lg object-cover" />
                   <button type="button" onClick={() => setPhotos(p => p.filter((_, j) => j !== i))} className="absolute -right-2 -top-2 grid size-7 place-items-center rounded-full bg-ink text-white" aria-label={t('report.removePhoto', { n: i + 1 })}>
                     <X className="size-4" />

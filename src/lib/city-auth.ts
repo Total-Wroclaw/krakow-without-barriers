@@ -6,9 +6,9 @@ import { clientIp } from './client-ip';
 import { apiMessages } from './i18n/request-locale';
 
 export const CITY_COOKIE = 'kk_city';
-export const CITY_SESSION_SECONDS = 12 * 60 * 60;
+const CITY_SESSION_SECONDS = 12 * 60 * 60;
 
-export function cityPassword() {
+function cityPassword() {
   const value = process.env.CITY_DASHBOARD_PASSWORD?.trim();
   return value ? value : null;
 }
@@ -56,7 +56,7 @@ export function verifySession(token: string | undefined | null, now = Date.now()
   return Number(parts[1]) * 1000 > now;
 }
 
-export function cookieFrom(request: Request) {
+function cookieFrom(request: Request) {
   const header = request.headers.get('cookie') ?? '';
   for (const part of header.split(';')) {
     const [name, ...value] = part.trim().split('=');

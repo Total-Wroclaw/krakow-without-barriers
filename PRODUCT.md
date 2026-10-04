@@ -17,16 +17,16 @@ Answer „Czy dam radę przejść tę trasę dzisiaj?” through editable barrie
 Daily recovery needs and convenient, reviewable reporting. Accessible routing already exists; no claim of invention.
 
 ## Operating Context
-Polish mobile interface used outdoors on an iPhone. Citywide Kraków trip planner (walking + ZTP trams/buses) with local address search; locally runnable, no publication or deployment authorised.
+Polish mobile interface used outdoors on an iPhone. Citywide Kraków trip planner (walking, ZTP trams/buses, taxi, car) with local address search. Deployed at kazdy-krok.antek.page.
 
 ## Capabilities and Constraints
-Deterministic routing on a cached real graph and GTFS timetable. AI turns a described need into editable preferences and describes one photo per report. Routing and search work without AI. No diagnosis, guarantees, inferred photographic dimensions or live lift claims. Report storage must persist locally. Source acquisition, routing, AI and presentation stay separate.
+Deterministic routing on a cached real graph and GTFS timetable. AI turns a described need into editable preferences and describes each report photo (up to 4 per report). Routing and search work without AI. No diagnosis, guarantees, inferred photographic dimensions or live lift claims. Reports persist on the server volume. Source acquisition, routing, AI and presentation stay separate.
 
 ## Brand Commitments
 Polish product and competition materials; name Każdy Krok / Every Step. Clear, polished mobile-first design.
 
 ## Evidence on Hand
-Original challenge PDFs in docs. Public OSM and city source links supplied by the user. No field survey, complete citywide barrier knowledge or real iPhone test exists.
+Original challenge PDFs in docs. Public OSM and city source links supplied by the user. No field survey, complete citywide barrier knowledge or test on a physical iPhone exists.
 
 ## Product Principles
 Show barriers, never reduce a place to an accessibility badge. Missing information remains unknown. Preserve provenance behind a status dot and distinguish user reports. Photo reports save automatically as unverified and stay correctable by their author. Few, short disclaimers.

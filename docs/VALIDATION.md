@@ -3,7 +3,7 @@
 | Kontrola | Wynik |
 | --- | --- |
 | `npm run typecheck` | bez błędów |
-| `npm test` | 68/68 (routing i kierunek schodów, profil wózka/wózka dziecięcego, taksówka i samochód z parkingami, przesiadki, kolejność wariantów, komunikaty pl/en/uk, wyszukiwanie, miejsca: parsowanie UMK, łączenie źródeł, konflikty, braki danych, walidacja partnera, magazyn zgłoszeń, błędy sieci/AI) |
+| `npm test` | 168 testów, 4.10.2026 (7 pominiętych, 1 błąd w `places.test.ts` „Kraków first: rynek” w osobnej kopii roboczej; w głównej kopii przechodzi; routing i kierunek schodów, profil wózka/wózka dziecięcego, taksówka i samochód z parkingami, przesiadki, kolejność wariantów, komunikaty pl/en/de, wyszukiwanie, miejsca: parsowanie UMK, łączenie źródeł, konflikty, braki danych, walidacja partnera, magazyn zgłoszeń, błędy sieci/AI) |
 | `npm run build` | produkcyjny build Next.js 16 przechodzi |
 | `npm run test:ai` | `gpt-5.6-luna` dostępny; potrzeby → ustawienia z zachowanym kierunkiem schodów; opis syntetycznego zdjęcia zgodny ze schematem, kierunek „nieznany” |
 | `node scripts/ui-check.mjs` | Chromium, iPhone 13 (emulacja) i desktop 1440×900: wyszukiwanie → wyniki → szczegóły → preferencje → zdjęcie (zapis automatyczny, poprawa, usunięcie) → wózek + samochód → mapa satelitarna → Odkrywaj → miejsce → formularz partnera → język angielski → widżet `/embed`. axe-core, tagi WCAG 2.0/2.1/2.2 A+AA: **0 naruszeń**, brak błędów strony. Zrzuty: `artifacts/ui/` (poza Gitem) |
@@ -116,5 +116,3 @@ Zakres: to, czego axe nie wykrywa. Przejście wyłącznie klawiaturą ze skrypte
 | EN/DE | Zgodne: `lang`, nazwy listy podpowiedzi, liczba podpowiedzi, opisy przycisków karty i nowe pole adresu są przetłumaczone. |
 
 Ograniczenia: znaczniki mapy głównej poza widokiem trasy mogą zachodzić na siebie (fokus częściowo zasłonięty, nie całkowicie). Na telefonie wybór adresu w formularzu zgłoszenia zamyka klawiaturę ekranową, więc fokus wraca do panelu, a nie do pola (wybrane miejsce ogłasza `role=status`). Doczytywanie Odkrywaj w trybie przeglądania czytnika zależy od przewijania, nie od fokusu. Wszystko to sprawdzono skryptem w Chromium: **test z prawdziwym VoiceOverem i TalkBackiem na fizycznym telefonie nadal jest do zrobienia**, podobnie jak NVDA/JAWS na desktopie.
-
-`npm test`: jeden błąd w `tests/places.test.ts` („Kraków first: rynek”) – występuje też bez tych zmian (ranking podpowiedzi, poza zakresem przeglądu); w głównej kopii roboczej z nowszym kodem przechodzi.

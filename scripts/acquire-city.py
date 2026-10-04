@@ -1,5 +1,5 @@
 """Filter a Geofabrik PBF locally. Output is ODbL, with source timestamps.
-Usage: data-venv/bin/python scripts/acquire-city.py /path/to/malopolskie.osm.pbf
+Usage: python3 scripts/acquire-city.py /path/to/malopolskie.osm.pbf   (needs the osmium package)
 """
 import osmium, json, sys, hashlib, os, gzip
 from pathlib import Path

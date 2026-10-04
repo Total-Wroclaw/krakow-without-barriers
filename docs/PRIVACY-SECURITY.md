@@ -32,7 +32,7 @@ Każdy punkt sprawdzono w kodzie (ścieżka w nawiasie).
 - Limit nieudanych logowań: 5 na 15 min na klienta, plus globalne opóźnienie przy masowych próbach.
 
 **Infrastruktura i API**
-- Nagłówki: HSTS (`max-age=63072000; includeSubDomains`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (kamera i geolokalizacja tylko dla własnej domeny), `X-Frame-Options: SAMEORIGIN` i `frame-ancestors 'self'`; `/embed` celowo osadzalny wszędzie (`frame-ancestors *`) (`next.config.ts`). **Uwaga:** w odpowiedzi działającej instalacji (4.10.2026, przez Cloudflare) nagłówka HSTS nie zaobserwowano; wdrożona wersja może być starsza niż kod. Do sprawdzenia po następnym wdrożeniu.
+- Nagłówki: HSTS (`max-age=63072000; includeSubDomains`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (kamera i geolokalizacja tylko dla własnej domeny), `X-Frame-Options: SAMEORIGIN` i `frame-ancestors 'self'`; `/embed` celowo osadzalny wszędzie (`frame-ancestors *`) (`next.config.ts`). Potwierdzone w odpowiedzi działającej instalacji (4.10.2026, przez Cloudflare).
 - Ochrona przed żądaniami z innych witryn (kontrola `Origin`/`Sec-Fetch-Site`), limit rozmiaru żądania 5 MB, walidacja Zod wejść, parametryzowane zapytania SQL (`src/lib/server.ts`, `guard`).
 - Limit 20 zapytań AI na minutę z jednego adresu IP (w pamięci procesu; adres z `CF-Connecting-IP` lub ostatniego wpisu `X-Forwarded-For`, `src/lib/client-ip.ts`).
 - Zapytania do OpenAI z `store: false`; klucz API tylko w pamięci serwera, ze zmiennej środowiskowej. To prośba do dostawcy, nie deklaracja zerowej retencji.

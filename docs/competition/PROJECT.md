@@ -103,6 +103,6 @@ Zakres: jedna dzielnica (np. Stare Miasto i Kazimierz), 15–20 obiektów partne
 
 ## Walidacja i ograniczenia
 
-162 testy automatyczne (routing, kierunek schodów, profile, samochód/parkingi, przesiadki, wyszukiwanie, miejsca, źródła i konflikty, zgłoszenia i tokeny, odczyt z lotu ptaka), kontrola Playwright + axe-core (WCAG 2.2 AA, 0 naruszeń) na telefonie i desktopie, Safari w symulatorze iPhone. Nie wykonano testu z VoiceOver na fizycznym iPhonie ani audytu terenowego. Rozkład ZTP nie podaje przystosowania kursów; tylko 5,6% parkingów w OSM ma oznaczone miejsca dla osób z niepełnosprawnościami — oba braki aplikacja pokazuje wprost.
+168 testów automatycznych (w tym 7 pominiętych) (routing, kierunek schodów, profile, samochód/parkingi, przesiadki, wyszukiwanie, miejsca, źródła i konflikty, zgłoszenia i tokeny, odczyt z lotu ptaka), kontrola Playwright + axe-core (WCAG 2.2 AA, 0 naruszeń) na telefonie i desktopie, Safari w symulatorze iPhone. Nie wykonano testu z VoiceOver na fizycznym iPhonie ani audytu terenowego. Rozkład ZTP nie podaje przystosowania kursów; tylko 5,6% parkingów w OSM ma oznaczone miejsca dla osób z niepełnosprawnościami — oba braki aplikacja pokazuje wprost.
 
 Istniejące rozwiązania (AccessMap, Project Sidewalk) pokazują dorobek routingu dostępnościowego. Nasz wyróżnik: codziennie zmienne potrzeby, jawna niepewność, zgłaszanie jednym zdjęciem i model partnerów finansujący aktualne dane.

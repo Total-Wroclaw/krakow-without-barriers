@@ -6,7 +6,5 @@ node_modules/
 artifacts/
 *.tsbuildinfo
 .DS_Store
-
-public/axe-test.js
-
 public/maplibre/
+public/axe-test.js

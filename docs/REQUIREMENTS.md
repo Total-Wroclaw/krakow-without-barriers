@@ -29,8 +29,8 @@ Stan na 4 października 2026. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` 
 | Grupa docelowa i sposób użycia | ✅ | PROJECT.md, README |
 | Źródła danych i ocena aktualności/wiarygodności | ✅ | `docs/DATA-SOURCES.md` |
 | Model biznesowy i rozwój | 🟡 | PROJECT.md: płatnicy, ceny i koszty jako **hipotezy** z rachunkiem progu rentowności i planem pilotażu; brak cennika, klientów i listów intencyjnych |
-| PDF do 10 slajdów | ✅ | `docs/competition/kazdy-krok.pdf`: 10 slajdów po polsku z aktualnymi zrzutami (generowany: `scripts/capture-competition.mjs` + `scripts/build-competition.py`) |
-| Film do 3 min w otwartym repozytorium | 🟡 | `docs/competition/demo.mp4`: 2:28, 1080p, polskie napisy (`demo.srt`), aktualny interfejs. Publikacja w otwartym repozytorium i przesłanie w HackTribe wymagają decyzji zespołu |
+| PDF do 10 slajdów | ✅ | `docs/competition/kazdy-krok.pdf`: 10 slajdów po polsku ze zrzutami z rana 4 października (generowany: `scripts/capture-competition.mjs` + `scripts/build-competition.py`) |
+| Film do 3 min w otwartym repozytorium | 🟡 | `docs/competition/demo.mp4`: 2:28, 1080p, polskie napisy (`demo.srt`), interfejs z rana 4 października (bez późniejszych zmian). Publikacja w otwartym repozytorium i przesłanie w HackTribe wymagają decyzji zespołu |
 
 ## Wymagania techniczne (sekcja 5)
 

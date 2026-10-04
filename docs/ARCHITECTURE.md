@@ -128,7 +128,8 @@ Zgłoszenia użytkowników (reports) ──────────────�
 - **Konflikty:** ten sam klucz z `yes` i `no` od różnych źródeł obiektu → `conflicts[]`, `hasConflict`; oba fakty zostają. Różne wejścia jednego budynku nie są konfliktem. `wheelchair` w podsumowaniu: najlepsze źródło (miasto > OSM obiekt > OSM wejście > partner).
 - **Stronicowanie:** `GET /api/objects?category&q&lat&lon&locale&withData&limit&offset` → `ObjectPage { objects, total, nextOffset }` (`limit` domyślnie 30, maks. 100; `offset` domyślnie 0; `nextOffset: null` na ostatniej stronie). Kolejność jest pełna (remisy rozstrzyga id), więc strony się nie nakładają; nakładka partnerów/zgłoszeń przebudowuje się co 15 s, więc nowy obiekt może przesunąć dalsze strony.
 - **Ranking:** z zapytaniem — trafność nazwy/adresu (bez polskich znaków, prefiksy), potem odległość; bez zapytania — więcej znanych faktów, potem odległość; `withData=1` ukrywa obiekty bez faktów. Promowani partnerzy (plan `partner`) są na górze **tylko w dopasowanym zbiorze** i ≤ 5 km od punktu użytkownika, zawsze oznaczeni `partner.promoted`.
-- **Model biznesowy (prototyp):** właściciele (hotele, organizatorzy, lokale) dodają deklaracje dostępności za darmo; plan `partner` daje wyróżnienie. Dalej: płatności, weryfikacja właściciela, audyt terenowy jako osobny status z datą.
+- **Zgłoszenia w Odkrywaj:** kategoria „Zgłoszenia” (`explore.r.*`) listuje publiczne zgłoszenia użytkowników w widocznym obszarze mapy i pokazuje je na mapie; zawsze jako niezweryfikowane.
+- **Partnerzy:** deklaracje bezpłatne, plan `partner` daje oznaczenie „Promowane”; poprawa i wycofanie tokenem, ukrywanie przez miasto. Płatności i weryfikacja właściciela: [PROJECT.md](competition/PROJECT.md).
 
 **Nowe źródło:** parser do `{name, address, features[{key,value,detail}]}` z oryginalnym zdaniem, plik w `data/` z URL/obtainedAt/SHA-256, funkcja `attachX` w `buildCatalog` z własnym `SourceStatus` i regułą łączenia; test na zapisanej kopii. **Nowa kategoria:** `ObjectCategory` w `explore-types.ts`, `classify()` w `acquire-objects.py`, etykiety pl/en/de w `objects.ts`. **Inne miasto:** BBOX i plik PBF w skryptach, kopertę w `pointSchema`/`partnerSubmissionSchema`, lokalny odpowiednik wykazu urzędu.
 
@@ -179,12 +180,7 @@ Każda zmiana statusu lub odpowiedzi ustawia `cityUpdatedAt` i dopisuje `{ at, s
 
 **Dostęp:** jedno hasło służbowe `CITY_DASHBOARD_PASSWORD` (bez niego panel i `/api/city/*` są wyłączone, 503). Logowanie wymienia hasło na ciasteczko `kk_city` = `v1.<wygaśnięcie>.<nonce>.<HMAC-SHA256>`: HttpOnly, SameSite=Strict, Secure w produkcji, ważne 12 h. Klucz HMAC: `CITY_DASHBOARD_SECRET` albo skrót hasła (zmiana hasła wylogowuje wszystkich). Hasło i podpis porównywane w stałym czasie. Strona `/city` sprawdza ciasteczko po stronie serwera (`await cookies()`), każda trasa `/api/city/*` — w nagłówku żądania; zapisy dodatkowo przez kontrolę Origin/Host. Prototyp nie ma kont ani ról — w docelowej wersji logowanie przez katalog urzędu (SSO), autor zmiany w historii.
 
-**Ochrona danych — co jest przechowywane i kto widzi:**
-
-- Przechowujemy: miejsce (współrzędne, nazwa, źródło lokalizacji), zdjęcia po usunięciu metadanych (do 1400 px), opisy AI, komentarz, cel podróży, daty, status i odpowiedź miasta z historią. **Nie** przechowujemy: kont, e-maili, telefonów, IP (limity działają w pamięci procesu), oryginalnych plików ani EXIF/GPS ze zdjęć.
-- Komentarz i cel podróży są wolnym tekstem i mogą zawierać dane osobowe (np. „jadę do onkologa”) — dlatego formularz powinien to mówić, a panel ostrzega urzędników przed wpisywaniem danych osobowych w publicznej odpowiedzi.
-- Widzi publicznie (`GET /api/reports`, mapa): opis, zdjęcia, komentarz, cel, miejsce, status i odpowiedź miasta. Tylko panel miasta: historia zmian, pełna lista do 5000, CSV. Zdjęcia trafiają do OpenAI do opisu (`store: false`).
-- Propozycja retencji: zgłoszenia `resolved`/`rejected` — anonimizacja po 12 miesiącach od ostatniej zmiany (usunięcie zdjęć, komentarza i celu; zostaje rodzaj, miejsce, daty i status do statystyk); `new` bez reakcji — przegląd po 24 miesiącach; eksporty CSV podlegają zasadom przechowywania dokumentów urzędu. Nie jest jeszcze zautomatyzowane.
+**Ochrona danych:** co jest przechowywane, kto to widzi i jaka jest proponowana retencja (12 miesięcy po zamknięciu, jeszcze nie zautomatyzowana): [PRIVACY-SECURITY.md](PRIVACY-SECURITY.md). Komentarz i cel podróży są wolnym tekstem i mogą zawierać dane osobowe, dlatego formularz o tym ostrzega, a panel ostrzega urzędników przed wpisywaniem ich w publicznej odpowiedzi.
 
 ## Interfejs
 
@@ -197,7 +193,7 @@ SQLite WAL, zapytania parametryzowane; zgłoszenie i pierwsze zdjęcie w jednym 
 **Bezpieczeństwo:**
 - `guard()` (`src/lib/server.ts`): nagłówek `Origin` musi zgadzać się z `Host`. Zapis (nie GET/HEAD/OPTIONS) bez `Origin` z `Sec-Fetch-Site: cross-site|same-site` → 403. W produkcji zapis bez `Origin` wymaga `Referer` z tym samym hostem albo `Sec-Fetch-Site: same-origin` — przeglądarki zawsze wysyłają `Origin` przy POST/PATCH/DELETE; skrypty i narzędzia muszą wysłać `Origin: https://<host>`. Poza produkcją (dev, testy) żądania bez tych nagłówków przechodzą.
 - Adres klienta do limitów (`src/lib/client-ip.ts`): `CF-Connecting-IP`, jeśli jest (ustawia go Cloudflare), inaczej **ostatni** wpis `X-Forwarded-For` — ten dopisuje nasz Traefik, wcześniejsze może podać klient. Założenie: port Node nie jest publiczny, ruch idzie tylko przez proxy. Bez nagłówków: wspólny klucz `local`.
-- Nagłówki (`next.config.ts`): `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=()`; wszędzie poza `/embed` `X-Frame-Options: SAMEORIGIN` i CSP `frame-ancestors 'self'`; `/embed` ma `frame-ancestors *` (widżet partnera; lokalizację przyznaje `<iframe allow="geolocation">`). Brak CSP dla skryptów celowo: MapLibre używa workerów, kafelki z OpenFreeMap i z naszego proxy. Preferencje i ostatnie miejsca są tylko w localStorage. GPS: lokalizacja zgłoszenia lub punkt startu, bez śladu.
+- Nagłówki bezpieczeństwa (`next.config.ts`, lista w [PRIVACY-SECURITY.md](PRIVACY-SECURITY.md)); `/embed` ma `frame-ancestors *` (widżet partnera; lokalizację przyznaje `<iframe allow="geolocation">`). Brak CSP dla skryptów celowo: MapLibre używa workerów, kafelki z OpenFreeMap i z naszego proxy. Preferencje i ostatnie miejsca są tylko w localStorage. GPS: lokalizacja zgłoszenia lub punkt startu, bez śladu.
 
 ## Dalej
 

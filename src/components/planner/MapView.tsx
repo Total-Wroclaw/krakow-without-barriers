@@ -50,6 +50,25 @@ function markerElement(label: string, icon: string, background: string, size = 3
   return el;
 }
 
+/**
+ * Hides route markers that would sit on top of one already shown, so every visible marker keeps its own
+ * 24 px target (WCAG 2.5.8) and stays readable. Markers are listed most important first; hidden ones are
+ * still in the route's step list, which is the text alternative to the map.
+ */
+function declutter(instance: MapLibreMap, list: { el: HTMLElement; lat: number; lon: number }[], hideMinor: boolean) {
+  const shown: { x: number; y: number; r: number }[] = [];
+  for (const m of list) {
+    if (hideMinor && m.el.classList.contains('map-minor')) continue;
+    const { x, y } = instance.project([m.lon, m.lat]);
+    const r = m.el.offsetWidth / 2 || 15;
+    const clash = shown.some(o => Math.hypot(o.x - x, o.y - y) < o.r + r + 2);
+    m.el.style.visibility = clash ? 'hidden' : '';
+    if (clash) m.el.setAttribute('tabindex', '-1');
+    else if (m.el.getAttribute('tabindex') === '-1' && m.el.dataset.focusable !== 'false') m.el.removeAttribute('tabindex');
+    if (!clash) shown.push({ x, y, r });
+  }
+}
+
 function endpointElement(kind: 'start' | 'end', label: string) {
   const el = document.createElement('div');
   el.setAttribute('role', 'img');
@@ -107,6 +126,8 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
   const latest = useRef({ onSelect, onFact, onReport, onObject, onMove, onPick, detail, onViewportChange });
   latest.current = { onSelect, onFact, onReport, onObject, onMove, onPick, detail, onViewportChange };
   const render = useRef<() => void>(() => {});
+  /** Re-runs marker decluttering for the current zoom. */
+  const routeMarkers = useRef<() => void>(() => {});
   // Read when the camera moves, so dragging the sheet never re-renders or moves the map.
   const inset = useRef(bottomInset);
   inset.current = bottomInset;
@@ -204,7 +225,10 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       ?.query({ name: 'geolocation' as PermissionName })
       .then(status => status.state === 'granted' && watchPosition())
       .catch(() => {});
-    const minor = () => container.current?.classList.toggle('hide-minor', instance.getZoom() < 15);
+    const minor = () => {
+      container.current?.classList.toggle('hide-minor', instance.getZoom() < 15);
+      routeMarkers.current();
+    };
     instance.on('zoomend', minor);
     instance.on('load', () => {
       minor();
@@ -319,6 +343,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       const add = (el: HTMLElement, lat: number, lon: number) => markers.current.push(new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).addTo(instance));
 
       const selected = options.find(o => o.id === selectedId);
+      const placed: { el: HTMLElement; lat: number; lon: number; rank: number }[] = [];
       if (selected) {
         for (const fact of allFacts(selected)) {
           const icon = fact.kind === 'toilet' ? icons.toilet : fact.kind === 'bench' ? icons.bench : fact.kind === 'entrance' ? icons.entrance : fact.kind === 'kerb' ? icons.kerb : fact.kind === 'surface' ? icons.surface : icons[fact.direction];
@@ -328,14 +353,22 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
           if (fact.kind !== 'stairs' && fact.kind !== 'kerb' && fact.kind !== 'toilet' && !fact.restAfterMinutes) el.classList.add('map-minor');
           el.addEventListener('click', () => latest.current.onFact(fact));
           add(el, fact.lat, fact.lon);
+          // Barriers first, then planned rests and toilets, then the rest.
+          const rank = fact.kind === 'stairs' || fact.kind === 'kerb' ? 0 : fact.restAfterMinutes || fact.kind === 'toilet' ? 1 : 2;
+          placed.push({ el, lat: fact.lat, lon: fact.lon, rank });
         }
         for (const leg of selected.legs) {
           if (leg.type !== 'drive' || !leg.parking) continue;
           const el = markerElement(t('option.parking', { name: leg.parking.name }), '<path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>', '#0e6c80', 30);
           el.tabIndex = -1;
+          el.dataset.focusable = 'false';
           add(el, leg.parking.lat, leg.parking.lon);
+          placed.push({ el, lat: leg.parking.lat, lon: leg.parking.lon, rank: 1 });
         }
       }
+      placed.sort((a, b) => a.rank - b.rank);
+      routeMarkers.current = () => declutter(instance, placed, instance.getZoom() < 15);
+      routeMarkers.current();
       for (const report of reports) {
         if (!report.location) continue;
         const el = markerElement(t('report.markerLabel', { title: reportTitle(report) }), icons.report, '#6d28d9', 28);

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 process.env.KROK_STORAGE_DIR = mkdtempSync(path.join(os.tmpdir(), 'krok-aerial-test-'));
 const { aerialBbox, AERIAL_WIDTHS, compass, distance, fitWidth, frameCorners, inFrame, project, roundPoint, unproject } = await import('../src/lib/aerial-geo');
-const { analysisHash, applyRefinement, buildOverlay, cachedAnalysis, cleanSentence, needsStepFree, preferencesForPrompt, preferencesKey, reportsDigest, reportsNear, sanitiseAnalysis, storeAnalysis } = await import('../src/lib/aerial');
+const { analysisHash, applyRefinement, arrivalKinds, buildOverlay, cachedAnalysis, cleanSentence, needsStepFree, preferencesForPrompt, preferencesKey, reportsDigest, reportsNear, sanitiseAnalysis, sanitiseObservations, storeAnalysis } = await import('../src/lib/aerial');
 const { aerialQuerySchema, autoWidth, overlaySummary, widthSchema } = await import('../src/lib/aerial-types');
 const { conditionOf, parseOpenMeteo, weatherBucket } = await import('../src/lib/weather');
 const { defaultPreferences } = await import('../src/lib/schemas');
@@ -77,6 +77,8 @@ test('WMS URL keeps ":" and "," unencoded (GUGiK rejects them encoded)', () => {
 
 const stop = (id: string, name: string, code: string, p: { lat: number; lon: number }): Stop => ({ id, name, code, wheelchair: '', ...p });
 const inputs = (): OverlayInputs => ({
+  // Entrances 1 and 2 are on the place's own building; 3 belongs to another one.
+  ownEntrances: ['node:1', '2'],
   entrances: [
     { id: '1', ...offset(30, 0), tags: { entrance: 'yes', wheelchair: 'no' }, editedAt: null },
     { id: '2', ...offset(10, 0), tags: { entrance: 'main', wheelchair: 'yes', step_count: '0', automatic_door: 'button', 'door:width': '95 cm' }, editedAt: '2025-01-01' },
@@ -104,7 +106,7 @@ test('pins are numbered entrances → stops → parking → toilets, nearest fir
   assert.equal(first.sourceUrl, 'https://www.openstreetmap.org/node/2');
   assert.equal(second.wheelchair, 'no');
   assert.equal(first.compass, 'e');
-  // The far entrance (150 m) belongs to another building; the toilet 400 m away is outside the overlay.
+  // Entrance 3 belongs to another building; the toilet 400 m away is outside the overlay.
   assert.ok(!o.pins.some(p => p.kind === 'toilet'));
   // One platform listed by the bus and tram feeds is a single pin with both modes.
   const platform = o.pins.find(p => p.kind === 'stop' && p.platform === '01')!;
@@ -163,47 +165,78 @@ test('AI sentences: guarantees are dropped', () => {
 const raw = (over: Partial<RawAnalysis['recommendation']> = {}, rest: Partial<RawAnalysis> = {}): RawAnalysis => ({
   recommendation: { entrance: 1, approachFrom: 3, why: 'Jedyne wejście oznaczone w mapach jako bez stopni.', steps: ['Wysiądź na przystanku [3].', 'Idź chodnikiem do wejścia [1].'], avoid: [], ask: [], ...over },
   today: [],
-  observations: [],
   ...rest,
 });
 const pinsOf = (...list: [AerialPin['kind'], AerialPin['wheelchair']?][]) => list.map(([kind, wheelchair]) => ({ kind, wheelchair }));
 
-test("when the place's own entrances are known, a neighbour's door is not a pin", () => {
+test("only the place's own entrances are pins; without them there are no entrance pins at all", () => {
   const own = buildOverlay(place, { ...inputs(), ownEntrances: ['node:1'] });
   assert.deepEqual(own.pins.filter(p => p.kind === 'entrance').map(p => [p.distance, p.ofPlace]), [[30, true]]);
-  const unknown = buildOverlay(place, inputs());
-  assert.ok(unknown.pins.filter(p => p.kind === 'entrance').every(p => p.ofPlace === false));
+  // A café with an unmapped street door: the neighbours' mapped doors are not shown, numbering starts at the stops.
+  for (const ownEntrances of [null, []]) {
+    const unknown = buildOverlay(place, { ...inputs(), ownEntrances });
+    assert.equal(unknown.pins.filter(p => p.kind === 'entrance').length, 0);
+    assert.equal(unknown.pins[0].kind, 'stop');
+    const s = overlaySummary({ ...unknown, osmObtainedAt: null, transitObtainedAt: null }, aerialBbox(place, 130));
+    assert.equal(s.stepFree.length + s.notAccessible.length + s.unknownEntrances.length, 0);
+  }
 });
 
 test('recommendation: entrance and arrival pins must exist and have the right kind', () => {
-  const bbox = aerialBbox(place, 200);
   const pins = pinsOf(['entrance', 'yes'], ['entrance', 'no'], ['stop'], ['parking']);
-  const ok = sanitiseAnalysis(raw(), bbox, pins).recommendation!;
+  const ok = sanitiseAnalysis(raw(), pins).recommendation!;
   assert.equal(ok.entrance, 1);
   assert.equal(ok.approachFrom, 3);
   assert.equal(ok.why, 'Jedyne wejście oznaczone w mapach jako bez stopni.');
   assert.equal(ok.steps.length, 2);
   // A stop given as the entrance, an entrance given as the arrival point, a pin that doesn't exist.
-  const wrong = sanitiseAnalysis(raw({ entrance: 3, approachFrom: 1 }), bbox, pins).recommendation!;
+  const wrong = sanitiseAnalysis(raw({ entrance: 3, approachFrom: 1 }), pins).recommendation!;
   assert.equal(wrong.entrance, null);
   assert.equal(wrong.approachFrom, null);
   assert.equal(wrong.why, '', 'no entrance, no reason');
-  assert.equal(sanitiseAnalysis(raw({ entrance: 9, approachFrom: 4 }), bbox, pins).recommendation!.entrance, null);
-  assert.equal(sanitiseAnalysis(raw({ entrance: 9, approachFrom: 4 }), bbox, pins).recommendation!.approachFrom, 4);
+  assert.equal(sanitiseAnalysis(raw({ entrance: 9, approachFrom: 3 }), pins).recommendation!.entrance, null);
+  assert.equal(sanitiseAnalysis(raw({ entrance: 9, approachFrom: 3 }), pins).recommendation!.approachFrom, 3);
   // Nothing grounded left: no recommendation at all.
-  assert.equal(sanitiseAnalysis(raw({ entrance: null, steps: ['Idź 50 m prosto.'] }), bbox, pins).recommendation, null);
+  assert.equal(sanitiseAnalysis(raw({ entrance: null, steps: ['Idź 50 m prosto.'] }), pins).recommendation, null);
+});
+
+test('recommendation: public transport by default, a car park only for people who drive', () => {
+  const pins = pinsOf(['entrance', 'yes'], ['entrance', 'unknown'], ['stop'], ['parking']);
+  assert.deepEqual(arrivalKinds('transit'), ['stop']);
+  assert.deepEqual(arrivalKinds('car'), ['parking']);
+  assert.deepEqual(arrivalKinds('walk'), []);
+  const input = raw({ approachFrom: 4, steps: ['Zaparkuj na parkingu [4] przy wejściu.', 'Wysiądź na przystanku [3].', 'Wejdź wejściem [1] od ulicy.'] });
+  // No travel mode given: transit. A car park is neither the arrival point nor in the steps.
+  const transit = sanitiseAnalysis(input, pins).recommendation!;
+  assert.equal(transit.approachFrom, null);
+  assert.deepEqual(transit.steps, ['Wysiądź na przystanku [3].', 'Wejdź wejściem [1] od ulicy.']);
+  assert.equal(sanitiseAnalysis(raw({ approachFrom: 3 }), pins, { arrival: 'transit' }).recommendation!.approachFrom, 3);
+  // Driving: the car park, and no stop.
+  const car = sanitiseAnalysis(input, pins, { arrival: 'car' }).recommendation!;
+  assert.equal(car.approachFrom, 4);
+  assert.deepEqual(car.steps, ['Zaparkuj na parkingu [4] przy wejściu.', 'Wejdź wejściem [1] od ulicy.']);
+  // Taxi or walking: neither.
+  assert.equal(sanitiseAnalysis(raw({ approachFrom: 3 }), pins, { arrival: 'taxi' }).recommendation!.approachFrom, null);
+});
+
+test('recommendation without mapped entrances: the way to the place, no entrance', () => {
+  const pins = pinsOf(['stop'], ['stop'], ['toilet']);
+  const r = sanitiseAnalysis(raw({ entrance: 1, approachFrom: 1, why: 'Najbliższe wejście.', steps: ['Wysiądź na przystanku [1].', 'Wejdź wejściem [2].', 'Idź północnym chodnikiem do lokalu.'] }), pins).recommendation!;
+  assert.equal(r.entrance, null);
+  assert.equal(r.why, '');
+  assert.equal(r.approachFrom, 1);
+  assert.deepEqual(r.steps, ['Wysiądź na przystanku [1].', 'Idź północnym chodnikiem do lokalu.']);
 });
 
 test('recommendation: an entrance tagged inaccessible is never suggested for step-free needs', () => {
-  const bbox = aerialBbox(place, 200);
   const pins = pinsOf(['entrance', 'yes'], ['entrance', 'no'], ['stop']);
   const input = raw({ entrance: 2, steps: ['Wysiądź na przystanku [3].', 'Wejdź wejściem [2] od ulicy.'], avoid: ['schody od rynku', 'wejście [1] od podwórza'] });
-  const forWheelchair = sanitiseAnalysis(input, bbox, pins, { stepFree: true }).recommendation!;
+  const forWheelchair = sanitiseAnalysis(input, pins, { stepFree: true }).recommendation!;
   assert.equal(forWheelchair.entrance, null);
   assert.deepEqual(forWheelchair.steps, ['Wysiądź na przystanku [3].']);
   assert.deepEqual(forWheelchair.avoid, ['schody od rynku', 'wejście [1] od podwórza']);
   // Walking: the same entrance may be suggested.
-  assert.equal(sanitiseAnalysis(input, bbox, pins).recommendation!.entrance, 2);
+  assert.equal(sanitiseAnalysis(input, pins).recommendation!.entrance, 2);
   assert.equal(needsStepFree({ ...defaultPreferences, mobility: 'wheelchair' }), true);
   assert.equal(needsStepFree({ ...defaultPreferences, mobility: 'stroller' }), true);
   assert.equal(needsStepFree({ ...defaultPreferences, mobility: 'crutches' }), false);
@@ -211,7 +244,6 @@ test('recommendation: an entrance tagged inaccessible is never suggested for ste
 });
 
 test('recommendation: steps, avoid and ask are cleaned, deduplicated and capped', () => {
-  const bbox = aerialBbox(place, 200);
   const pins = pinsOf(['entrance', 'yes'], ['entrance', 'unknown'], ['stop']);
   const r = sanitiseAnalysis(
     raw({
@@ -219,7 +251,6 @@ test('recommendation: steps, avoid and ask are cleaned, deduplicated and capped'
       avoid: ['bruk', 'torowisko poza przejściem', 'schody (4 stopnie)', 'wejście [2]', 'schody od rynku'],
       ask: ['Zapytaj o dzwonek przy wejściu [1].', 'Zapytaj, czy przejście jest w pełni dostępne.', 'Sprawdź próg przy drzwiach.'],
     }),
-    bbox,
     pins,
   ).recommendation!;
   assert.deepEqual(r.steps, ['Wysiądź na przystanku [3].', 'Przejdź przez jezdnię na przejściu.', 'Idź do wejścia [1] od dziedzińca.', 'Wejdź wejściem [1].']);
@@ -229,30 +260,25 @@ test('recommendation: steps, avoid and ask are cleaned, deduplicated and capped'
 
 test('AI observations: inside the frame, known kinds, no duplicates, mapped back to coordinates', () => {
   const bbox = aerialBbox(place, 200);
-  const result = sanitiseAnalysis(
-    raw(
-      {},
-      {
-        observations: [
-          { x: 0.5, y: 0.25, kind: 'crossing', label: 'przejście przez jezdnię' },
-          { x: 0.501, y: 0.251, kind: 'crossing', label: 'to samo przejście' },
-          { x: 1.4, y: 0.5, kind: 'square', label: 'poza kadrem' },
-          { x: 0.2, y: 0.8, kind: 'elevator', label: 'winda' },
-          { x: 0.3, y: 0.3, kind: 'steps', label: 'schody 12 stopni' },
-          { x: 0.7, y: 0.6, kind: 'tracks', label: 'torowisko' },
-        ],
-        today: ['Po deszczu bruk przy przystanku [3] bywa śliski.', 'Dziś jest 2 °C.'],
-      },
-    ),
+  const pins = pinsOf(['entrance'], ['entrance'], ['stop']);
+  const observations = sanitiseObservations(
+    [
+      { x: 0.5, y: 0.25, kind: 'crossing', label: 'przejście przez jezdnię' },
+      { x: 0.501, y: 0.251, kind: 'crossing', label: 'to samo przejście' },
+      { x: 1.4, y: 0.5, kind: 'square', label: 'poza kadrem' },
+      { x: 0.2, y: 0.8, kind: 'elevator', label: 'winda' },
+      { x: 0.3, y: 0.3, kind: 'steps', label: 'schody 12 stopni' },
+      { x: 0.7, y: 0.6, kind: 'tracks', label: 'torowisko' },
+    ],
     bbox,
-    pinsOf(['entrance'], ['entrance'], ['stop']),
+    pins,
   );
-  assert.deepEqual(result.observations.map(o => `${o.id}:${o.kind}`), ['A:crossing', 'B:tracks']);
-  const a = result.observations[0];
-  const pos = project(a, bbox);
+  assert.deepEqual(observations.map(o => `${o.id}:${o.kind}`), ['A:crossing', 'B:tracks']);
+  const pos = project(observations[0], bbox);
   near(pos.x, 0.5, 0.001);
   near(pos.y, 0.25, 0.001);
-  assert.deepEqual(result.today, ['Po deszczu bruk przy przystanku [3] bywa śliski.']);
+  const { today } = sanitiseAnalysis(raw({}, { today: ['Po deszczu bruk przy przystanku [3] bywa śliski.', 'Dziś jest 2 °C.'] }), pins);
+  assert.deepEqual(today, ['Po deszczu bruk przy przystanku [3] bywa śliski.']);
 });
 
 test('close-up check moves confirmed observations, drops the rest and re-letters them', () => {
@@ -273,7 +299,7 @@ test('close-up check moves confirmed observations, drops the rest and re-letters
   near(project(result[0], bbox).x, 0.32, 0.001);
 });
 
-const keyFor = (over: Partial<AnalysisKey> = {}): AnalysisKey => ({ ...place, widthM: 130, name: 'Test', locale: 'pl', objectId: null, preferences: 'none', weather: 'none', reports: 'none', ...over });
+const keyFor = (over: Partial<AnalysisKey> = {}): AnalysisKey => ({ ...place, widthM: 130, name: 'Test', locale: 'pl', objectId: null, preferences: 'none', arrival: 'transit', weather: 'none', reports: 'none', ...over });
 
 test('analysis cache round-trips per place, frame, language, needs, weather and reports', async () => {
   const key = keyFor();
@@ -281,7 +307,7 @@ test('analysis cache round-trips per place, frame, language, needs, weather and 
   const analysis = { recommendation: { entrance: 1, approachFrom: 3, why: '', steps: ['Od przystanku [3] prosto.'], avoid: [], ask: [] }, today: [], observations: [], widthM: 130, basedOn: { mobility: null, weather: null, reports: 0 }, createdAt: '2026-10-03T00:00:00.000Z' };
   await storeAnalysis(key, analysis);
   assert.deepEqual(await cachedAnalysis(key), analysis);
-  for (const over of [{ locale: 'en' }, { widthM: 200 }, { preferences: 'wheelchair.1.0.0.1.1.0.12' }, { weather: 'rain:mild:calm' }, { reports: 'abc' }]) {
+  for (const over of [{ locale: 'en' }, { widthM: 200 }, { preferences: 'wheelchair.1.0.0.1.1.0.12' }, { arrival: 'car' as const }, { weather: 'rain:mild:calm' }, { reports: 'abc' }]) {
     assert.equal(await cachedAnalysis(keyFor(over)), null, JSON.stringify(over));
     assert.notEqual(analysisHash(keyFor(over)), analysisHash(key));
   }

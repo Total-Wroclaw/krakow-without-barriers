@@ -19,13 +19,30 @@ import styles from './AerialSection.module.css';
 maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
 const orthoTiles = () => `${window.location.origin}/api/tiles/ortho/{z}/{x}/{y}`;
-/** One beam pass over the photo while the AI reads it. */
-const SCAN_MS = 3200;
+/** One beam pass over the photo while the AI reads it, and the fade-out once it is done. */
+const SCAN_MS = 2800;
+const LEAVE_MS = 700;
+/** Smoothstep: 0 → 1 with zero slope at both ends. */
+const smooth = (t: number) => t * t * (3 - 2 * t);
+
+/**
+ * Beam state at `elapsed` ms: the position eases in and out over each pass, and the beam fades in over the first
+ * part and out over the last, so passes blend instead of popping from the bottom to the top. `out` fades it all.
+ */
+function scanFrame(el: HTMLElement, elapsed: number, out: number) {
+  const p = (elapsed % SCAN_MS) / SCAN_MS;
+  const position = (1 - Math.cos(Math.PI * p)) / 2;
+  const envelope = smooth(Math.max(0, Math.min(1, p / 0.18, (1 - p) / 0.28)));
+  el.style.setProperty('--scan', position.toFixed(4));
+  el.style.setProperty('--scan-a', (envelope * out).toFixed(3));
+  el.style.setProperty('--scan-out', out.toFixed(3));
+}
 type FeatureData = Exclude<Parameters<GeoJSONSource['setData']>[0], string>;
 type Feature = Extract<FeatureData, { type: 'FeatureCollection' }>['features'][number];
 const collection = (features: Feature[]): FeatureData => ({ type: 'FeatureCollection', features });
 
-export type AerialPhase = 'points' | 'image' | 'ai' | 'done';
+/** 'refine': the advice is in, the observations are being checked on close-ups. */
+export type AerialPhase = 'points' | 'image' | 'ai' | 'refine' | 'done';
 
 export function AerialMap({ place, name, overlay, widthM, observations, placeholder, phase, large = false, onEnlarge }: {
   place: Point;
@@ -196,27 +213,50 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
     (m.getSource('markers') as GeoJSONSource).setData(collection(overlay.markers.map(mk => ({ type: 'Feature', properties: { kind: mk.kind }, geometry: { type: 'Point', coordinates: [mk.lon, mk.lat] } }))));
   }, [ready, overlay]);
 
-  // Beam position for the scanning state, driven per frame so the pins it passes light up in sync.
+  // Scanning state, driven per frame so the pins the beam passes light up in sync. Each pass eases down the photo,
+  // fading in at the top and out at the bottom (no jump back to the top); when the reading is done the beam keeps
+  // moving while everything, lit pins included, fades out. CSS reads --scan (position), --scan-a (beam opacity)
+  // and --scan-out (the whole layer).
   const scanning = phase !== 'done';
   const [leaving, setLeaving] = useState(false);
   const [showScan, setShowScan] = useState(scanning);
+  const scanStart = useRef<number | null>(null);
   useEffect(() => {
+    const el = root.current;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (scanning) {
       setShowScan(true);
       setLeaving(false);
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      el?.style.setProperty('--scan-out', '1');
+      if (reduced) return;
+      scanStart.current ??= performance.now();
       let id = 0;
-      const start = performance.now();
       const step = (now: number) => {
-        root.current?.style.setProperty('--scan', String(((now - start) % SCAN_MS) / SCAN_MS));
+        if (el) scanFrame(el, now - scanStart.current!, 1);
         id = requestAnimationFrame(step);
       };
       id = requestAnimationFrame(step);
       return () => cancelAnimationFrame(id);
     }
+    if (scanStart.current === null && !reduced) return; // Never scanned (the reading was ready at once).
     setLeaving(true);
-    const timer = setTimeout(() => setShowScan(false), 750);
-    return () => clearTimeout(timer);
+    if (reduced) {
+      const timer = setTimeout(() => setShowScan(false), LEAVE_MS + 50);
+      return () => clearTimeout(timer);
+    }
+    let id = 0;
+    const from = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - from) / LEAVE_MS);
+      if (el) scanFrame(el, now - scanStart.current!, 1 - smooth(t));
+      if (t < 1) id = requestAnimationFrame(step);
+      else {
+        scanStart.current = null;
+        setShowScan(false);
+      }
+    };
+    id = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(id);
   }, [scanning]);
 
   const points = useMemo<MapPoint[]>(() => {
@@ -234,13 +274,18 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
   const size = m ? { w: m.getContainer().clientWidth, h: m.getContainer().clientHeight } : null;
   const steps: { key: AerialPhase; label: string; done: boolean }[] = [
     { key: 'points', label: t('aerial.step.points'), done: !!overlay },
-    { key: 'image', label: t('aerial.step.image'), done: tilesShown || phase === 'ai' || phase === 'done' },
-    { key: 'ai', label: t('aerial.step.ai'), done: phase === 'done' },
+    { key: 'image', label: t('aerial.step.image'), done: tilesShown || phase === 'ai' || phase === 'refine' || phase === 'done' },
+    { key: 'ai', label: t('aerial.step.ai'), done: phase === 'refine' || phase === 'done' },
+    { key: 'refine', label: t('aerial.step.refine'), done: phase === 'done' },
   ];
-  const current = steps.find(s => !s.done);
+  // While the layer fades out the pill keeps its last label and fades with it.
+  const step = steps.find(s => !s.done)?.label;
+  const [lastStep, setLastStep] = useState(step);
+  useEffect(() => void (step && setLastStep(step)), [step]);
+  const current = step ?? (showScan ? lastStep : undefined);
 
   return (
-    <div ref={root} className={cn('relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-muted', styles.map)} style={{ ['--scan' as string]: 0 }} data-vaul-no-drag>
+    <div ref={root} className={cn('relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-muted', styles.map)} style={{ ['--scan' as string]: 0, ['--scan-a' as string]: 0, ['--scan-out' as string]: 1 }} data-vaul-no-drag>
       {placeholder && !tilesShown ? (
         // eslint-disable-next-line @next/next/no-img-element -- decorative placeholder; the map has its own label
         <img src={placeholder} alt="" className="absolute inset-0 size-full object-cover" />
@@ -261,8 +306,8 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
 
       {m && size && ready ? (
         <div className="pointer-events-none absolute inset-0 z-10">
-          {placed(points, p => m.project([p.lon, p.lat]), size).map(({ point: p, x, y }) => (
-            <MapButton key={p.key} point={p} overlay={overlay} x={x} y={y} z={p.type === 'place' ? 50 : p.type === 'pin' ? 30 : p.type === 'observation' ? 20 : 10} lit={showScan && !leaving ? y / size.h : null} large={large} onWheel={forwardWheel} />
+          {placed(points, p => m.project([p.lon, p.lat]), size, [controlsRect(size, onEnlarge ? 4 : 3)], large).map(({ point: p, x, y }) => (
+            <MapButton key={p.key} point={p} overlay={overlay} x={x} y={y} z={p.type === 'place' ? 50 : p.type === 'pin' ? 30 : p.type === 'observation' ? 20 : 10} lit={showScan ? y / size.h : null} large={large} onWheel={forwardWheel} />
           ))}
         </div>
       ) : null}
@@ -271,7 +316,7 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
       {showScan && current ? (
         <p aria-hidden className={cn('absolute left-2 top-2 z-20 flex max-w-[calc(100%-4rem)] items-center gap-1.5 rounded-full bg-card/90 px-2.5 py-1 text-xs font-medium text-foreground shadow transition-opacity duration-700', leaving && 'opacity-0')}>
           <LoaderCircle className="size-3.5 shrink-0 motion-safe:animate-spin" aria-hidden />
-          <span className="truncate">{current.label}</span>
+          <span className="truncate">{current}</span>
         </p>
       ) : null}
 
@@ -306,19 +351,45 @@ export function AerialMap({ place, name, overlay, widthM, observations, placehol
  * Points to draw at their screen positions. The place and numbered pins always show; stairs and AI markers that
  * would sit on top of another target are left out at this zoom (zooming in reveals them; the text list has all).
  */
-function placed(points: MapPoint[], toScreen: (p: MapPoint) => { x: number; y: number }, size: { w: number; h: number }) {
-  const MIN_GAP = 26;
+function placed(points: MapPoint[], toScreen: (p: MapPoint) => { x: number; y: number }, size: { w: number; h: number }, reserved: Rect[], large: boolean) {
   const priority = (p: MapPoint) => (p.type === 'place' ? 0 : p.type === 'pin' ? 1 : p.type === 'observation' ? 2 : 3);
+  // Half the tap target (the place badge is larger) plus a little air, so every target stays fully tappable.
+  const radius = (p: MapPoint) => (p.type === 'place' ? 18 : 12) + (large ? 2 : 0);
   const kept: { point: MapPoint; x: number; y: number }[] = [];
   for (const point of [...points].sort((a, b) => priority(a) - priority(b))) {
-    const { x, y } = toScreen(point);
-    if (x < -20 || y < -20 || x > size.w + 20 || y > size.h + 20) continue;
-    if (priority(point) >= 2 && kept.some(k => Math.hypot(k.x - x, k.y - y) < MIN_GAP)) continue;
-    kept.push({ point, x, y });
+    const at = toScreen(point);
+    if (at.x < -20 || at.y < -20 || at.x > size.w + 20 || at.y > size.h + 20) continue;
+    const r = radius(point);
+    const fits = (x: number, y: number) =>
+      // Tap targets are squares: they must not overlap even diagonally.
+      kept.every(k => Math.max(Math.abs(k.x - x), Math.abs(k.y - y)) >= radius(k.point) + r + 2) &&
+      reserved.every(b => x + r < b.x0 || x - r > b.x1 || y + r < b.y0 || y - r > b.y1);
+    let spot: { x: number; y: number } | null = point.type === 'place' || fits(at.x, at.y) ? at : null;
+    // Numbered pins always show: one that would sit on another (two doors of one building at this zoom) or under
+    // the map controls is nudged to the nearest free spot. Zooming in puts it back on its own place. Stairs and
+    // observations that don't fit are left out at this zoom (the text list has them all).
+    if (!spot && point.type === 'pin') {
+      search: for (let d = 6; d <= 48; d += 6) {
+        for (let a = 0; a < 8; a++) {
+          const x = at.x + Math.cos((a * Math.PI) / 4) * d;
+          const y = at.y + Math.sin((a * Math.PI) / 4) * d;
+          if (fits(x, y)) {
+            spot = { x, y };
+            break search;
+          }
+        }
+      }
+      spot ??= at;
+    }
+    if (spot) kept.push({ point, ...spot });
   }
   // Render order = stacking order: the place last, on top of everything.
   return kept.reverse();
 }
+
+type Rect = { x0: number; y0: number; x1: number; y1: number };
+/** The zoom/reset/enlarge buttons in the top-right corner (right-2 top-2, 40 px buttons 6 px apart). */
+const controlsRect = (size: { w: number }, count: number): Rect => ({ x0: size.w - 48, y0: 0, x1: size.w, y1: 8 + count * 46 });
 
 function Control({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (

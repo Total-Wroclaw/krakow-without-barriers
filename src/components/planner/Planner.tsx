@@ -35,6 +35,8 @@ const MapView = dynamic(() => import('./MapView'), {
 });
 
 const PREFS_KEY = 'krok-preferences-v1';
+/** How the person travels, for the place card's way-in advice (same key in AerialSection). */
+const TRANSPORT_KEY = 'krok-transport';
 const EXAMPLE: { from: CityPlace; to: CityPlace } = {
   from: { id: 'example:dworzec', name: 'Dworzec Główny', lat: 50.06583, lon: 19.94756, source: 'example' },
   to: { id: 'example:wawel', name: 'Wawel, Smok Wawelski', lat: 50.05302, lon: 19.93359, source: 'example' },
@@ -234,6 +236,13 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
     if (transport !== 'transit') url.searchParams.set('mode', transport);
     window.history.replaceState(window.history.state, '', url);
   }, [from, to, transport, hydrated, embed]);
+
+  // The place card's way-in advice starts from a stop, or from a car park when the person drives.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(TRANSPORT_KEY, transport);
+    } catch {}
+  }, [transport]);
 
   // A different way of travelling means a different best option; don't keep a stale selection.
   const firstTransport = useRef(true);

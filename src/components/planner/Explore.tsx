@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, CircleHelp, Minus, Search, Star, Store, TriangleAlert, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, CircleHelp, MessageSquareWarning, Minus, Search, Star, Store, TriangleAlert, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,9 +10,13 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { AccessFeature, FeatureValue, MapViewport, ObjectCategory, ObjectPage, PlaceObjectSummary } from '@/lib/explore-types';
 import { distance } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
+import type { Report } from '@/lib/schemas';
 import { cn } from '@/lib/utils';
+import { ExploreReports } from './ExploreReports';
 
 export const categories: ObjectCategory[] = ['museum', 'landmark', 'culture', 'office', 'toilet', 'hotel', 'health', 'park', 'food'];
+/** 'reports' is a special category: user reports instead of places, never part of "all". */
+type Category = ObjectCategory | 'all' | 'reports';
 
 export const valueStyle: Record<FeatureValue, { icon: typeof Check; className: string }> = {
   yes: { icon: Check, className: 'bg-rest-soft text-rest' },
@@ -69,6 +73,11 @@ type Props = {
   onResults: (objects: PlaceObjectSummary[], fit: boolean) => void;
   onSelect: (id: string) => void;
   onOwner: () => void;
+  /** Public user reports, for the "Reports" category. */
+  reports: Report[];
+  onReport: (report: Report) => void;
+  /** The reports to draw on the map while the "Reports" category is open (null: none). */
+  onShowReports: (reports: Report[] | null) => void;
 };
 
 const PAGE = 30;
@@ -80,7 +89,7 @@ const VIEW_DEBOUNCE_MS = 400;
 type Area = { bbox: MapViewport['bbox']; center: MapViewport['center']; zoom: number };
 type Request = {
   seq: number;
-  category: ObjectCategory | 'all';
+  category: Category;
   q: string;
   withData: boolean;
   /** 'view': only the visible map area; 'city': all of Kraków ("search all of Kraków"). */
@@ -132,14 +141,19 @@ async function fetchPage(r: Request, offset: number, locale: string, signal: Abo
 }
 
 /** "All" by default; a link may preselect one (?category=museum). Explore only renders in the browser. */
-function initialCategory(): ObjectCategory | 'all' {
+function initialCategory(): Category {
   const asked = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('category');
-  return categories.find(c => c === asked) ?? 'all';
+  return asked === 'reports' ? 'reports' : (categories.find(c => c === asked) ?? 'all');
 }
 
-export function Explore({ center, viewport, selectedId, onResults, onSelect, onOwner }: Props) {
+export function Explore({ center, viewport, selectedId, onResults, onSelect, onOwner, reports, onReport, onShowReports }: Props) {
   const { t, tp, locale } = useI18n();
-  const [category, setCategory] = useState<ObjectCategory | 'all'>(initialCategory);
+  const [category, setCategory] = useState<Category>(initialCategory);
+  const showingReports = category === 'reports';
+  // The reports category filters locally by the area the user looks at (same rules as the places list).
+  const [reportArea, setReportArea] = useState<MapViewport['bbox'] | null>(viewport?.bbox ?? null);
+  const [reportScope, setReportScope] = useState<'view' | 'city'>('view');
+  const [viewUpdates, setViewUpdates] = useState(0);
   const [query, setQuery] = useState('');
   const [withData, setWithData] = useState(true);
   const q = query.trim().length >= 2 ? query.trim() : '';
@@ -216,6 +230,7 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
     const previous = latestView.current;
     const area: Area = { bbox: viewport.bbox, center: viewport.center, zoom: viewport.zoom };
     latestView.current = area;
+    if (!previous) setReportArea(area.bbox);
     // The map loaded after the list asked for the first page: ask again for what is actually visible.
     if (!previous && asked.current) {
       ask('initial', { area });
@@ -223,7 +238,12 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
     }
     if (!viewport.user || !moved(previous, area)) return;
     clearTimeout(viewTimer.current);
-    viewTimer.current = setTimeout(() => ask('view', { scope: 'view', area }), VIEW_DEBOUNCE_MS);
+    viewTimer.current = setTimeout(() => {
+      setReportArea(area.bbox);
+      setReportScope('view');
+      setViewUpdates(n => n + 1);
+      ask('view', { scope: 'view', area });
+    }, VIEW_DEBOUNCE_MS);
   }, [viewport, ask]);
   useEffect(() => () => clearTimeout(viewTimer.current), []);
 
@@ -241,6 +261,15 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
     moreController.current?.abort();
     moreBusy.current = false;
     moreFailed.current = false;
+    // Reports are listed from the data already loaded; no places (and no place markers) meanwhile.
+    if (request.category === 'reports') {
+      firstBusy.current = false;
+      setMore('idle');
+      setFirst({ loading: false, error: '' });
+      commit(null);
+      latest.current.onResults([], false);
+      return;
+    }
     firstBusy.current = true;
     setMore('idle');
     setFirst({ loading: true, error: '' });
@@ -345,8 +374,8 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
           type="search"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          aria-label={t('explore.search')}
-          placeholder={t('explore.searchPlaceholder')}
+          aria-label={t(showingReports ? 'explore.r.search' : 'explore.search')}
+          placeholder={t(showingReports ? 'explore.r.searchPlaceholder' : 'explore.searchPlaceholder')}
           className="h-12 rounded-xl bg-card pl-10 text-base"
         />
       </div>
@@ -355,7 +384,7 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
       <ToggleGroup
         type="single"
         value={category}
-        onValueChange={v => v && setCategory(v as ObjectCategory | 'all')}
+        onValueChange={v => v && setCategory(v as Category)}
         aria-label={t('explore.categories')}
         ref={chipRow}
         onScroll={updateEdges}
@@ -370,6 +399,14 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
             {c === 'all' ? t('explore.all') : t(`cat.${c}`)}
           </ToggleGroupItem>
         ))}
+        <span aria-hidden className="my-2 w-px shrink-0 self-stretch bg-border" />
+        <ToggleGroupItem
+          value="reports"
+          className="h-10 shrink-0 gap-1.5 rounded-full! border border-report/40 bg-card px-4 text-sm text-report data-[state=on]:border-report data-[state=on]:bg-report data-[state=on]:text-white"
+        >
+          <MessageSquareWarning aria-hidden />
+          {t('explore.r.chip')}
+        </ToggleGroupItem>
       </ToggleGroup>
         {edges.start ? (
           <>
@@ -389,12 +426,25 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-1">
+      <div hidden={showingReports} className="flex items-center justify-between gap-3 px-1">
         <Label htmlFor="with-data" className="text-sm font-normal">{t('explore.withData')}</Label>
         <Switch id="with-data" checked={withData} onCheckedChange={setWithData} />
       </div>
 
-      <section ref={section} aria-labelledby="explore-results" aria-busy={first.loading} className="relative flex flex-col gap-3">
+      {showingReports ? (
+        <ExploreReports
+          reports={reports}
+          q={q}
+          bbox={reportScope === 'view' ? reportArea : null}
+          center={center}
+          viewUpdate={viewUpdates}
+          onCity={() => setReportScope('city')}
+          onOpen={onReport}
+          onShow={onShowReports}
+        />
+      ) : null}
+      {/* Stays mounted (hidden) under the reports, keeping the infinite-scroll observer in place. */}
+      <section ref={section} hidden={showingReports} aria-labelledby="explore-results" aria-busy={first.loading} className="relative flex flex-col gap-3">
         {/* Thin progress bar while a new area or search loads; takes no space, so nothing jumps. */}
         <div className="sticky top-0 z-10 h-0" aria-hidden>
           {refreshing ? (

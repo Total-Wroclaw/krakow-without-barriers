@@ -73,6 +73,9 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [fact, setFact] = useState<CityFact | null>(null);
   const [openReport, setOpenReport] = useState<{ report: Report; editing: boolean | 'place' } | null>(null);
+  // Explore's "Reports" category: the reports listed (drawn on the map) and the one opened from the list (the map pans to it).
+  const [exploreReports, setExploreReports] = useState<Report[] | null>(null);
+  const [reportFocus, setReportFocus] = useState<{ lat: number; lon: number } | null>(null);
   const [objects, setObjects] = useState<PlaceObjectSummary[]>([]);
   const [objectId, setObjectId] = useState<string | null>(null);
   // Explore follows the map: the visible area, and a key that changes only when the list asks the map to fit its places.
@@ -362,7 +365,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
             </div>
           ) : null}
           <TabsContent value="explore" tabIndex={-1}>
-            {exploring ? <Explore center={from ?? mapCenter.current} viewport={viewport} selectedId={objectId} onResults={onExploreResults} onSelect={setObjectId} onOwner={() => setPartner({ open: true, existing: null })} /> : null}
+            {exploring ? <Explore center={from ?? mapCenter.current} viewport={viewport} selectedId={objectId} onResults={onExploreResults} onSelect={setObjectId} onOwner={() => setPartner({ open: true, existing: null })} reports={reports} onShowReports={setExploreReports} onReport={r => { setOpenReport({ report: r, editing: false }); setReportFocus(r.location ?? null); }} /> : null}
           </TabsContent>
           <TabsContent value="route" tabIndex={-1}>
           {/* The list stays mounted (hidden) under the details view, keeping its scroll position, inputs and focus target. */}
@@ -480,10 +483,10 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
           options={exploring ? [] : options}
           selectedId={exploring ? null : selectedId}
           detail={!exploring && detail}
-          focus={fact}
+          focus={fact ?? (exploring ? reportFocus : null)}
           from={exploring ? null : from}
           to={exploring ? null : to}
-          reports={exploring ? [] : routeReports}
+          reports={exploring ? (exploreReports ?? []) : routeReports}
           objects={exploring ? objects : []}
           selectedObjectId={objectId}
           onSelect={choose}
@@ -538,7 +541,10 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
         <ReportPanel
           report={openReport.report}
           editing={openReport.editing}
-          onClose={() => setOpenReport(null)}
+          onClose={() => {
+            setOpenReport(null);
+            setReportFocus(null);
+          }}
           onChange={r => {
             setReports(old => old.map(x => (x.id === r.id ? r : x)));
             setOpenReport({ report: r, editing: false });

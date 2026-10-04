@@ -24,6 +24,8 @@ Każdy punkt sprawdzono w kodzie (ścieżka w nawiasie).
 
 **Partnerzy**
 - E-mail kontaktowy jest zapisywany tylko w bazie i nie jest zwracany w żadnej odpowiedzi API (`src/lib/objects.ts`). Wpis ma status „deklaracja właściciela” i `confirmedAt: null`.
+- Poprawa i wycofanie deklaracji bez kont: utworzenie zwraca raz token edycji (32 losowe bajty); w bazie (`partner_objects.edit_hash`) tylko skrót SHA-256, porównanie w stałym czasie, ten sam mechanizm co przy zgłoszeniach. Przeglądarka trzyma token w `localStorage` (`krok-partner-tokens-v1`, czyści go „Usuń dane z tej przeglądarki”). `GET`/`PATCH`/`DELETE /api/partners/objects/[id]` wymagają nagłówka `x-partner-token` (403 przy złym tokenie, 404 dla nieznanej lub wycofanej deklaracji); `GET` zwraca właścicielowi jego własny rekord z e-mailem tylko do wypełnienia formularza. Wycofanie to usunięcie miękkie: deklaracja znika z katalogu, wiersz zostaje do audytu, a e-mail kontaktowy jest z niego usuwany. Dane demonstracyjne partnera nie są edytowalne. Token dowodzi tylko, że to ta sama przeglądarka, która wysłała deklarację; nie dowodzi własności obiektu, a po utracie przeglądarki nie ma odzyskiwania.
+- Miasto może ukryć fałszywą deklarację w panelu `/city` (i przywrócić ją): ukryta nie trafia do katalogu, ale zostaje w bazie (`hidden_at`). Ukrycie przez miasto nie jest cofane przez poprawkę właściciela.
 
 **Panel miasta `/city`**
 - Jedno wspólne hasło (`CITY_DASHBOARD_PASSWORD`) wymieniane na podpisane ciasteczko sesji (HMAC-SHA256, 12 h, `HttpOnly`, `SameSite=Strict`, `Secure` w produkcji), porównania w stałym czasie. Brak hasła w konfiguracji wyłącza panel (`src/lib/city-auth.ts`).
@@ -44,14 +46,14 @@ Każdy punkt sprawdzono w kodzie (ścieżka w nawiasie).
 - Serwerowe skanowanie plików i **automatyczne zamazywanie twarzy i tablic** (polityka je opisuje; prototyp tylko ukrywa zdjęcia z osobami do decyzji urzędu).
 - Szyfrowanie danych w spoczynku, szyfrowane kopie zapasowe i test odtworzenia, menedżer sekretów z rotacją.
 - Panel urzędu: SSO, role, MFA, dziennik zmian z identyfikatorem autora (dziś jedno wspólne hasło, bez ról i bez śladu autora).
-- Moderacja zgłoszeń i kolejka do przeglądu; konta partnerów z weryfikacją własności wpisu.
+- Moderacja zgłoszeń i kolejka do przeglądu; konta partnerów z weryfikacją własności wpisu (dziś miasto ręcznie ukrywa fałszywe deklaracje, bez kolejki i bez historii zmian).
 - Automatyczna retencja: usuwanie zdjęć, komentarza i celu 12 miesięcy po zamknięciu zgłoszenia (dziś brak mechanizmu).
 - Ścisła polityka CSP dla skryptów i stylów (dziś tylko ograniczenie osadzania w ramkach, bo MapLibre potrzebuje `blob:`), logi bez treści zgłoszeń, PostgreSQL/PostGIS zamiast SQLite, limity zapytań na proxy zamiast w pamięci procesu.
 - Wymuszenie HTTPS, przekierowanie HTTP i minimalne TLS 1.2 na poziomie proxy; automatyczne odnawianie certyfikatów.
 
 ## Znane ograniczenia
 
-- **Partnerzy bez weryfikacji własności:** każdy może zgłosić obiekt i wybrać pakiet; wpisy są oznaczone jako deklaracje, ale ich autorstwo nie jest sprawdzane.
+- **Partnerzy bez weryfikacji własności:** każdy może zgłosić obiekt i wybrać pakiet; wpisy są oznaczone jako „deklaracja właściciela, bez weryfikacji”, ale ich autorstwo nie jest sprawdzane. Token edycji pozwala poprawić lub wycofać wpis tylko z tej samej przeglądarki; osoba, która podała się za właściciela, może więc zostawić nieprawdziwą deklarację, dopóki miasto jej nie ukryje.
 - **Publiczne pola tekstowe:** opis, komentarz i cel zgłoszenia są publiczne; model i filtr ograniczają część danych osobowych, ale nie gwarantują ich wykrycia. Użytkownik jest tylko proszony o niewpisywanie danych osobowych.
 - **Brak automatycznego zamazywania twarzy i tablic.** Zdjęcie z osobą jest ukrywane, a nie przetwarzane; ocena „brak osób” pochodzi z modelu i może być błędna.
 - **Retencja nie jest egzekwowana automatycznie**; zgłoszenia i zdjęcia zostają do usunięcia przez autora lub urząd.

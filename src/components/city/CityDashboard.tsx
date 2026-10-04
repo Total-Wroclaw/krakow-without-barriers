@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cityStatusLabel, emptyCityFilter, filterReports, reportTypeLabel, summary, typeOf, type CityFilter } from '@/lib/city-reports';
 import { cityStatuses, type Report } from '@/lib/schemas';
 import { cn } from '@/lib/utils';
+import type { PartnerDeclaration } from '@/lib/objects';
+import PartnerDeclarations from './PartnerDeclarations';
 import ReportDetail from './ReportDetail';
 import { formatDate, MapLinks, StatusBadge, TypeBadge } from './shared';
 
@@ -48,7 +50,7 @@ function filterQuery(f: CityFilter) {
   return p.toString();
 }
 
-export default function CityDashboard({ initialReports }: { initialReports: Report[] }) {
+export default function CityDashboard({ initialReports, initialPartners }: { initialReports: Report[]; initialPartners: PartnerDeclaration[] }) {
   const router = useRouter();
   const [reports, setReports] = useState(initialReports);
   const [filter, setFilter] = useState<CityFilter>(emptyCityFilter);
@@ -221,6 +223,8 @@ export default function CityDashboard({ initialReports }: { initialReports: Repo
             </ul>
           )}
         </section>
+
+        <PartnerDeclarations initial={initialPartners} />
       </main>
 
       <ReportDetail report={open} onClose={() => setOpenId(null)} onSaved={onSaved} onUnauthorized={() => router.refresh()} />

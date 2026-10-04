@@ -158,7 +158,7 @@ test('partner submissions are validated, stored and returned without the contact
     { ...valid, admin: true },
   ]) await assert.rejects(() => objects.savePartnerObject(bad), String(JSON.stringify(bad)).slice(0, 80));
   await assert.rejects(() => objects.savePartnerObject({ ...valid, existingObjectId: 'osm-node-0' }), objects.PartnerInputError);
-  const saved = await objects.savePartnerObject(valid);
+  const { object: saved } = await objects.savePartnerObject(valid);
   assert.ok(saved.id.startsWith('partner-'));
   assert.equal(saved.partner?.promoted, true);
   assert.equal(saved.sources[0].status, 'partner');
@@ -167,7 +167,7 @@ test('partner submissions are validated, stored and returned without the contact
   assert.equal(listed[0].id, saved.id);
   assert.ok(!JSON.stringify(await objects.getObject(saved.id)).includes('secret-owner'));
   // Attach owner data to an existing object.
-  const attached = await objects.savePartnerObject({ ...valid, name: 'Muzeum Narodowe', category: 'museum', existingObjectId: saved.id, features: [{ key: 'lift', value: 'yes' }], promote: false, plan: 'free' });
+  const { object: attached } = await objects.savePartnerObject({ ...valid, name: 'Muzeum Narodowe', category: 'museum', existingObjectId: saved.id, features: [{ key: 'lift', value: 'yes' }], promote: false, plan: 'free' });
   assert.equal(attached.id, saved.id);
   assert.equal(attached.sources.filter(s => s.kind === 'partner').length, 2);
 });

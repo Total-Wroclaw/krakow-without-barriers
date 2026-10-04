@@ -24,7 +24,7 @@ export type PartnerFeatureInput = { key: FeatureKey; value: FeatureValue; detail
 export type PartnerRecord = {
   id: string; name: string; category: ObjectCategory; lat: number; lon: number; address?: string; website?: string;
   contactEmail: string; features: PartnerFeatureInput[]; description?: string; promote: boolean; plan: 'free' | 'partner';
-  existingObjectId?: string; obtainedAt: string; example?: boolean; tagline?: string;
+  existingObjectId?: string; obtainedAt: string; /** Set when the owner corrected the declaration. */ editedAt?: string; example?: boolean; tagline?: string;
 };
 export type CatalogInput = { osm?: OsmFile | null; city?: CityVenuesFile | null; partners?: PartnerRecord[]; reports?: Report[] };
 
@@ -261,7 +261,7 @@ function partnerInfo(p: PartnerRecord): PartnerInfo {
 function attachPartner(cat: Catalog, p: PartnerRecord) {
   const sid = `partner:${p.id}`;
   const status = p.example ? 'example' as const : 'partner' as const;
-  const source = { id: sid, kind: 'partner' as const, label: (p.example ? LABELS.example : LABELS.partner).pl, labelKey: p.example ? 'example' as const : 'partner' as const, ...(p.website ? { url: p.website } : {}), obtainedAt: p.obtainedAt, confirmedAt: null, editedAt: p.obtainedAt, status };
+  const source = { id: sid, kind: 'partner' as const, label: (p.example ? LABELS.example : LABELS.partner).pl, labelKey: p.example ? 'example' as const : 'partner' as const, ...(p.website ? { url: p.website } : {}), obtainedAt: p.obtainedAt, confirmedAt: null, editedAt: p.editedAt ?? p.obtainedAt, status };
   const features = p.features.map(f => ({ key: f.key, value: f.value, sourceId: sid, ...(f.detail ? { detail: f.detail } : {}) }));
   const existing = p.existingObjectId ? cat.byId.get(p.existingObjectId) : undefined;
   if (existing) {
@@ -493,7 +493,7 @@ let baseCatalog: Catalog | undefined;
  * otherwise OSM + city data only. Recomputed only when the catalogue changes.
  */
 export function accessibleToilets(): AccessibleToilet[] {
-  const cat = cached?.cat ?? (baseCatalog ??= buildCatalog(loadBase()));
+  const cat = holder.cached?.cat ?? (baseCatalog ??= buildCatalog(loadBase()));
   if (toiletCache?.cat !== cat) toiletCache = { cat, toilets: accessibleToiletsOf(cat) };
   return toiletCache.toilets;
 }
@@ -563,7 +563,8 @@ export function partnerFieldErrors(error: z.ZodError, messages: FieldMessages) {
 // ---------- Lazy singleton over files + SQLite ----------
 type Base = { osm: OsmFile | null; city: CityVenuesFile | null };
 let base: Base | undefined;
-let cached: { cat: Catalog; at: number } | undefined;
+// Held on globalThis: route handlers can be bundled separately, and a write in one must invalidate the cache the others read.
+const holder = ((globalThis as { __krokCatalog?: { cached?: { cat: Catalog; at: number } } }).__krokCatalog ??= {});
 const OVERLAY_TTL = 15_000;
 function loadBase(): Base {
   if (base) return base;
@@ -577,34 +578,123 @@ function loadBase(): Base {
   return base;
 }
 async function store() { return import('./server'); }
+/** Columns added after the first release are added in place, so databases created earlier keep working. */
 function ensurePartnerTable(db: import('node:sqlite').DatabaseSync) {
   db.exec('CREATE TABLE IF NOT EXISTS partner_objects (id TEXT PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL)');
+  const have = new Set((db.prepare('PRAGMA table_info(partner_objects)').all() as { name: string }[]).map(c => c.name));
+  for (const column of ['edit_hash', 'hidden_at', 'withdrawn_at']) if (!have.has(column)) db.exec(`ALTER TABLE partner_objects ADD COLUMN ${column} TEXT`);
 }
 async function catalog(): Promise<Catalog> {
-  if (cached && Date.now() - cached.at < OVERLAY_TTL) return cached.cat;
+  if (holder.cached && Date.now() - holder.cached.at < OVERLAY_TTL) return holder.cached.cat;
   const { db, listReports } = await store();
   ensurePartnerTable(db());
-  const partners = (db().prepare('SELECT body FROM partner_objects ORDER BY rowid').all() as { body: string }[]).map(r => JSON.parse(r.body) as PartnerRecord);
+  const partners = (db().prepare('SELECT body FROM partner_objects WHERE hidden_at IS NULL AND withdrawn_at IS NULL ORDER BY rowid').all() as { body: string }[]).map(r => JSON.parse(r.body) as PartnerRecord);
   const demo = process.env.KROK_DEMO_PARTNER === '0' ? [] : [DEMO_PARTNER];
   // The base (OSM + city) is parsed once; rebuilding records from it with the overlay takes a few ms.
   const cat = buildCatalog({ ...loadBase(), partners: [...demo, ...partners], reports: listReports() });
-  cached = { cat, at: Date.now() };
+  holder.cached = { cat, at: Date.now() };
   return cat;
 }
 export async function listObjects(query: ObjectQuery): Promise<PlaceObjectSummary[]> { return queryCatalog(await catalog(), query); }
 export async function listObjectPage(query: ObjectQuery): Promise<ObjectPage> { return queryCatalogPage(await catalog(), query); }
 export async function getObject(id: string, locale: Locale = 'pl'): Promise<PlaceObject | null> { return getFromCatalog(await catalog(), id, locale); }
-/** Validate and store a partner submission; returns the public object (contact e-mail is never included). */
-export async function savePartnerObject(input: unknown, locale: Locale = 'pl'): Promise<PlaceObject> {
+export type PartnerSaved = { object: PlaceObject; editToken: string; partnerId: string };
+/**
+ * Validate and store a partner submission. Returns the public object (contact e-mail is never included) and, once,
+ * the edit token: only its SHA-256 hash is stored, so the owner's browser is the only place that can correct or
+ * withdraw the declaration. The token proves "same browser as the submitter", not ownership of the venue.
+ */
+export async function savePartnerObject(input: unknown, locale: Locale = 'pl'): Promise<PartnerSaved> {
   const { locale: formLocale, ...data } = partnerSubmissionSchema.parse(input);
   if (formLocale) locale = formLocale;
   if (data.existingObjectId && !(await catalog()).byId.has(data.existingObjectId)) throw new PartnerInputError('existingObjectId');
   const record: PartnerRecord = { ...data, id: randomUUID(), obtainedAt: new Date().toISOString() };
+  const { newEditToken } = await import('./reports-server');
+  const { token, hash } = newEditToken();
   const { db } = await store();
   ensurePartnerTable(db());
-  db().prepare('INSERT INTO partner_objects (id, body, created_at) VALUES (?, ?, ?)').run(record.id, JSON.stringify(record), record.obtainedAt);
-  cached = undefined;
+  db().prepare('INSERT INTO partner_objects (id, body, created_at, edit_hash) VALUES (?, ?, ?, ?)').run(record.id, JSON.stringify(record), record.obtainedAt, hash);
+  holder.cached = undefined;
   const object = await getObject(data.existingObjectId ?? `partner-${record.id}`, locale);
   if (!object) throw new Error('Partner object not found after save');
-  return object;
+  return { object, editToken: token, partnerId: record.id };
+}
+
+// ---------- Correcting, withdrawing and moderating declarations ----------
+export type PartnerAccess = 'ok' | 'not_found' | 'forbidden';
+type PartnerRow = { body: string; edit_hash: string | null; hidden_at: string | null; withdrawn_at: string | null };
+async function partnerRow(id: string): Promise<PartnerRow | undefined> {
+  const { db } = await store();
+  ensurePartnerTable(db());
+  return db().prepare('SELECT body, edit_hash, hidden_at, withdrawn_at FROM partner_objects WHERE id=?').get(id) as PartnerRow | undefined;
+}
+/** Withdrawn declarations are gone for everyone, hidden ones are still correctable (they stay hidden). */
+async function partnerFor(id: string, token: string | null | undefined): Promise<{ access: PartnerAccess; record?: PartnerRecord }> {
+  const row = id === DEMO_PARTNER.id ? undefined : await partnerRow(id);
+  if (!row || row.withdrawn_at) return { access: 'not_found' };
+  const { tokenMatches } = await import('./reports-server');
+  if (!tokenMatches(row.edit_hash, token)) return { access: 'forbidden' };
+  return { access: 'ok', record: JSON.parse(row.body) as PartnerRecord };
+}
+
+/** The owner's own record for prefilling the correction form (includes the private contact e-mail). */
+export async function readPartnerDeclaration(id: string, token: string | null | undefined): Promise<{ access: PartnerAccess; record?: PartnerRecord }> {
+  return partnerFor(id, token);
+}
+
+/** Replaces the declaration with a validated submission; id, existingObjectId and obtainedAt stay. */
+export async function updatePartnerObject(id: string, token: string | null | undefined, input: unknown, locale: Locale = 'pl'): Promise<{ access: PartnerAccess; object?: PlaceObject }> {
+  const { locale: formLocale, existingObjectId: _ignored, ...fields } = partnerSubmissionSchema.parse(input);
+  if (formLocale) locale = formLocale;
+  const { access, record } = await partnerFor(id, token);
+  if (access !== 'ok' || !record) return { access };
+  const next: PartnerRecord = { ...record, ...fields, id: record.id, obtainedAt: record.obtainedAt, editedAt: new Date().toISOString() };
+  if (!fields.website) delete next.website;
+  if (!fields.address) delete next.address;
+  if (!fields.description) delete next.description;
+  const { db } = await store();
+  db().prepare('UPDATE partner_objects SET body=? WHERE id=?').run(JSON.stringify(next), id);
+  holder.cached = undefined;
+  const object = await getObject(next.existingObjectId ?? `partner-${id}`, locale);
+  return { access, ...(object ? { object } : {}) };
+}
+
+/**
+ * Soft delete: the row is marked withdrawn, so the declaration leaves the catalogue at once but the audit trail
+ * stays; the owner's contact e-mail is erased from it.
+ */
+export async function withdrawPartnerObject(id: string, token: string | null | undefined): Promise<PartnerAccess> {
+  const { access, record } = await partnerFor(id, token);
+  if (access !== 'ok' || !record) return access;
+  const { db } = await store();
+  db().prepare('UPDATE partner_objects SET body=?, withdrawn_at=? WHERE id=?').run(JSON.stringify({ ...record, contactEmail: '' }), new Date().toISOString(), id);
+  holder.cached = undefined;
+  return 'ok';
+}
+
+export type PartnerDeclaration = {
+  id: string; name: string; category: ObjectCategory; address?: string; website?: string; contactEmail: string; description?: string;
+  features: PartnerFeatureInput[]; existingObjectId?: string; plan: 'free' | 'partner'; createdAt: string; editedAt?: string; hidden: boolean; hiddenAt?: string;
+};
+/** For the city dashboard: every live (not withdrawn) declaration, newest first, including hidden ones. */
+export async function listPartnerDeclarations(): Promise<PartnerDeclaration[]> {
+  const { db } = await store();
+  ensurePartnerTable(db());
+  const rows = db().prepare('SELECT body, hidden_at FROM partner_objects WHERE withdrawn_at IS NULL ORDER BY rowid DESC').all() as { body: string; hidden_at: string | null }[];
+  return rows.map(({ body, hidden_at }) => {
+    const r = JSON.parse(body) as PartnerRecord;
+    return {
+      id: r.id, name: r.name, category: r.category, address: r.address, website: r.website, contactEmail: r.contactEmail, description: r.description,
+      features: r.features, existingObjectId: r.existingObjectId, plan: r.plan, createdAt: r.obtainedAt, editedAt: r.editedAt, hidden: !!hidden_at, ...(hidden_at ? { hiddenAt: hidden_at } : {}),
+    };
+  });
+}
+/** The city hides a false declaration (kept for audit, excluded from the catalogue) or restores it. */
+export async function setPartnerHidden(id: string, hidden: boolean): Promise<PartnerDeclaration | null> {
+  const { db } = await store();
+  ensurePartnerTable(db());
+  const changed = db().prepare('UPDATE partner_objects SET hidden_at=? WHERE id=? AND withdrawn_at IS NULL').run(hidden ? new Date().toISOString() : null, id);
+  if (!changed.changes) return null;
+  holder.cached = undefined;
+  return (await listPartnerDeclarations()).find(d => d.id === id) ?? null;
 }

@@ -176,6 +176,8 @@ const pl = {
       invalid: 'Popraw zaznaczone pola.',
       notFound: 'Nie znaleziono wskazanego miejsca.',
       saveFailed: 'Nie udało się zapisać danych. Spróbuj ponownie.',
+      declNotFound: 'Nie znaleziono tej deklaracji. Mogła zostać wycofana.',
+      declForbidden: 'Deklarację może zmienić tylko przeglądarka, z której została wysłana.',
       fields: {
         name: 'Podaj nazwę (2–160 znaków).',
         category: 'Wybierz kategorię.',
@@ -359,6 +361,8 @@ const en: ServerMessages = {
       invalid: 'Correct the highlighted fields.',
       notFound: 'The selected place was not found.',
       saveFailed: 'Could not save the data. Please try again.',
+      declNotFound: 'This declaration was not found. It may have been withdrawn.',
+      declForbidden: 'Only the browser it was sent from can change this declaration.',
       fields: {
         name: 'Enter a name (2–160 characters).',
         category: 'Choose a category.',
@@ -540,6 +544,8 @@ const de: ServerMessages = {
       invalid: 'Korrigieren Sie die markierten Felder.',
       notFound: 'Der gewählte Ort wurde nicht gefunden.',
       saveFailed: 'Die Daten konnten nicht gespeichert werden. Bitte versuchen Sie es erneut.',
+      declNotFound: 'Diese Erklärung wurde nicht gefunden. Möglicherweise wurde sie zurückgezogen.',
+      declForbidden: 'Nur der Browser, von dem sie gesendet wurde, kann diese Erklärung ändern.',
       fields: {
         name: 'Geben Sie einen Namen ein (2–160 Zeichen).',
         category: 'Wählen Sie eine Kategorie.',

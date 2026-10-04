@@ -4,6 +4,7 @@ import { connection } from 'next/server';
 import CityDashboard from '@/components/city/CityDashboard';
 import CityLogin from '@/components/city/CityLogin';
 import { CITY_COOKIE, cityEnabled, verifySession } from '@/lib/city-auth';
+import { listPartnerDeclarations } from '@/lib/objects';
 import { cityReport, listAllReports } from '@/lib/reports-server';
 
 export const metadata: Metadata = {
@@ -26,5 +27,5 @@ export default async function CityPage() {
   }
   const token = (await cookies()).get(CITY_COOKIE)?.value;
   if (!verifySession(token)) return <CityLogin />;
-  return <CityDashboard initialReports={listAllReports().map(cityReport)} />;
+  return <CityDashboard initialReports={listAllReports().map(cityReport)} initialPartners={await listPartnerDeclarations()} />;
 }

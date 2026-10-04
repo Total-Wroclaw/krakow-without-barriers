@@ -1,17 +1,20 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Camera, Check, ChevronDown, CircleHelp, Clock, ExternalLink, Info, LoaderCircle, Minus, Navigation, Share2, Store, TriangleAlert, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, CircleHelp, Clock, ExternalLink, Info, LoaderCircle, Minus, Navigation, Pencil, Share2, Store, Trash2, TriangleAlert, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { ObjectSource, PlaceObject, SourceStatus } from '@/lib/explore-types';
+import { errorText, requestJson } from '@/lib/client';
 import { formatDate } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
+import { forgetPartnerToken, ownedDeclarations, PARTNER_TOKEN_HEADER, partnerToken, partnerWriteStamp, touchPartnerWrite } from '@/lib/partner-tokens';
 import { groupFacts, groupSources, keyFactKeys, toneOf, type FactGroup, type FactStatement, type Tone } from '@/lib/place-facts';
 import { cn } from '@/lib/utils';
 import { ShowMore } from './AerialParts';
 import { AerialSection } from './AerialSection';
 import { PartnerBadges } from './Explore';
+import { PartnerForm } from './PartnerForm';
 import { Panel } from './Panel';
 import { useMediaQuery } from '@/hooks/use-media-query';
 
@@ -42,12 +45,16 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
 }) {
   const { t, locale } = useI18n();
   const [state, setState] = useState<{ loading: boolean; object: PlaceObject | null; error: string }>({ loading: false, object: null, error: '' });
+  // Bumped after the owner corrects a declaration, so the card shows what the catalogue now says.
+  const [version, setVersion] = useState(0);
+  const [editing, setEditing] = useState<string | null>(null);
+  const editAuth = editing ? partnerToken(editing) : null;
 
   useEffect(() => {
     if (!id) return;
     const controller = new AbortController();
-    setState({ loading: true, object: null, error: '' });
-    fetch(`/api/objects/${encodeURIComponent(id)}?locale=${locale}`, { signal: controller.signal })
+    setState(prev => (prev.object?.id === id && version ? { ...prev, error: '' } : { loading: true, object: null, error: '' }));
+    fetch(`/api/objects/${encodeURIComponent(id)}?locale=${locale}${partnerWriteStamp() ? `&w=${partnerWriteStamp()}` : ''}`, { signal: controller.signal })
       .then(async res => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
@@ -55,12 +62,13 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
       })
       .catch(() => !controller.signal.aborted && setState({ loading: false, object: null, error: t('explore.failed') }));
     return () => controller.abort();
-  }, [id, locale, t]);
+  }, [id, locale, t, version]);
 
   if (!id) return null;
   const o = state.object;
 
   return (
+    <>
     <PlaceFrame title={o?.name ?? t('explore.loading')} description={o ? [o.categoryLabel, o.address].filter(Boolean).join(', ') : undefined} onClose={onClose}>
       {state.loading ? (
         <p className="flex items-center gap-2 py-6 text-muted-foreground" role="status">
@@ -70,9 +78,24 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
       ) : state.error || !o ? (
         <p role="alert" className="py-6 font-medium">{state.error}</p>
       ) : (
-        <PlaceBody o={o} onRoute={onRoute} onPhoto={onPhoto} onOwner={onOwner} />
+        <PlaceBody
+          o={o}
+          onRoute={onRoute}
+          onPhoto={onPhoto}
+          onOwner={onOwner}
+          onEditDeclaration={setEditing}
+          onWithdrawn={() => (o.id.startsWith('partner-') && !o.sources.some(s => s.kind !== 'partner') ? onClose() : setVersion(v => v + 1))}
+        />
       )}
     </PlaceFrame>
+    <PartnerForm
+      open={!!editing && !!editAuth}
+      existing={o}
+      edit={editing && editAuth ? { id: editing, token: editAuth } : null}
+      onClose={() => setEditing(null)}
+      onSaved={() => setVersion(v => v + 1)}
+    />
+    </>
   );
 }
 
@@ -80,7 +103,14 @@ export function ObjectSheet({ id, onClose, onRoute, onPhoto, onOwner }: {
  * Card order: what decides a visit first (the four key facts, conflicts, route), then the remaining facts, user
  * reports, practical details and where the facts come from, the bird's-eye view, and finally how to correct them.
  */
-function PlaceBody({ o, onRoute, onPhoto, onOwner }: { o: PlaceObject; onRoute: (o: PlaceObject) => void; onPhoto: (o: PlaceObject) => void; onOwner: (o: PlaceObject) => void }) {
+function PlaceBody({ o, onRoute, onPhoto, onOwner, onEditDeclaration, onWithdrawn }: {
+  o: PlaceObject;
+  onRoute: (o: PlaceObject) => void;
+  onPhoto: (o: PlaceObject) => void;
+  onOwner: (o: PlaceObject) => void;
+  onEditDeclaration: (partnerId: string) => void;
+  onWithdrawn: () => void;
+}) {
   const { t, locale } = useI18n();
   const groups = groupFacts(o.features, o.sources);
   const byKey = new Map(groups.map(g => [g.key, g]));
@@ -217,6 +247,8 @@ function PlaceBody({ o, onRoute, onPhoto, onOwner }: { o: PlaceObject; onRoute: 
 
       <Provenance o={o} />
 
+      <OwnerDeclarations o={o} onEdit={onEditDeclaration} onWithdrawn={onWithdrawn} />
+
       <AerialSection lat={o.lat} lon={o.lon} name={o.name} objectId={o.id} />
 
       <div className="flex flex-wrap gap-2 border-t pt-4">
@@ -230,6 +262,89 @@ function PlaceBody({ o, onRoute, onPhoto, onOwner }: { o: PlaceObject; onRoute: 
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Declarations on this place that this browser submitted (it holds the edit token): correct or withdraw them.
+ * Nobody else gets these buttons, and the server checks the token again.
+ */
+function OwnerDeclarations({ o, onEdit, onWithdrawn }: { o: PlaceObject; onEdit: (partnerId: string) => void; onWithdrawn: () => void }) {
+  const { t, locale } = useI18n();
+  const [mine, setMine] = useState<ReturnType<typeof ownedDeclarations>>([]);
+  // localStorage is read after mount so the first client render matches the server.
+  useEffect(() => setMine(ownedDeclarations(o.sources)), [o.sources]);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const withdrawButtons = useRef(new Map<string, HTMLButtonElement>());
+  if (!mine.length) return null;
+
+  async function withdraw(id: string) {
+    const token = partnerToken(id);
+    if (!token) return;
+    setBusy(true);
+    try {
+      await requestJson('DELETE', `/api/partners/objects/${id}?locale=${locale}`, undefined, 35000, { [PARTNER_TOKEN_HEADER]: token });
+      forgetPartnerToken(id);
+      touchPartnerWrite();
+      toast.success(t('partner.withdrawn'));
+      setConfirming(null);
+      onWithdrawn();
+    } catch (err) {
+      toast.error(errorText(err, t('partner.withdrawFailed')));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="owner-decl-title" className="flex flex-col gap-3 rounded-xl border border-drive/40 bg-card p-3">
+      <h3 id="owner-decl-title" className="font-semibold">{t('partner.mine')}</h3>
+      <ul className="flex flex-col gap-3">
+        {mine.map(({ id, source }) => (
+          <li key={id} className="flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{t('status.partner')}</span>
+              {' · '}
+              {source.editedAt && source.editedAt !== source.obtainedAt ? t('explore.edited', { date: formatDate(source.editedAt, locale) }) : t('explore.obtained', { date: formatDate(source.obtainedAt, locale) })}
+            </p>
+            {confirming === id ? (
+              <div className="flex flex-col gap-2 rounded-lg border border-barrier/40 p-3">
+                <p className="font-medium">{t('partner.withdrawConfirm')}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="destructive" className="h-11" disabled={busy} autoFocus onClick={() => withdraw(id)}>
+                    {busy ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+                    {t('partner.withdrawYes')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="h-11"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirming(null);
+                      window.setTimeout(() => withdrawButtons.current.get(id)?.focus(), 0);
+                    }}
+                  >
+                    {t('partner.withdrawNo')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="h-11" onClick={() => onEdit(id)}>
+                  <Pencil />
+                  {t('partner.edit')}
+                </Button>
+                <Button variant="ghost" className="h-11" ref={el => { if (el) withdrawButtons.current.set(id, el); }} onClick={() => setConfirming(id)}>
+                  <Trash2 />
+                  {t('partner.withdraw')}
+                </Button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

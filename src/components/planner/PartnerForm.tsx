@@ -9,9 +9,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { CityPlace } from '@/lib/city-types';
-import { errorText, postJson } from '@/lib/client';
+import { errorText, postJson, requestJson } from '@/lib/client';
 import type { FeatureKey, FeatureValue, ObjectCategory, PlaceObject } from '@/lib/explore-types';
 import { useI18n } from '@/lib/i18n/client';
+import { PARTNER_TOKEN_HEADER, rememberPartnerToken, touchPartnerWrite } from '@/lib/partner-tokens';
+import type { PartnerRecord } from '@/lib/objects';
 import { categories } from './Explore';
 import { Panel } from './Panel';
 import { PlaceInput } from './PlaceInput';
@@ -24,7 +26,14 @@ export function embedCode(origin: string, place: { lat: number; lon: number; nam
   return `<iframe src="${src}" title="${place.name.replace(/"/g, '&quot;')}" width="100%" height="680" style="border:0" loading="lazy" allow="geolocation"></iframe>`;
 }
 
-export function PartnerForm({ open, existing, onClose }: { open: boolean; existing: PlaceObject | null; onClose: () => void }) {
+/** With `edit` the form corrects the owner's own declaration (loaded with the token from this browser) instead of adding one. */
+export function PartnerForm({ open, existing, edit, onClose, onSaved }: {
+  open: boolean;
+  existing: PlaceObject | null;
+  edit?: { id: string; token: string } | null;
+  onClose: () => void;
+  onSaved?: () => void;
+}) {
   const { t, locale } = useI18n();
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ObjectCategory>('hotel');
@@ -35,6 +44,8 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
   const [plan, setPlan] = useState<'free' | 'partner'>('free');
   const [rows, setRows] = useState<Record<string, Row>>({});
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [existingId, setExistingId] = useState<string | undefined>(undefined);
   const [done, setDone] = useState<{ lat: number; lon: number; name: string } | null>(null);
 
   useEffect(() => {
@@ -45,7 +56,34 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
     setPlace(existing ? { id: existing.id, name: existing.address ?? existing.name, lat: existing.lat, lon: existing.lon, source: 'object' } : null);
     setWebsite(existing?.website ?? '');
     setRows({});
-  }, [open, existing]);
+    setEmail('');
+    setDescription('');
+    setPlan('free');
+    setExistingId(undefined);
+    if (!edit) return;
+    const controller = new AbortController();
+    setLoading(true);
+    requestJson('GET', `/api/partners/objects/${edit.id}?locale=${locale}`, undefined, 35000, { [PARTNER_TOKEN_HEADER]: edit.token }, controller.signal)
+      .then(({ declaration: d }: { declaration: PartnerRecord }) => {
+        setName(d.name);
+        setCategory(d.category);
+        setPlace({ id: d.existingObjectId ?? `partner-${d.id}`, name: d.address ?? d.name, lat: d.lat, lon: d.lon, source: 'object' });
+        setWebsite(d.website ?? '');
+        setEmail(d.contactEmail);
+        setDescription(d.description ?? '');
+        setPlan(d.plan);
+        setExistingId(d.existingObjectId);
+        setRows(Object.fromEntries(d.features.map(f => [f.key, { value: f.value === 'unknown' ? 'none' : f.value, detail: f.detail ?? '' } as Row])));
+        setLoading(false);
+      })
+      .catch(err => {
+        if (controller.signal.aborted) return;
+        toast.error(errorText(err, t('partner.failed')));
+        onClose();
+      });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, existing, edit?.id, edit?.token, locale]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -58,7 +96,7 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
       const features = Object.entries(rows)
         .filter(([, r]) => r.value !== 'none')
         .map(([key, r]) => ({ key, value: r.value, ...(r.detail.trim() ? { detail: r.detail.trim() } : {}) }));
-      await postJson(`/api/partners/objects?locale=${locale}`, {
+      const payload = {
         name: name.trim(),
         category,
         lat: place.lat,
@@ -70,9 +108,22 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
         ...(description.trim() ? { description: description.trim() } : {}),
         promote: plan === 'partner',
         plan,
-        ...(existing ? { existingObjectId: existing.id } : {}),
-      });
+        ...(edit ? (existingId ? { existingObjectId: existingId } : {}) : existing ? { existingObjectId: existing.id } : {}),
+      };
+      if (edit) {
+        await requestJson('PATCH', `/api/partners/objects/${edit.id}?locale=${locale}`, payload, 35000, { [PARTNER_TOKEN_HEADER]: edit.token });
+        touchPartnerWrite();
+        toast.success(t('partner.corrected'));
+        onSaved?.();
+        onClose();
+        return;
+      }
+      const data = await postJson(`/api/partners/objects?locale=${locale}`, payload);
+      // The token is shown to nobody: it only lives in this browser, which is what lets the owner correct or withdraw later.
+      rememberPartnerToken(data.partnerId, data.editToken);
+      touchPartnerWrite();
       toast.success(t('partner.sent'));
+      onSaved?.();
       setDone({ lat: place.lat, lon: place.lon, name: name.trim() });
     } catch (err) {
       toast.error(errorText(err, t('partner.failed')));
@@ -84,8 +135,13 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
   const code = done ? embedCode(window.location.origin, done) : '';
 
   return (
-    <Panel open={open} onOpenChange={o => !o && onClose()} title={t('partner.title')} description={t('partner.description')}>
-      {done ? (
+    <Panel open={open} onOpenChange={o => !o && onClose()} title={edit ? t('partner.editTitle') : t('partner.title')} description={edit ? t('partner.editDescription') : t('partner.description')}>
+      {loading ? (
+        <p className="flex items-center gap-2 py-6 text-muted-foreground" role="status">
+          <LoaderCircle className="size-5 animate-spin" aria-hidden />
+          {t('explore.loading')}
+        </p>
+      ) : done ? (
         <div className="flex flex-col gap-3 pt-2">
           <Label htmlFor="embed-code" className="text-base font-semibold">{t('partner.embed')}</Label>
           <p className="text-sm text-muted-foreground">{t('partner.embedHint')}</p>
@@ -178,9 +234,11 @@ export function PartnerForm({ open, existing, onClose }: { open: boolean; existi
             </RadioGroup>
           </fieldset>
 
+          <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">{t('partner.tokenNote')}</p>
+
           <Button type="submit" size="lg" className="h-12 text-base" disabled={busy || !place}>
             {busy ? <LoaderCircle className="animate-spin" /> : null}
-            {t('partner.submit')}
+            {edit ? t('partner.saveChanges') : t('partner.submit')}
           </Button>
         </form>
       )}

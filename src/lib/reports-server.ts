@@ -91,10 +91,15 @@ export type ReportAccess = 'ok' | 'not_found' | 'forbidden';
 export function checkEditToken(id: string, token: string | null | undefined): ReportAccess {
   const row = db().prepare('SELECT edit_hash FROM reports WHERE id=?').get(id) as { edit_hash: string | null } | undefined;
   if (!row) return 'not_found';
-  if (!row.edit_hash || !token || token.length > 200) return 'forbidden';
-  const expected = Buffer.from(row.edit_hash, 'hex');
+  return tokenMatches(row.edit_hash, token) ? 'ok' : 'forbidden';
+}
+
+/** Constant-time comparison of a presented token with a stored SHA-256 hash (also used for partner declarations). */
+export function tokenMatches(storedHash: string | null | undefined, token: string | null | undefined) {
+  if (!storedHash || !token || token.length > 200) return false;
+  const expected = Buffer.from(storedHash, 'hex');
   const given = Buffer.from(hashToken(token), 'hex');
-  return expected.length === given.length && timingSafeEqual(expected, given) ? 'ok' : 'forbidden';
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
 /** The author may delete only while the city has not started handling the report. */

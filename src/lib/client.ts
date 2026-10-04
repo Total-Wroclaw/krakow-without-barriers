@@ -3,14 +3,19 @@
  * `error` text when there is one, and an empty string otherwise (offline, timeout, HTML proxy
  * error pages), so callers can show their own translated fallback.
  */
-export async function postJson(url: string, body: unknown, timeout = 35000, headers: Record<string, string> = {}, signal?: AbortSignal) {
+export function postJson(url: string, body: unknown, timeout = 35000, headers: Record<string, string> = {}, signal?: AbortSignal) {
+  return requestJson('POST', url, body, timeout, headers, signal);
+}
+
+/** Same as postJson for any method (PATCH, DELETE, GET); `body` may be undefined. */
+export async function requestJson(method: string, url: string, body?: unknown, timeout = 35000, headers: Record<string, string> = {}, signal?: AbortSignal) {
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (signal?.aborted) abort();
   else signal?.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: controller.signal });
+    const res = await fetch(url, { method, headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: controller.signal });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data) throw new RequestError(typeof data?.error === 'string' ? data.error : '', res.status);
     return data;

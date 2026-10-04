@@ -27,3 +27,18 @@ Pomiar: 12 miejsc w Krakowie (centrum, dworzec, galerie, szpital, arena, Nowa Hu
 | **pełna rozdzielczość + drugie spojrzenie na zbliżeniu 50 m** | **1–3 m** | **3–4 z ~40** | ok. 20% obserwacji odrzuconych jako niepotwierdzone |
 
 Wybrany ostatni wariant: każda obserwacja jest sprawdzana na ostrzejszym wycinku 50 × 50 m wokół wskazanego miejsca; model wskazuje ją dokładnie albo odrzuca (dach, drzewo, trawnik). Bez tego sprawdzenia obserwacje nie są pokazywane. Część „błędów” to braki w OSM (np. nieoznaczony parking na podwórku), a parking na dachu Galerii Kazimierz jest prawdziwy. Pełny odczyt trwa ok. 15–20 s i jest zapisywany w pamięci podręcznej.
+
+### Szybszy odczyt (4 października 2026, ANALYSIS_VERSION 10)
+
+Odczyt jest teraz podzielony: wskazówki dojścia (bez rozumowania modelu, `effort: none`) i wstępne obserwacje (`effort: low`, pełna rozdzielczość) idą równolegle, a każda obserwacja jest sprawdzana na własnym zbliżeniu 50 × 50 m, wszystkie naraz (`effort: none`). Odpowiedź `POST /api/aerial` to NDJSON: najpierw wskazówki, potem pełny odczyt z obserwacjami; odczyt z pamięci podręcznej to jedna linia.
+
+Czas (5 miejsc: Teatr Słowackiego, Camelot Cafe, Bar Kawowy Rio, Galeria Kazimierz, Muzeum Narodowe; bez pamięci podręcznej, po jednym naraz):
+
+| | wskazówki | obserwacje |
+| --- | --- | --- |
+| przedtem (jedno wywołanie + zbiorcze zbliżenia, `effort: medium`) | ok. 16 s (razem z obserwacjami; pierwsze 4–8 s, zbliżenia 6–10 s) | ok. 16 s |
+| teraz, `POST /api/aerial` | 2,7–3,5 s (średnio 3,0 s) | 5,7–7,4 s (średnio 6,5 s) |
+| teraz, w przeglądarce od kliknięcia miejsca | 3,4–4,5 s | 6,2–8,7 s |
+| z pamięci podręcznej, w przeglądarce | ok. 0,4 s | ok. 0,4 s |
+
+Dokładność (te same 12 miejsc co wyżej, 4 przebiegi z ustawieniami produkcyjnymi): mediana błędu 1,7–2,3 m, > 20 m od obiektu 4–9 z ~45 (łącznie 25/180 = 14%; przedtem 24/209 = 11,5%), na dachu 0–3 (przedtem 3–8), przejścia/schody/parkingi/tory w 8 m: 77% (przedtem 69%). Wstępne obserwacje bez rozumowania (`effort: none`) wypadły wyraźnie gorzej (mediana dla przejść i schodów ~20 m przed sprawdzeniem), więc zostają na `low`.

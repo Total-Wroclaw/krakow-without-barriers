@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, CloudSun, ExternalLink, Info, MessageCircleQuestion, RotateCcw, Sparkles, TriangleAlert, X } from 'lucide-react';
+import { ChevronDown, CloudSun, ExternalLink, Info, LoaderCircle, MessageCircleQuestion, RotateCcw, Sparkles, TriangleAlert, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -11,12 +11,15 @@ import { autoWidth, nearestStairs, overlaySummary, type AerialAnalysis, type Aer
 import { formatDate } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
 import type { MessageKey } from '@/lib/i18n/messages';
+import type { TransportMode } from '@/lib/journey-types';
 import { defaultPreferences, preferencesSchema, type Preferences } from '@/lib/schemas';
 import { cn } from '@/lib/utils';
 import { AerialMap, type AerialPhase } from './AerialMap';
 import { ObservationBadge, PinBadge, ShowMore, StairsBadge, useDescribe } from './AerialParts';
 
-type Analysis = { status: 'loading' | 'done' | 'failed'; data: AerialAnalysis | null };
+/** `pending`: the advice is here, the observations are still being checked on close-ups. */
+type Analysis = { status: 'loading' | 'done' | 'failed'; data: AerialAnalysis | null; pending: boolean };
+type Line = { analysis?: AerialAnalysis; final?: boolean; error?: string };
 
 /** Today's needs as saved by the planner (same key and parsing); null when the person hasn't set them. */
 function savedPreferences(): Preferences | null {
@@ -30,18 +33,48 @@ function savedPreferences(): Preferences | null {
   }
 }
 
+/** How the person travels as picked in the planner (same key); public transport unless they chose otherwise. */
+function savedArrival(): TransportMode {
+  try {
+    const mode = sessionStorage.getItem('krok-transport');
+    return mode === 'walk' || mode === 'taxi' || mode === 'car' ? mode : 'transit';
+  } catch {
+    return 'transit';
+  }
+}
+
+/** Reads an NDJSON response line by line as it streams in. */
+async function readLines(res: Response, onLine: (line: Line) => void) {
+  if (!res.body) return;
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let end: number;
+    while ((end = buffer.indexOf('\n')) >= 0) {
+      const text = buffer.slice(0, end).trim();
+      buffer = buffer.slice(end + 1);
+      if (text) onLine(JSON.parse(text) as Line);
+    }
+  }
+  if (buffer.trim()) onLine(JSON.parse(buffer) as Line);
+}
+
 /**
  * The area around a place from above, opened automatically with the card. A pannable orthophoto map with
- * sourced pins (OSM entrances, stairs, surfaces; ZTP stops; parking; toilets) appears first; the recommendation
- * (which entrance and why, where to arrive from, steps, what to avoid and ask, for today's needs and weather)
- * arrives later, with one line saying it is automatic and unverified.
+ * sourced pins (the place's own OSM entrances, stairs, surfaces; ZTP stops; parking; toilets) appears first; the
+ * recommendation (which entrance and why, where to arrive from — a stop, or a car park when the person drives —,
+ * steps, what to avoid and ask, for today's needs and weather) streams in a few seconds later and the observations
+ * on the photo after their close-up check, with one line saying it is automatic and unverified.
  */
 export function AerialSection({ lat, lon, name, objectId }: { lat: number; lon: number; name: string; objectId?: string }) {
   const { t, locale } = useI18n();
   const place = useMemo(() => roundPoint({ lat, lon }), [lat, lon]);
   const [overlay, setOverlay] = useState<AerialOverlay | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
-  const [analysis, setAnalysis] = useState<Analysis>({ status: 'loading', data: null });
+  const [analysis, setAnalysis] = useState<Analysis>({ status: 'loading', data: null, pending: false });
   const [attempt, setAttempt] = useState(0);
   const [enlarged, setEnlarged] = useState(false);
 
@@ -64,21 +97,35 @@ export function AerialSection({ lat, lon, name, objectId }: { lat: number; lon: 
     return () => controller.abort();
   }, []);
 
+  // Started with the card (in parallel with the overlay and the photo). The advice streams in first; the
+  // observations follow once each is confirmed on a close-up. A cached reading arrives whole at once.
   useEffect(() => {
     const controller = new AbortController();
-    // First reading plus the close-up check of what it saw: allow up to two model calls.
-    const timer = setTimeout(() => controller.abort(), 100_000);
-    setAnalysis({ status: 'loading', data: null });
-    const body = { ...place, name, locale, objectId: objectId ?? null, preferences: savedPreferences() };
+    // Unmounted or a new place: drop everything. A timeout only ends the wait.
+    let cancelled = false;
+    const timer = setTimeout(() => controller.abort(), 60_000);
+    let got = false;
+    setAnalysis({ status: 'loading', data: null, pending: false });
+    const body = { ...place, name, locale, objectId: objectId ?? null, preferences: savedPreferences(), arrival: savedArrival() };
     fetch('/api/aerial', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal })
       .then(async res => {
-        const data = await res.json();
-        if (!res.ok || !data.analysis) throw new Error(data.error);
-        setAnalysis({ status: 'done', data: data.analysis });
+        if (!res.ok) throw new Error();
+        await readLines(res, line => {
+          if (!line.analysis || cancelled) return;
+          got = true;
+          setAnalysis({ status: 'done', data: line.analysis, pending: !line.final });
+        });
+        if (!got) throw new Error();
       })
-      .catch(() => !controller.signal.aborted && setAnalysis({ status: 'failed', data: null }))
-      .finally(() => clearTimeout(timer));
+      .catch(() => {})
+      .finally(() => {
+        clearTimeout(timer);
+        if (cancelled) return;
+        // Without any reading it failed; after the advice alone (stream ended or broke) stop waiting for observations.
+        setAnalysis(a => (got ? (a.pending ? { ...a, pending: false } : a) : { status: 'failed', data: null, pending: false }));
+      });
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       controller.abort();
     };
@@ -87,7 +134,7 @@ export function AerialSection({ lat, lon, name, objectId }: { lat: number; lon: 
   const widthM = overlay ? autoWidth(overlay) : null;
   const bbox = useMemo(() => aerialBbox(place, widthM ?? DEFAULT_WIDTH), [place, widthM]);
   const placeholder = widthM ? `/api/aerial/image?lat=${place.lat}&lon=${place.lon}&w=${widthM}` : null;
-  const phase: AerialPhase = analysis.status !== 'loading' ? 'done' : overlay ? 'ai' : 'points';
+  const phase: AerialPhase = analysis.status === 'loading' ? (overlay ? 'ai' : 'points') : analysis.pending ? 'refine' : 'done';
   const map = (large: boolean) => (
     <AerialMap
       key={`${place.lat},${place.lon}`}
@@ -211,13 +258,12 @@ function KeyFacts({ overlay, bbox }: { overlay: AerialOverlay; bbox: Bbox }) {
   const { t, tp } = useI18n();
   const { where } = useDescribe();
   const s = overlaySummary(overlay, bbox);
-  const hasEntrances = s.stepFree.length + s.notAccessible.length + s.unknownEntrances.length > 0;
-  // Entrances and how to arrive first: the preview answers "can I get in, and from where".
+  // Entrances (only the place's own, when mapped) and how to arrive first: the preview answers "can I get in, and
+  // from where". Nothing is said about entrances when none is mapped on the place's building.
   const rows = [
     s.stepFree.length ? <FactRow key="free" pins={s.stepFree}>{t('aerial.fact.stepFree')}</FactRow> : null,
     s.notAccessible.length ? <FactRow key="no" pins={s.notAccessible}>{t('aerial.fact.notAccessible')}</FactRow> : null,
     s.unknownEntrances.length ? <FactRow key="unknown" pins={s.unknownEntrances}>{t('aerial.fact.entrancesUnknown')}</FactRow> : null,
-    !hasEntrances ? <FactRow key="none">{t('aerial.fact.noEntrances')}</FactRow> : null,
     s.stop ? <FactRow key="stop" pins={[s.stop]}>{t('aerial.fact.stop', { name: s.stop.name ?? '' })}, {where(s.stop)}</FactRow> : null,
     s.parking ? <FactRow key="parking" pins={[s.parking]}>{t('aerial.fact.parking')}, {where(s.parking)}</FactRow> : null,
     overlay.osmObtainedAt ? (
@@ -342,7 +388,7 @@ function WayIn({ analysis, pins, bbox, onRetry }: { analysis: Analysis; pins: Ae
             <>
               {entrance || from ? (
                 <div className="flex flex-col gap-3">
-                  {entrance ? <ChosenPin label={t(entrance.ofPlace ? 'aerial.rec.entrance' : 'aerial.rec.entranceNearby')} pin={entrance} pins={pins} note={rec.why} /> : null}
+                  {entrance ? <ChosenPin label={t('aerial.rec.entrance')} pin={entrance} pins={pins} note={rec.why} /> : null}
                   {from ? <ChosenPin label={t('aerial.rec.from')} pin={from} pins={pins} /> : null}
                 </div>
               ) : null}
@@ -363,7 +409,14 @@ function WayIn({ analysis, pins, bbox, onRetry }: { analysis: Analysis; pins: Ae
             <p className="text-sm">{t('aerial.rec.none')}</p>
           )}
           <NoteList icon={<CloudSun className="size-4" aria-hidden />} title={t('aerial.today')} items={data.today} pins={pins} />
-          {data.observations.length ? <Observations analysis={data} bbox={bbox} /> : null}
+          {analysis.pending ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircle className="size-4 shrink-0 motion-safe:animate-spin" aria-hidden />
+              {t('aerial.checking')}
+            </p>
+          ) : data.observations.length ? (
+            <Observations analysis={data} bbox={bbox} />
+          ) : null}
           <p className="border-t pt-2 text-xs text-muted-foreground">
             {t('aerial.basedOn', { list: basedOn })}. {t('aerial.disclosure')}
           </p>

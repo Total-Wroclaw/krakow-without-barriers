@@ -13,14 +13,15 @@ import { handrail } from './data';
 import { widthCm } from './objects';
 import { runtimeDir } from './server';
 import type { Point, Stop } from './city-types';
+import type { TransportMode } from './journey-types';
 import type { PlaceObject } from './explore-types';
 import type { WalkGraph } from './routing';
 import type { Preferences, Report } from './schemas';
 
 /** Limits keep the photo readable: the nearest few of each kind. */
 const LIMITS = { entrance: 6, stop: 6, parking: 4, toilet: 2, bench: 40, kerb: 40, step: 20, line: 70 } as const;
-/** Entrances further than this from the place's point most likely belong to other buildings. */
-const ENTRANCE_RADIUS = 100;
+/** The place's own entrances are looked up this far from its point (large buildings have far doors). */
+const ENTRANCE_RADIUS = 150;
 /** When no stop is in the frame, the nearest ones within this radius are still listed (outside the photo). */
 const FAR_STOP_RADIUS = 500;
 /** Same stop name closer than this is one physical platform. */
@@ -29,7 +30,7 @@ const SAME_PLATFORM = 15;
 export const REPORT_RADIUS = 150;
 
 export type OverlayInputs = {
-  /** Entrance ids of the place's own building, when known: then only those are shown. */
+  /** Entrance ids of the place's own building. Only these become pins: a nearby door may be a neighbour's. */
   ownEntrances?: string[] | null;
   entrances: { id: string; lat: number; lon: number; tags: Record<string, string>; editedAt: string | null }[];
   stops: (Stop & { lines?: string[] })[];
@@ -47,23 +48,24 @@ const byLineNumber = (a: string, b: string) => a.localeCompare(b, 'pl', { numeri
 
 /**
  * Numbered pins in a fixed order (entrances, stops, parking, toilets), nearest first within each kind,
- * so ① is always the nearest mapped entrance and numbers don't change while the user moves the map.
+ * so ① is always the nearest of the place's own entrances and numbers don't change while the user moves the map.
  */
 export function buildOverlay(place: Point, input: OverlayInputs): Omit<AerialOverlay, 'osmObtainedAt' | 'transitObtainedAt'> {
   const pins: AerialPin[] = [];
   const add = (pin: Omit<AerialPin, 'n' | 'distance' | 'compass'>) =>
     pins.push({ ...pin, n: pins.length + 1, distance: Math.round(distance(place, pin)), compass: compass(place, pin) });
 
-  // When the place's building is known, only its entrances are pins: a neighbour's door would only mislead.
-  const own = input.ownEntrances?.length ? new Set(input.ownEntrances.map(id => id.replace(/^node[:/]/, ''))) : null;
-  const entrances = own ? input.entrances.filter(e => own.has(e.id.replace(/^node[:/]/, ''))) : input.entrances;
+  // Only entrances mapped on the place's own building are pins. A café or shop often has just an unmapped street
+  // door; showing the nearest mapped door instead (a neighbour's, a stairwell) would only mislead.
+  const own = new Set((input.ownEntrances ?? []).map(id => id.replace(/^node[:/]/, '')));
+  const entrances = input.entrances.filter(e => own.has(e.id.replace(/^node[:/]/, '')));
   for (const { item: e } of nearestFirst(place, entrances, ENTRANCE_RADIUS, LIMITS.entrance)) {
     const steps = /^\d+$/.test(e.tags.step_count ?? '') ? Number(e.tags.step_count) : undefined;
     const ramp = e.tags['ramp:wheelchair'] === 'yes' || e.tags.ramp === 'yes' ? true : e.tags.ramp === 'no' ? false : undefined;
     const door = widthCm(e.tags['door:width'] ?? e.tags.width);
     add({
       kind: 'entrance', lat: e.lat, lon: e.lon, name: e.tags.name ?? e.tags.ref ?? null, sourceUrl: osmUrl(`node:${e.id.replace(/^node[:/]/, '')}`), editedAt: e.editedAt,
-      wheelchair: yesNo(e.tags.wheelchair), main: e.tags.entrance === 'main', ofPlace: !!own,
+      wheelchair: yesNo(e.tags.wheelchair), main: e.tags.entrance === 'main', ofPlace: true,
       ...(steps !== undefined ? { steps } : {}), ...(ramp !== undefined ? { ramp } : {}), ...(door ? { doorWidth: door } : {}),
       ...(e.tags.automatic_door && e.tags.automatic_door !== 'no' ? { automaticDoor: true } : {}),
     });
@@ -186,12 +188,25 @@ function stopLines() {
 }
 
 const overlays = new Map<string, AerialOverlay>();
+const overlayJobs = new Map<string, Promise<AerialOverlay>>();
 
-/** Overlay for a (rounded) point. Each source is optional: a missing dataset only removes its pins. */
-export async function overlayAt(place: Point): Promise<AerialOverlay> {
+/**
+ * Overlay for a (rounded) point. Each source is optional: a missing dataset only removes its pins. The card asks
+ * for it twice at once (to draw the pins and, inside the reading, to frame the photo): both share one build.
+ */
+export function overlayAt(place: Point): Promise<AerialOverlay> {
   const key = `${place.lat},${place.lon}`;
   const hit = overlays.get(key);
-  if (hit) return hit;
+  if (hit) return Promise.resolve(hit);
+  let job = overlayJobs.get(key);
+  if (!job) {
+    job = buildOverlayAt(place, key).finally(() => overlayJobs.delete(key));
+    overlayJobs.set(key, job);
+  }
+  return job;
+}
+
+async function buildOverlayAt(place: Point, key: string): Promise<AerialOverlay> {
   const [{ cityGraph }, { transitStops }, { parkingsNear }, { accessibleToilets, ownEntrancesAt }] = await Promise.all([import('./city-graph'), import('./transit'), import('./parking'), import('./objects')]);
   const safe = <T,>(f: () => T[]): T[] => {
     try {
@@ -235,10 +250,10 @@ export async function overlayAt(place: Point): Promise<AerialOverlay> {
 
 // ---------- Context for the model ----------
 
-/** Where a point is in the analysed photo, or the compass direction when outside it. */
+/** Where a point is in the analysed photo, or the compass direction and distance when outside it. */
 function at(p: Point, bbox: Bbox, place: Point) {
   const pos = project(p, bbox);
-  return inFrame(pos, 0) ? `x=${pos.x.toFixed(2)}, y=${pos.y.toFixed(2)}` : `poza kadrem, ${compass(place, p).toUpperCase()}`;
+  return inFrame(pos, 0) ? `x=${pos.x.toFixed(2)}, y=${pos.y.toFixed(2)}` : `poza kadrem, ${compass(place, p).toUpperCase()}, ok. ${Math.round(distance(place, p) / 10) * 10} m`;
 }
 
 /** Pins with their sourced facts and image positions, for the model (Polish; the model answers in the user's language). */
@@ -246,7 +261,7 @@ export function pinsForPrompt(overlay: AerialOverlay, bbox: Bbox) {
   return overlay.pins.map(pin => {
     const facts: string[] = [];
     if (pin.kind === 'entrance') {
-      facts.push(`wejście${pin.main ? ' główne' : ''} ${pin.ofPlace ? 'do budynku tego miejsca' : 'w okolicy (nie wiadomo, czy do tego miejsca; może należeć do sąsiedniego budynku)'}`, `wheelchair=${pin.wheelchair}`);
+      facts.push(`wejście${pin.main ? ' główne' : ''} do budynku tego miejsca`, `wheelchair=${pin.wheelchair}`);
       if (pin.steps !== undefined) facts.push(`step_count=${pin.steps}`);
       if (pin.ramp !== undefined) facts.push(`ramp=${pin.ramp ? 'yes' : 'no'}`);
       if (pin.doorWidth) facts.push(`door:width=${pin.doorWidth}cm`);
@@ -255,7 +270,7 @@ export function pinsForPrompt(overlay: AerialOverlay, bbox: Bbox) {
       facts.push(`przystanek ${JSON.stringify(pin.name)} (${pin.modes?.map(m => (m === 'tram' ? 'tramwaj' : 'autobus')).join(', ')})`);
       if (pin.wheelchair && pin.wheelchair !== 'unknown') facts.push(`wheelchair_boarding=${pin.wheelchair}`);
     } else if (pin.kind === 'parking') {
-      facts.push(`parking z miejscami dla osób z niepełnosprawnością${pin.disabledSpaces ? ` (${pin.disabledSpaces})` : ''}`);
+      facts.push(`parking z miejscami dla osób z niepełnosprawnością${pin.disabledSpaces ? ` (${pin.disabledSpaces})` : ''}`, `fee=${pin.fee ?? 'unknown'}`);
     } else {
       facts.push('dostępna toaleta');
     }
@@ -393,24 +408,28 @@ export function cleanSentence(text: string, pinKinds: AerialPin['kind'][]) {
 export type RawAnalysis = {
   recommendation: { entrance: number | null; approachFrom: number | null; why: string; steps: string[]; avoid: string[]; ask: string[] };
   today: string[];
-  observations: { x: number; y: number; kind: string; label: string }[];
 };
+export type RawObservation = { x: number; y: number; kind: string; label: string };
 
 /** Needs for which an entrance tagged "not accessible" must never be recommended. */
 export const needsStepFree = (p: Preferences | null) => !!p && (p.mobility === 'wheelchair' || p.mobility === 'stroller');
 
+/** Pins the person may arrive from, by how they travel: a stop by default, a car park only when they drive. */
+export const arrivalKinds = (arrival: TransportMode): AerialPin['kind'][] => (arrival === 'transit' ? ['stop'] : arrival === 'car' ? ['parking'] : []);
+
 /**
- * Keep only what the model can honestly say: a recommended entrance that is a mapped entrance (and not one tagged
- * inaccessible when the person needs step-free access), arrival from a mapped stop or parking, sentences without
- * measurements, guarantees or invented pins, and observations inside the frame, with a known kind, not stacked.
+ * Keep only what the model can honestly say: a recommended entrance that is one of the place's mapped entrances (and
+ * not one tagged inaccessible when the person needs step-free access), arrival from a mapped stop (public transport,
+ * the default) or car park (only when they drive), sentences without measurements, guarantees, invented pins or
+ * pins of another way of arriving ("park at [5]" for someone coming by tram).
  */
 export function sanitiseAnalysis(
   raw: RawAnalysis,
-  bbox: Bbox,
   pins: Pick<AerialPin, 'kind' | 'wheelchair'>[],
-  options: { stepFree?: boolean } = {},
-): Pick<AerialAnalysis, 'recommendation' | 'today' | 'observations'> {
+  options: { stepFree?: boolean; arrival?: TransportMode } = {},
+): Pick<AerialAnalysis, 'recommendation' | 'today'> {
   const kinds = pins.map(p => p.kind);
+  const arrival = arrivalKinds(options.arrival ?? 'transit');
   const rejected = new Set<number>();
   const pinOf = (n: number | null, allowed: AerialPin['kind'][]) => {
     if (n === null || !Number.isInteger(n)) return null;
@@ -418,21 +437,30 @@ export function sanitiseAnalysis(
     if (!pin || !allowed.includes(pin.kind)) return null;
     return pin;
   };
-  // Entrances the person should not be sent to: tagged inaccessible while they need a step-free way in.
-  if (options.stepFree) pins.forEach((p, i) => p.kind === 'entrance' && p.wheelchair === 'no' && rejected.add(i + 1));
+  pins.forEach((p, i) => {
+    // Entrances the person should not be sent to: tagged inaccessible while they need a step-free way in.
+    if (options.stepFree && p.kind === 'entrance' && p.wheelchair === 'no') rejected.add(i + 1);
+    // Stops and car parks that are not how this person arrives.
+    if ((p.kind === 'stop' || p.kind === 'parking') && !arrival.includes(p.kind)) rejected.add(i + 1);
+  });
   const usable = (s: string) => ![...s.matchAll(reference)].some(m => rejected.has(Number(m[1])));
   const sentences = (list: string[], max: number, min = 8) =>
     [...new Set(list.map(s => cleanSentence(s, kinds)).filter(s => s.length >= min && usable(s)))].slice(0, max);
 
   const r = raw.recommendation;
   const entrance = pinOf(r.entrance, ['entrance']) && !rejected.has(r.entrance!) ? r.entrance : null;
-  const approachFrom = pinOf(r.approachFrom, ['stop', 'parking']) ? r.approachFrom : null;
+  const approachFrom = pinOf(r.approachFrom, arrival) ? r.approachFrom : null;
   const steps = sentences(r.steps, 4);
   const why = entrance !== null ? (sentences([r.why], 1)[0] ?? '') : '';
   const recommendation = entrance === null && !steps.length ? null : { entrance, approachFrom, why, steps, avoid: sentences(r.avoid, 3, 4), ask: sentences(r.ask, 3, 4) };
+  return { recommendation, today: sentences(raw.today, 2) };
+}
 
+/** Observations inside the frame, with a known kind and a clean label, not stacked on each other; at most six. */
+export function sanitiseObservations(raw: RawObservation[], bbox: Bbox, pins: Pick<AerialPin, 'kind'>[]): AerialObservation[] {
+  const kinds = pins.map(p => p.kind);
   const kept: AerialObservation[] = [];
-  for (const o of raw.observations) {
+  for (const o of raw) {
     if (!Number.isFinite(o.x) || !Number.isFinite(o.y) || !inFrame(o)) continue;
     if (!(observationKinds as readonly string[]).includes(o.kind)) continue;
     const label = cleanSentence(o.label, kinds).replace(reference, '').trim().slice(0, 80);
@@ -442,7 +470,7 @@ export function sanitiseAnalysis(
     kept.push({ id: String.fromCharCode(65 + kept.length), kind: o.kind as ObservationKind, label, lat: Math.round(point.lat * 1e6) / 1e6, lon: Math.round(point.lon * 1e6) / 1e6 });
     if (kept.length === 6) break;
   }
-  return { recommendation, today: sentences(raw.today, 2), observations: kept };
+  return kept;
 }
 
 /**
@@ -463,12 +491,12 @@ export function applyRefinement(observations: AerialObservation[], found: (Point
 
 // ---------- Analysis cache ----------
 /** Bump when the prompt or the validation changes, so old readings are not served. */
-const ANALYSIS_VERSION = 9;
-export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; weather: string; reports: string };
+const ANALYSIS_VERSION = 10;
+export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; arrival: TransportMode; weather: string; reports: string };
 
 /** File name for a reading: everything that changes the text is part of the hash. */
 export function analysisHash(key: AnalysisKey) {
-  return createHash('sha256').update(JSON.stringify([ANALYSIS_VERSION, key.lat, key.lon, key.widthM, key.name, key.locale, key.objectId, key.preferences, key.weather, key.reports])).digest('hex').slice(0, 24);
+  return createHash('sha256').update(JSON.stringify([ANALYSIS_VERSION, key.lat, key.lon, key.widthM, key.name, key.locale, key.objectId, key.preferences, key.arrival, key.weather, key.reports])).digest('hex').slice(0, 24);
 }
 
 async function analysisFile(key: AnalysisKey) {

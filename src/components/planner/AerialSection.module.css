@@ -1,19 +1,17 @@
 /*
- * "Reading the photo" state over the aerial map. --scan (0..1, set from JS each frame) is the beam position,
- * so the beam, the grid it reveals and the pins it passes stay in sync. Reduced motion: static tint and grid.
+ * "Reading the photo" state over the aerial map, driven from JS each frame (see scanFrame in AerialMap):
+ * --scan (0..1) is the beam position, --scan-a the beam's opacity (fades in at the top and out at the bottom of
+ * each pass) and --scan-out the whole layer's opacity (fades everything out when the reading is done). The beam,
+ * the grid it reveals and the pins it passes stay in sync. Reduced motion: static tint and grid, plain fade out.
  */
-/* --scan is set on the map wrapper so pins (outside .scan) inherit it too. */
+/* The variables are set on the map wrapper so pins (outside .scan) inherit them too. */
 .scan {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
   background: radial-gradient(120% 90% at 50% 50%, rgb(20 33 61 / 0.04), rgb(20 33 61 / 0.28));
-  transition: opacity 700ms ease;
-}
-
-.leaving {
-  opacity: 0;
+  opacity: var(--scan-out, 1);
 }
 
 .grid {
@@ -23,6 +21,7 @@
     linear-gradient(to right, rgb(255 255 255 / 0.5) 1px, transparent 1px),
     linear-gradient(to bottom, rgb(255 255 255 / 0.5) 1px, transparent 1px);
   background-size: 10% 13.3333%;
+  opacity: var(--scan-a, 0);
   /* The grid shows only in a band trailing the beam and fades out behind it. */
   mask-image: linear-gradient(
     to bottom,
@@ -37,6 +36,7 @@
   inset-inline: 0;
   height: 34%;
   top: calc(var(--scan) * 100% - 34%);
+  opacity: var(--scan-a, 0);
   background: linear-gradient(to bottom, rgb(186 230 253 / 0), rgb(186 230 253 / 0.16) 70%, rgb(224 242 254 / 0.42));
 }
 
@@ -45,15 +45,16 @@
   inset-inline: 0;
   height: 2px;
   top: calc(var(--scan) * 100% - 1px);
+  opacity: var(--scan-a, 0);
   background: linear-gradient(to right, rgb(255 255 255 / 0.2), #ffffff 20%, #ffffff 80%, rgb(255 255 255 / 0.2));
   box-shadow:
     0 0 10px 2px rgb(224 242 254 / 0.95),
     0 0 28px 8px rgb(125 211 252 / 0.45);
 }
 
-/* A pin lights up while the beam passes it: intensity = 1 − |scan − y| × 12, clamped to 0..1. */
+/* A pin lights up while the beam passes it: (1 − |scan − y| × 12) clamped to 0..1, times the beam's opacity. */
 .lit {
-  --lit: clamp(0, calc(1 - max(var(--scan) - var(--y), var(--y) - var(--scan)) * 12), 1);
+  --lit: calc(clamp(0, calc(1 - max(var(--scan) - var(--y), var(--y) - var(--scan)) * 12), 1) * var(--scan-a, 0));
   filter: brightness(calc(1 + var(--lit) * 0.45));
   box-shadow: 0 0 0 calc(var(--lit) * 7px) rgb(255 255 255 / 0.55);
   border-radius: 9999px;
@@ -68,6 +69,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .scan {
+    transition: opacity 700ms ease;
+  }
+  .leaving {
+    opacity: 0;
+  }
   .trail,
   .beam {
     display: none;

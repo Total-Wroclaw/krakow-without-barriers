@@ -33,15 +33,24 @@ export function RouteDetails({ option, to, reports, mobileView, onMobileView, on
   const { t } = useI18n();
   return (
     <div className="flex flex-col gap-4 px-4 pb-10 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-200">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" className="-ml-2 h-11" onClick={onBack}>
           <ArrowLeft />
           {t('results.all')}
         </Button>
-        <ToggleGroup type="single" value={mobileView} onValueChange={v => v && onMobileView(v as 'map' | 'list')} className="rounded-lg border bg-card p-0.5 lg:hidden" aria-label={t('results.view')}>
-          <ToggleGroupItem value="list" className="h-10 gap-1.5 px-3"><List />{t('results.list')}</ToggleGroupItem>
-          <ToggleGroupItem value="map" className="h-10 gap-1.5 px-3"><MapIcon />{t('results.map')}</ToggleGroupItem>
-        </ToggleGroup>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {onShare ? (
+            <Button variant="outline" className="h-11 bg-card max-lg:w-11 max-lg:px-0" onClick={onShare}>
+              <Share2 />
+              {/* Below lg the list/map switch shares the row, so the label stays for screen readers only. */}
+              <span className="max-lg:sr-only">{t('share.button')}</span>
+            </Button>
+          ) : null}
+          <ToggleGroup type="single" value={mobileView} onValueChange={v => v && onMobileView(v as 'map' | 'list')} className="rounded-lg border bg-card p-0.5 lg:hidden" aria-label={t('results.view')}>
+            <ToggleGroupItem value="list" className="h-10 gap-1.5 px-3"><List />{t('results.list')}</ToggleGroupItem>
+            <ToggleGroupItem value="map" className="h-10 gap-1.5 px-3"><MapIcon />{t('results.map')}</ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
       <h1 ref={headingRef} tabIndex={-1} className="sr-only">{t('results.detailH1')}</h1>
       <OptionCard option={option} selected onOpen={() => onMobileView(mobileView === 'map' ? 'list' : 'map')} />
@@ -72,12 +81,6 @@ export function RouteDetails({ option, to, reports, mobileView, onMobileView, on
           </div>
           <p className="px-1 text-xs text-muted-foreground">{t('taxi.linksNote')}</p>
         </section>
-      ) : null}
-      {onShare ? (
-        <Button variant="outline" className="h-11 self-start" onClick={onShare}>
-          <Share2 />
-          {t('share.button')}
-        </Button>
       ) : null}
       <h2 className="px-1 text-lg font-bold">{t('results.steps')}</h2>
       <JourneyDetail option={option} reports={reports} onFact={onFact} onReport={onReport} />

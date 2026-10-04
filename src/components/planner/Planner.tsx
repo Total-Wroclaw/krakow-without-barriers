@@ -395,7 +395,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
                 <div className="mt-1 border-t">
                   <DistanceControl preferences={preferences} onChange={setPreferences} />
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1 border-t px-1.5 pt-1">
+                <div className="border-t py-1">
                   <TimeChooser value={when} onChange={setWhen} />
                 </div>
                 <div className="border-t pt-1">

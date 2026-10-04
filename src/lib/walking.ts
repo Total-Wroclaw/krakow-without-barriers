@@ -163,7 +163,8 @@ function buildSteps(g: WalkGraph, edges: number[], to: LegPoint, stairFactIds: M
     if (segment.kind === 'stairs') {
       const edge = edgeAt(g, segment.edges[0]);
       const rail = m.facts.handrail(handrail(edge.way.tags));
-      steps.push({ instruction: `${stairsTitle(edge.way.tags, edge.direction, m)} · ${rail}`, distance, factId: stairFactIds.get(segment.edges[0]) });
+      const maneuver = edge.direction === 'up' ? 'stairsUp' : edge.direction === 'down' ? 'stairsDown' : 'stairs';
+      steps.push({ instruction: `${stairsTitle(edge.way.tags, edge.direction, m)} · ${rail}`, maneuver, distance, factId: stairFactIds.get(segment.edges[0]) });
       return;
     }
     let turn: Turn = 'go';
@@ -173,10 +174,10 @@ function buildSteps(g: WalkGraph, edges: number[], to: LegPoint, stairFactIds: M
     }
     if (segment.kind === 'crossing') {
       const instruction = turn === 'go' || turn === 'straight' ? m.steps.cross : m.steps.turnAndCross(m.steps[turn]);
-      steps.push({ instruction, distance });
-    } else steps.push({ instruction: m.steps.along(m.steps[turn], segment.label), distance });
+      steps.push({ instruction, maneuver: turn === 'left' || turn === 'right' || turn === 'back' ? turn : 'cross', distance });
+    } else steps.push({ instruction: m.steps.along(m.steps[turn], segment.label), maneuver: turn, distance });
   });
-  steps.push({ instruction: m.steps.destination(to.name), distance: 0 });
+  steps.push({ instruction: m.steps.destination(to.name), maneuver: 'arrive', distance: 0 });
   return steps;
 }
 

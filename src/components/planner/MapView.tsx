@@ -310,7 +310,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       if (selected) {
         for (const fact of allFacts(selected)) {
           const icon = fact.kind === 'toilet' ? icons.toilet : fact.kind === 'bench' ? icons.bench : fact.kind === 'entrance' ? icons.entrance : fact.kind === 'kerb' ? icons.kerb : fact.kind === 'surface' ? icons.surface : icons[fact.direction];
-          const bg = fact.kind === 'toilet' ? '#2443b0' : fact.kind === 'bench' ? '#0f766e' : fact.kind === 'entrance' ? '#2443b0' : '#a1460a';
+          const bg = fact.kind === 'toilet' ? '#7a3e9d' : fact.kind === 'bench' ? '#0f766e' : fact.kind === 'entrance' ? '#2443b0' : '#a1460a';
           const el = markerElement(factTitle(fact, t, tp), icon, bg, fact.kind === 'stairs' ? 34 : 30);
           // Stairs always show; benches and entrances only once zoomed in, to avoid clutter.
           if (fact.kind !== 'stairs' && fact.kind !== 'kerb' && fact.kind !== 'toilet' && !fact.restAfterMinutes) el.classList.add('map-minor');

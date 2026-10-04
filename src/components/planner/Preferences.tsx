@@ -237,9 +237,12 @@ export function PreferencesPanel({ open, onOpenChange, preferences, onChange }: 
         ) : null}
 
         <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="pref-toilets" className="flex items-center gap-3 text-base font-normal">
-            <Toilet className="size-5 text-primary" aria-hidden />
-            {t('prefs.toilets')}
+          <Label htmlFor="pref-toilets" className="flex items-start gap-3 text-base font-normal">
+            <Toilet className="mt-0.5 size-5 shrink-0 text-object" aria-hidden />
+            <span className="flex flex-col">
+              {t('prefs.toilets')}
+              <span className="text-sm text-muted-foreground">{t('prefs.toiletsHint')}</span>
+            </span>
           </Label>
           <Switch id="pref-toilets" checked={preferences.showToilets} onCheckedChange={v => onChange({ ...preferences, showToilets: v })} />
         </div>

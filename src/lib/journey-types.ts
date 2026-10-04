@@ -4,8 +4,12 @@ import type { CityFact, CityPlace, Stop } from './city-types';
 
 export type LegPoint = { name: string; lat: number; lon: number };
 
+/** What to do at a step, for its icon; the instruction carries the words. */
+export type Maneuver = 'go' | 'straight' | 'right' | 'left' | 'back' | 'cross' | 'stairsUp' | 'stairsDown' | 'stairs' | 'arrive';
+
 export type WalkStep = {
   instruction: string;
+  maneuver?: Maneuver;
   distance: number;
   /** Fact shown inline in the directions list at this step (e.g. stairs). */
   factId?: string;

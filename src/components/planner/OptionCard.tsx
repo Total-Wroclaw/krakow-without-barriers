@@ -219,10 +219,15 @@ export function OptionCard({ option, selected, onOpen, onPick }: { option: Journ
     </button>
       {onPick ? (
         <div className="flex items-center justify-between gap-3 border-t px-4 py-2">
-          <span id={`${option.id}-hint`} className="flex items-center gap-1 text-sm text-muted-foreground">
+          <button
+            type="button"
+            id={`${option.id}-hint`}
+            onClick={onOpen}
+            className="-ml-2 inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          >
             {t('option.details')}
-            <ChevronRight className="size-4" aria-hidden />
-          </span>
+            <ChevronRight className="size-4 shrink-0" aria-hidden />
+          </button>
           <button
             type="button"
             onClick={onPick}

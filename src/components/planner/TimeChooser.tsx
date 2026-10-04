@@ -28,8 +28,8 @@ export function TimeChooser({ value, onChange }: { value: When; onChange: (w: Wh
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" className="h-10 gap-2 px-2 font-medium" aria-label={t('time.change', { label })}>
-          <Clock className="text-primary" />
+        <Button variant="ghost" className="h-11 w-full justify-start gap-3 rounded-xl px-3 text-left font-medium whitespace-normal" aria-label={t('time.change', { label })}>
+          <Clock className="size-5 text-primary" />
           {label}
         </Button>
       </PopoverTrigger>

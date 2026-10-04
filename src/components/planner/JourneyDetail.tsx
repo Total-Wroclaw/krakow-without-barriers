@@ -1,9 +1,9 @@
 'use client';
 import { useState } from 'react';
-import { Accessibility, Armchair, ArrowDown, ArrowUp, Grid3x3, OctagonAlert, Toilet, CarFront, CarTaxiFront, ChevronDown, CircleDot, DoorOpen, ExternalLink, Footprints, MapPin, MessageSquareWarning, SquareParking } from 'lucide-react';
+import { Accessibility, Armchair, ArrowDown, ArrowRightLeft, ArrowUp, Grid3x3, OctagonAlert, Toilet, CarFront, CarTaxiFront, ChevronDown, CircleDot, CornerUpLeft, CornerUpRight, DoorOpen, ExternalLink, Footprints, MapPin, MessageSquareWarning, SquareParking, TrendingDown, TrendingUp, Undo2, type LucideIcon } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { CityFact } from '@/lib/city-types';
-import type { JourneyOption, Leg, WalkLeg } from '@/lib/journey-types';
+import type { JourneyOption, Leg, Maneuver, WalkLeg } from '@/lib/journey-types';
 import type { Report } from '@/lib/schemas';
 import { clock, distance, duration } from '@/lib/format';
 import { useI18n } from '@/lib/i18n/client';
@@ -22,6 +22,27 @@ type Props = {
 const lineClass = (leg: Leg) =>
   leg.type === 'walk' ? 'border-dotted border-ink/50' : leg.type === 'drive' ? 'border-drive' : leg.mode === 'tram' ? 'border-tram' : 'border-bus';
 
+/** Time | rail | content. The rail column is the same for every mode, so dots and lines always line up. */
+const row = 'grid grid-cols-[3.25rem_1.25rem_minmax(0,1fr)] gap-x-2';
+/** A stop on the rail; its centre is where the line segments start and end. */
+const NODE_TOP = 'top-1';
+const NODE_CENTRE = 'top-[0.6875rem]';
+
+function Rail({ leg, end }: { leg?: Leg; end?: boolean }) {
+  return (
+    <div aria-hidden className="relative">
+      {leg ? <span className={cn('absolute -bottom-[0.6875rem] left-1/2 w-0 -translate-x-1/2 border-l-4', NODE_CENTRE, lineClass(leg))} /> : null}
+      <span
+        className={cn(
+          'absolute left-1/2 z-10 size-3.5 -translate-x-1/2 rounded-full border-[3px]',
+          NODE_TOP,
+          end ? 'border-primary bg-primary ring-4 ring-primary/20' : 'border-ink bg-card',
+        )}
+      />
+    </div>
+  );
+}
+
 export function JourneyDetail({ option, reports, onFact, onReport }: Props) {
   const { t } = useI18n();
   const reportTitle = useReportTitle();
@@ -33,10 +54,10 @@ export function JourneyDetail({ option, reports, onFact, onReport }: Props) {
           const start = leg.type === 'ride' ? leg.departure : (leg.departure ?? clockCursor);
           clockCursor = leg.type === 'ride' ? leg.arrival : start !== null ? start + leg.seconds : null;
           return (
-            <li key={i} className="relative grid grid-cols-[3.25rem_1fr] gap-x-3">
+            <li key={i} className={row}>
               <span className="pt-0.5 text-right text-sm font-semibold tabular-nums">{start !== null ? clock(start) : ''}</span>
-              <div className={cn('relative border-l-4 pb-6 pl-4', lineClass(leg))}>
-                <span aria-hidden className="absolute -left-[9px] top-1 size-3.5 rounded-full border-[3px] border-ink bg-card" />
+              <Rail leg={leg} />
+              <div className="min-w-0 pb-6">
                 {leg.type === 'walk' ? (
                   <WalkPart leg={leg} next={option.legs[i + 1]} onFact={onFact} last={i === option.legs.length - 1} />
                 ) : leg.type === 'drive' ? (
@@ -48,12 +69,10 @@ export function JourneyDetail({ option, reports, onFact, onReport }: Props) {
             </li>
           );
         })}
-        <li className="grid grid-cols-[3.25rem_1fr] gap-x-3">
-          <span className="text-right text-sm font-semibold tabular-nums">{option.arrival !== null ? clock(option.arrival) : ''}</span>
-          <p className="flex items-center gap-2 font-semibold">
-            <MapPin className="size-5 text-primary" aria-hidden />
-            {t('leg.arrived')}
-          </p>
+        <li className={row}>
+          <span className="pt-0.5 text-right text-sm font-semibold tabular-nums">{option.arrival !== null ? clock(option.arrival) : ''}</span>
+          <Rail end />
+          <p className="font-semibold">{t('leg.arrived')}</p>
         </li>
       </ol>
 
@@ -96,7 +115,7 @@ function FactChip({ fact, onFact, count = 1 }: { fact: CityFact; onFact: (f: Cit
       onClick={() => onFact(fact)}
       className={cn(
         'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm font-medium',
-        fact.kind === 'stairs' || fact.kind === 'kerb' || fact.kind === 'surface' ? 'bg-barrier-soft text-barrier' : fact.kind === 'bench' ? (fact.restAfterMinutes ? 'bg-rest text-white' : 'bg-rest-soft text-rest') : 'bg-accent text-accent-foreground',
+        fact.kind === 'stairs' || fact.kind === 'kerb' || fact.kind === 'surface' ? 'bg-barrier-soft text-barrier' : fact.kind === 'bench' ? (fact.restAfterMinutes ? 'bg-rest text-white' : 'bg-rest-soft text-rest') : fact.kind === 'toilet' ? 'bg-object/10 text-object' : 'bg-accent text-accent-foreground',
       )}
     >
       <Icon className="size-4 shrink-0" aria-hidden />
@@ -142,8 +161,9 @@ function WalkPart({ leg, next, onFact, last }: { leg: WalkLeg; next?: Leg; onFac
               {leg.steps.map((step, i) => {
                 const fact = step.factId ? leg.facts.find(f => f.id === step.factId) : undefined;
                 return (
-                  <li key={i} className={cn('flex items-start justify-between gap-3 px-3 py-2.5 text-sm', fact && 'bg-barrier-soft/50')}>
-                    <span className="min-w-0">
+                  <li key={i} className={cn('flex items-start gap-3 px-3 py-2.5 text-sm', fact && 'bg-barrier-soft/50')}>
+                    <ManeuverIcon maneuver={step.maneuver} />
+                    <span className="min-w-0 flex-1">
                       {step.instruction}
                       {fact ? (
                         <button type="button" onClick={() => onFact(fact)} className="mt-1 block text-sm font-semibold text-barrier underline underline-offset-2">
@@ -160,6 +180,21 @@ function WalkPart({ leg, next, onFact, last }: { leg: WalkLeg; next?: Leg; onFac
         </Collapsible>
       ) : null}
     </div>
+  );
+}
+
+const maneuverIcons: Record<Maneuver, LucideIcon> = {
+  go: ArrowUp, straight: ArrowUp, right: CornerUpRight, left: CornerUpLeft, back: Undo2,
+  cross: ArrowRightLeft, stairsUp: TrendingUp, stairsDown: TrendingDown, stairs: Footprints, arrive: MapPin,
+};
+
+function ManeuverIcon({ maneuver }: { maneuver?: Maneuver }) {
+  const Icon = maneuver ? maneuverIcons[maneuver] : Footprints;
+  const barrier = maneuver === 'stairsUp' || maneuver === 'stairsDown' || maneuver === 'stairs';
+  return (
+    <span aria-hidden className={cn('grid size-6 shrink-0 place-items-center rounded-full', barrier ? 'bg-barrier-soft text-barrier' : maneuver === 'arrive' ? 'bg-accent text-primary' : 'bg-muted text-foreground')}>
+      <Icon className="size-3.5" />
+    </span>
   );
 }
 

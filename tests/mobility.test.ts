@@ -183,7 +183,7 @@ test('plural forms and number formats per locale', () => {
   assert.equal(formatDistance(80, 'de'), '80 m');
   assert.equal(serverMessages('de').issues.noBench(10), 'Keine Sitzbank um Minute 10');
   assert.equal(serverMessages('pl').issues.noBench(10), 'Brak ławki ok. 10. minuty');
-  assert.equal(serverMessages('de').facts.toilet('Rynek', false), 'Barrierefreie Toilette · Rynek');
+  assert.equal(serverMessages('de').facts.toilet('Rynek', false), 'Rollstuhlgerechte Toilette · Rynek');
   assert.equal(serverMessages('xx').labels.preferred, 'Omija Twoje bariery', 'unknown locale falls back to Polish');
 });
 

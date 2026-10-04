@@ -182,7 +182,7 @@ test('toilets: only those a source states as accessible, near the walk and the d
   const facts = (option.legs[0] as WalkLeg).facts.filter(f => f.kind === 'toilet');
   // Route: node:1 (~400 m), node:4 (~1000 m); node:5 is only 100 m further, too close to node:4. Destination: museum 250 m past b.
   assert.deepEqual(facts.map(f => f.objectId), ['osm-node-1', 'osm-node-4', 'osm-node-6']);
-  assert.deepEqual(facts.map(f => f.title), ['Toaleta dostępna · WC Aleja', 'Toaleta częściowo dostępna · WC częściowo', 'Toaleta dostępna · Muzeum']);
+  assert.deepEqual(facts.map(f => f.title), ['Toaleta przystosowana · WC Aleja', 'Toaleta częściowo przystosowana · WC częściowo', 'Toaleta przystosowana · Muzeum']);
   assert.ok(facts.every(f => f.sourceUrl.startsWith('https://www.openstreetmap.org/') && f.id === `toilet:${f.objectId}`));
 
   // showToilets off: the provider is never called.
@@ -191,7 +191,7 @@ test('toilets: only those a source states as accessible, near the walk and the d
   assert.equal((off.legs[0] as WalkLeg).facts.filter(f => f.kind === 'toilet').length, 0);
   const [on] = walkingOptions(g, place(d, 'a'), place(d, 'b'), free, 0).options;
   applyExtras([on], g, { ...free, showToilets: true }, 'de', () => toilets);
-  assert.equal((on.legs[0] as WalkLeg).facts.find(f => f.kind === 'toilet')!.title, 'Barrierefreie Toilette · WC Aleja');
+  assert.equal((on.legs[0] as WalkLeg).facts.find(f => f.kind === 'toilet')!.title, 'Rollstuhlgerechte Toilette · WC Aleja');
 });
 
 test('taxi fare follows the Kraków maximum tariff (zone I): min tariff 1, max tariff 2 + 20 %', () => {

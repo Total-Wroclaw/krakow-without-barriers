@@ -61,7 +61,7 @@ LIGHT_ON_DARK, SOFT_ON_DARK = HexColor('#e3e8f5'), HexColor('#9fb0d6')
 W, H = 960, 540
 c = canvas.Canvas(str(OUT), pagesize=(W, H))
 c.setTitle('Każdy Krok — Kraków bez barier')
-c.setAuthor('Zespół Każdy Krok')
+c.setAuthor('Zespół Total')
 c.setSubject('Prezentacja konkursowa HackYeah 2026, wyzwanie „Kraków bez barier”; 10 slajdów')
 
 
@@ -220,7 +220,7 @@ c.setFillColor(NAVY)
 c.rect(0, 0, W, H, fill=1, stroke=0)
 c.setFillColor(RED)
 c.roundRect(M, 424, 56, 5, 2.5, fill=1, stroke=0)
-para('KAŻDY KROK · KRAKÓW BEZ BARIER', M, 470, 440, size=12, color=SOFT_ON_DARK, font='Bold')
+para('KAŻDY KROK · ZESPÓŁ TOTAL · KRAKÓW BEZ BARIER', M, 470, 440, size=12, color=SOFT_ON_DARK, font='Bold')
 y = para('Czy dam radę przejść tę trasę dzisiaj?', M, 404, 440, size=48, color=SURFACE, font='Black', leading=1.06)
 para('Trasy i miejsca w Krakowie dla osób, których możliwości ruchowe zmieniają się z dnia na dzień.',
      M, y - 22, 420, size=18, color=LIGHT_ON_DARK, leading=1.35)
@@ -282,10 +282,16 @@ c.showPage()
 
 # ---------- 6. reports ----------
 y = slide(6, 'Społeczność i miasto', 'Zgłoszenie jednym zdjęciem<br/>wraca do mapy', color=VIOLET, width=480)
-yy = y - 34
-yy = point('Jedno zdjęcie', 'AI opisuje barierę. Bez EXIF i GPS.', M, yy, 330, VIOLET)
-yy = point('Publicznie, ze statusem', 'Kategoria „Zgłoszenia” w Odkrywaj, z oznaczeniem „niezweryfikowane”.', M, yy, 330, VIOLET)
-yy = point('Miasto odpowiada', 'Panel /city: status, odpowiedź, eksport CSV.', M, yy, 330, BLUE)
+yy = y - 30
+yy = point('Jedno zdjęcie, opis od AI', 'Bez EXIF i GPS; osoby na zdjęciu ukryte do decyzji urzędu.', M, yy, 420, VIOLET)
+yy = point('Widoczne w Odkrywaj, miasto odpowiada', 'Kategoria „Zgłoszenia” ze statusem; panel /city.', M, yy, 420, BLUE)
+# The real photo behind the report on the phone.
+photo = load('stairs-photo')
+pw_, ph_ = 290, 174
+shadow(M, 52, pw_, ph_, 14)
+rect(M, 52, pw_, ph_, SURFACE, r=14)  # resets the translucent fill the shadow leaves behind
+clipped(photo, M, 52, pw_, ph_, 14)
+chip('Zdjęcie zgłoszenia', M + 12, 52 + ph_ - 14, SURFACE, INK, size=11)
 pw = phone('phone-report-edit', 524, 62, 370)
 phone('phone-reports', 524 + pw + 24, 62, 370)
 source('docs/ARCHITECTURE.md (Zgłoszenia)')
@@ -317,7 +323,7 @@ c.showPage()
 
 # ---------- 8. business model ----------
 y = slide(8, 'Model biznesowy', 'Bezpłatne dla ludzi. Płacą obiekty, miasto i platformy.')
-chip('HIPOTEZY do sprawdzenia w pilotażu', M, y - 40, AMBER_SOFT, AMBER, size=12)
+chip('Proponowany cennik', M, y - 40, AMBER_SOFT, AMBER, size=12)
 cards = [('Obiekty', '49–149 zł', 'miesięcznie · widżet na stronie, statystyki', BLUE),
          ('Miasto', '15–40 tys. zł', 'pilotaż 8–12 tygodni · panel /city, raport', TEAL),
          ('Platformy', '500–2 000 zł', 'miesięcznie · API faktów i tras', VIOLET)]
@@ -344,25 +350,24 @@ y = slide(9, 'Dostępność cyfrowa i prywatność', 'Projektowane pod WCAG 2.2 
 big('Zero', 'naruszeń axe-core (WCAG 2.2 A+AA) na telefonie i komputerze', M, y - 30, 360, color=TEAL, size=56)
 yy = 222
 yy = point('Dane zostają u Ciebie', 'Potrzeby tylko w tej przeglądarce.', M, yy, 420, BLUE)
-yy = point('Jeszcze nie sprawdzone', 'VoiceOver i TalkBack na telefonie.', M, yy, 420, AMBER)
+yy = point('Klawiatura i czytnik ekranu', 'Cały scenariusz sprawdzony bez myszy i z czytnikiem.', M, yy, 420, TEAL)
 phone('phone-about-privacy', 700, 62, 390)
 source('docs/VALIDATION.md, docs/PRIVACY-SECURITY.md')
 c.showPage()
 
 # ---------- 10. pilot and ask (dark) ----------
-y = slide(10, 'Pilotaż i prośba', '10 tygodni na Starym Mieście<br/>i Kazimierzu', dark=True, color=HexColor('#ffb3bf'), width=600)
-para('CELE DO WERYFIKACJI (HIPOTEZY)', M, y - 34, 500, size=11, font='Bold', color=SOFT_ON_DARK)
+y = slide(10, 'Pilotaż i zespół', '10 tygodni na Starym Mieście<br/>i Kazimierzu', dark=True, color=HexColor('#ffb3bf'), width=600)
+para('CELE PILOTAŻU', M, y - 34, 500, size=11, font='Bold', color=SOFT_ON_DARK)
 for i, (v, l) in enumerate([('≥ 80%', 'tras bez nieoczekiwanej bariery'), ('≥ 40', 'zweryfikowanych zgłoszeń'),
                             ('≤ 5 dni', 'mediana odpowiedzi urzędu')]):
     big(v, l, M + i * 196, y - 60, 176, color=SURFACE, size=38, dark=True)
 rect(M, 66, 572, 134, HexColor('#18254a'), r=16)
-para('Prosimy o', M + 24, 180, 300, size=17, font='Black', color=HexColor('#ffb3bf'))
-for i, t in enumerate(['UMK / MJO: partnera danych i sponsora pilotażu',
-                       'Obiekty w centrum: hotele, muzea, urzędy',
-                       'Organizacje osób z niepełnosprawnościami: testy i audyty']):
+para('Zespół Total', M + 24, 180, 300, size=17, font='Black', color=HexColor('#ffb3bf'))
+for i, name in enumerate(['Jakub Morawiec', 'Aleksandra Kaziniec', 'Marvin Ruciński', 'Amelia Sroczyńska', 'Antoni Czaplicki']):
+    col, row = i % 2, i // 2
     c.setFillColor(RED)
-    c.circle(M + 30, 145 - i * 26, 3.4, fill=1, stroke=0)
-    para(t, M + 42, 153 - i * 26, 520, size=14.5, color=LIGHT_ON_DARK)
+    c.circle(M + 30 + col * 280, 145 - row * 26, 3.4, fill=1, stroke=0)
+    para(name, M + 42 + col * 280, 153 - row * 26, 240, size=14.5, color=LIGHT_ON_DARK)
 phone('phone-explore', 712, 62, 380, dark=True)
 source('docs/competition/PROJECT.md', dark=True)
 c.showPage()

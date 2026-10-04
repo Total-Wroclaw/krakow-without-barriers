@@ -153,8 +153,9 @@ async function waitAerial(p) {
   }, null, { timeout: 120_000, polling: 250 });
   await p.waitForTimeout(800);
 }
-/** Synthetic test photo (grey steps) — never a picture of a real place. */
+/** Test photo for the report scene: TEST_PHOTO (a real photo, downsized like the app does) or synthetic grey steps. */
 async function testPhoto() {
+  if (process.env.TEST_PHOTO) return sharp(process.env.TEST_PHOTO).rotate().resize(1400, 1400, { fit: 'inside' }).jpeg({ quality: 88 }).toBuffer();
   const steps = Array.from({ length: 9 }, (_, i) => {
     const y = 560 - i * 52, inset = i * 34;
     return `<polygon points="${40 + inset},${y} ${760 - inset},${y} ${745 - inset},${y - 22} ${55 + inset},${y - 22}" fill="#b9b4ab"/><rect x="${55 + inset}" y="${y - 52}" width="${690 - 2 * inset}" height="30" fill="#8f8a82"/>`;

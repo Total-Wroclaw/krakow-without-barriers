@@ -188,7 +188,7 @@ Każda zmiana statusu lub odpowiedzi ustawia `cityUpdatedAt` i dopisuje `{ at, s
 
 ## Interfejs
 
-Next.js 16 (App Router), React 19, shadcn/ui (Radix) + Tailwind 4. MapLibre GL 6 z kafelkami OpenFreeMap; worker serwowany z `public/maplibre` (kopiowany skryptem `copy-maplibre-worker.mjs`). Telefon: mapa u góry i lista pod nią; podczas wpisywania mapa się chowa, a podpowiedzi są pod polem (popover nad klawiaturą iOS był nieczytelny). Desktop: panel 440 px + mapa. Panele: dolna szuflada (vaul) na telefonie, boczny arkusz na desktopie.
+Next.js 16 (App Router), React 19, shadcn/ui (Radix) + Tailwind 4. MapLibre GL 6 z kafelkami OpenFreeMap; worker serwowany z `public/maplibre` (kopiowany skryptem `copy-maplibre-worker.mjs`). Telefon: pełnoekranowa mapa, a panel jako przeciągany arkusz nad nią (`useBottomSheet.ts`: trzy wysokości, przeciąganie uchwytu lub treści, obsługa klawiaturą); podczas wpisywania arkusz otwiera się w pełni, a podpowiedzi są pod polem (popover nad klawiaturą iOS był nieczytelny). Dopasowanie kadru i obszar listy Odkrywaj pomijają zasłoniętą część mapy. Desktop: panel 440 px + mapa. Panele: dolna szuflada (vaul) na telefonie, boczny arkusz na desktopie.
 
 ## Trwałość, bezpieczeństwo, prywatność
 

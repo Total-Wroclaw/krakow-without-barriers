@@ -33,7 +33,7 @@ function distance(locale: Locale, units: { m: string; km: string }) {
 const pl = {
   distance: distance('pl', { m: 'm', km: 'km' }),
   labels: {
-    preferred: 'Omija Twoje bariery',
+    preferred: 'Omija znane bariery',
     shortest: 'Najkrótsza',
     alternative: 'Inny przebieg',
     tram: (line: string) => `Tramwaj ${line}`,
@@ -217,7 +217,7 @@ export type ServerMessages = typeof pl;
 const en: ServerMessages = {
   distance: distance('en', { m: 'm', km: 'km' }),
   labels: {
-    preferred: 'Avoids your barriers',
+    preferred: 'Avoids mapped barriers',
     shortest: 'Shortest',
     alternative: 'Another route',
     tram: line => `Tram ${line}`,
@@ -398,7 +398,7 @@ const en: ServerMessages = {
 const de: ServerMessages = {
   distance: distance('de', { m: 'm', km: 'km' }),
   labels: {
-    preferred: 'Meidet Ihre Barrieren',
+    preferred: 'Meidet bekannte Barrieren',
     shortest: 'Kürzeste',
     alternative: 'Andere Route',
     tram: line => `Straßenbahn ${line}`,

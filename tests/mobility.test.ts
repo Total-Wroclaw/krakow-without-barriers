@@ -184,7 +184,7 @@ test('plural forms and number formats per locale', () => {
   assert.equal(serverMessages('de').issues.noBench(10), 'Keine Sitzbank um Minute 10');
   assert.equal(serverMessages('pl').issues.noBench(10), 'Brak ławki ok. 10. minuty');
   assert.equal(serverMessages('de').facts.toilet('Rynek', false), 'Rollstuhlgerechte Toilette · Rynek');
-  assert.equal(serverMessages('xx').labels.preferred, 'Omija Twoje bariery', 'unknown locale falls back to Polish');
+  assert.equal(serverMessages('xx').labels.preferred, 'Omija znane bariery', 'unknown locale falls back to Polish');
 });
 
 test('journey request defaults to transit in Polish; off-network errors are localised', () => {

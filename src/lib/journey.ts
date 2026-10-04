@@ -107,7 +107,13 @@ export function planJourney(
 
   const all = applyExtras([...drive, ...orderOptions(walking, transit, preferences)], graph, preferences, locale, toilets);
   // Options that fit today's needs come first; the original order is kept within each group.
-  const options = [...all.filter(o => o.fits), ...all.filter(o => !o.fits)];
+  // Option ids key the UI lists and the selected route, so they must be unique even if two planners agree.
+  const seen = new Map<string, number>();
+  const options = [...all.filter(o => o.fits), ...all.filter(o => !o.fits)].map(o => {
+    const n = seen.get(o.id) ?? 0;
+    seen.set(o.id, n + 1);
+    return n ? { ...o, id: `${o.id}~${n + 1}` } : o;
+  });
   // When stairs cannot be avoided at all, say so instead of leaving people to guess from red labels.
   const avoidsStairs = preferences.avoidStairs || preferences.mobility === 'wheelchair' || preferences.mobility === 'stroller';
   if (avoidsStairs && options.length && options.every(o => hasAvoidedStairs(o, preferences))) addError(m.errors.stairsOnly);

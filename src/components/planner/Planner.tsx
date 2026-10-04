@@ -72,7 +72,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
   const [detail, setDetail] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [fact, setFact] = useState<CityFact | null>(null);
-  const [openReport, setOpenReport] = useState<{ report: Report; editing: boolean } | null>(null);
+  const [openReport, setOpenReport] = useState<{ report: Report; editing: boolean | 'place' } | null>(null);
   const [objects, setObjects] = useState<PlaceObjectSummary[]>([]);
   const [objectId, setObjectId] = useState<string | null>(null);
   // Explore follows the map: the visible area, and a key that changes only when the list asks the map to fit its places.
@@ -171,7 +171,7 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
     return { place: { id: `point:${c.lat}:${c.lon}`, name: t('report.mapPoint'), lat: c.lat, lon: c.lon, source: 'map' }, source: 'map' };
   }, [fact, t]);
   const onSaved = useCallback((r: Report) => setReports(old => [r, ...old.filter(existing => existing.id !== r.id)]), []);
-  const onOpen = useCallback((report: Report, editing: boolean) => setOpenReport({ report, editing }), []);
+  const onOpen = useCallback((report: Report, editing: boolean | 'place') => setOpenReport({ report, editing }), []);
   const { capture, busy, notice: photoNotice } = useReportCapture({ fallback, onSaved, onOpen });
 
   // What "selected place" means for a report: an open barrier, an open place card, or the trip destination.

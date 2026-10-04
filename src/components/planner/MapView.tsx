@@ -576,11 +576,11 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
           aria-label={t('map.style')}
           className="rounded-lg border bg-card p-0.5 shadow-sm"
         >
-          <ToggleGroupItem value="standard" className="h-11 min-w-11 gap-1 px-2.5 text-sm" aria-label={t('map.standard')}>
+          <ToggleGroupItem value="standard" className="h-10 min-w-10 gap-1 px-2.5 text-sm" aria-label={t('map.standard')}>
             <MapIcon aria-hidden />
             <span className="hidden sm:inline">{t('map.standard')}</span>
           </ToggleGroupItem>
-          <ToggleGroupItem value="satellite" className="h-11 min-w-11 gap-1 px-2.5 text-sm" aria-label={t('map.satellite')}>
+          <ToggleGroupItem value="satellite" className="h-10 min-w-10 gap-1 px-2.5 text-sm" aria-label={t('map.satellite')}>
             <Satellite aria-hidden />
             <span className="hidden sm:inline">{t('map.satellite')}</span>
           </ToggleGroupItem>

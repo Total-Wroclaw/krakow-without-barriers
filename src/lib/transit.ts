@@ -382,7 +382,8 @@ function buildOption(data: TransitData, g: WalkGraph, c: Pick<Candidate, 'journe
 
   const rides = legs.filter((l): l is RideLeg => l.type === 'ride');
   const label = rides.map(r => (r.mode === 'tram' ? m.labels.tram(r.line) : m.labels.bus(r.line))).join(' → ');
-  const id = `transit-${rides.map(r => `${r.line}@${r.departure}`).join('+')}`;
+  // Line and time alone can repeat (same vehicle, another stop to get on or off), so the stops are part of the id.
+  const id = `transit-${rides.map(r => `${r.line}@${r.departure}:${r.from.id}>${r.to.id}`).join('+')}`;
   // GTFS accessibility, only where it matters today. Unknown is listed but does not make the option unfit.
   const hard: string[] = [];
   const soft: string[] = [];

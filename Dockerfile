@@ -38,6 +38,7 @@ USER node
 VOLUME ["/data"]
 EXPOSE 3000
 # Answers 200 whenever the server is up; stale data shows as "degraded" in the body, not as a failure.
-HEALTHCHECK --interval=60s --timeout=5s --start-period=120s --retries=3 \
+# A short interval matters: the proxy routes to a new container only once it reports healthy.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 CMD ["node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]

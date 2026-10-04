@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { LoaderCircle, LocateFixed, MapPin, Minus, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import type { CityPlace } from '@/lib/city-types';
 import { useI18n } from '@/lib/i18n/client';
+import { PlaceInput } from './PlaceInput';
 import { gpsPoint, inKrakow } from './Reports';
 
 maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
@@ -15,6 +17,7 @@ export type Preset = { key: string; label: string; place: CityPlace | (() => Pro
 /**
  * Confirm or correct where a report belongs: the map moves under a fixed centre pin, the nearest
  * address is shown, and presets (my location, selected place, map centre) jump the map there.
+ * An address search reaches any point without dragging the map (WCAG 2.5.7, 2.1.1).
  * The chosen point is always visible as text before anything is sent.
  */
 export function LocationPicker({ value, onChange, presets }: { value: CityPlace; onChange: (p: CityPlace) => void; presets: Preset[] }) {
@@ -23,6 +26,7 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
   const map = useRef<MapLibreMap | null>(null);
   const [label, setLabel] = useState(value.name);
   const [busy, setBusy] = useState<string | null>(null);
+  const [searched, setSearched] = useState<CityPlace | null>(null);
   const latest = useRef(onChange);
   latest.current = onChange;
 
@@ -36,7 +40,7 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
       attributionControl: { compact: true },
       // One-finger page scroll keeps working on phones; two fingers move the map.
       cooperativeGestures: window.matchMedia('(pointer: coarse)').matches,
-      locale: { 'Map.Title': t('report.whereMap') },
+      locale: { 'Map.Title': t('report.pickerMap'), 'AttributionControl.ToggleAttribution': t('map.attribution') },
     });
     instance.on('moveend', async e => {
       // Only user moves and preset jumps (not the initial render) change the chosen point.
@@ -44,6 +48,8 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
       const c = instance.getCenter();
       const point = { lat: +c.lat.toFixed(6), lon: +c.lng.toFixed(6) };
       if (!inKrakow(point)) return;
+      // Moved away from a searched address: the field no longer describes the point.
+      if (!(e as { preset?: boolean }).preset) setSearched(null);
       const name = (await reverseName(point, locale)) ?? t('report.mapPoint');
       setLabel(name);
       latest.current({ id: `point:${point.lat}:${point.lon}`, name, lat: point.lat, lon: point.lon, source: 'map' });
@@ -78,6 +84,21 @@ export function LocationPicker({ value, onChange, presets }: { value: CityPlace;
             {p.label}
           </Button>
         ))}
+      </div>
+      <div className="rounded-xl border bg-card">
+        <PlaceInput
+          label={t('report.whereSearch')}
+          placeholder={t('report.whereSearchPlaceholder')}
+          value={searched}
+          onChange={p => {
+            if (!p) return setSearched(null);
+            setSearched(p);
+            usePreset({ key: 'search', label: p.name, place: p });
+          }}
+          marker="end"
+          near={value}
+          onError={m => toast.error(m)}
+        />
       </div>
       <div className="relative h-56 overflow-hidden rounded-xl border">
         <div ref={container} className="size-full" />

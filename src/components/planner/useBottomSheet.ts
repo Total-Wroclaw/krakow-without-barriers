@@ -117,6 +117,44 @@ export function useBottomSheet(scroller: RefObject<HTMLElement | null>, forced?:
     };
   }, [scroller, viewport?.mobile, begin, move, end]);
 
+  // Keyboard focus moving into a lowered sheet must not end up below the screen edge (WCAG 2.4.11): at peek, or
+  // when the control would sit below the bottom once a temporary full height (the place search) ends, open it fully.
+  const resting = useRef(snap);
+  resting.current = snap;
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !viewport?.mobile) return;
+    let frame = 0;
+    const onFocus = (e: FocusEvent) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement) || !target.matches(':focus-visible') || resting.current === 'full') return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const { height, heightOf } = live.current;
+        // The sheet is anchored to the bottom: settling at its resting height moves the content down by the difference.
+        const below = target.getBoundingClientRect().bottom + (height ?? 0) - heightOf(resting.current) > window.innerHeight;
+        if (resting.current === 'peek' || below) setSnap('full');
+      });
+    };
+    // And the other way round: keyboard focus on the map (its canvas, markers, attribution) that the sheet covers
+    // lowers the sheet, so the focused control shows.
+    const sheet = el.parentElement;
+    const onMapFocus = (e: FocusEvent) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement) || !sheet || sheet.contains(target) || !target.matches(':focus-visible')) return;
+      const r = target.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (hit && sheet.contains(hit)) setSnap('peek');
+    };
+    el.addEventListener('focusin', onFocus);
+    document.addEventListener('focusin', onMapFocus);
+    return () => {
+      el.removeEventListener('focusin', onFocus);
+      document.removeEventListener('focusin', onMapFocus);
+      cancelAnimationFrame(frame);
+    };
+  }, [scroller, viewport?.mobile]);
+
   // The handle: drag with any pointer; tap or Enter steps through the heights; arrow keys go up/down.
   const dragged = useRef(false);
   const step = (by: 1 | -1) => setSnap(order[Math.min(order.length - 1, Math.max(0, order.indexOf(current) + by))]);

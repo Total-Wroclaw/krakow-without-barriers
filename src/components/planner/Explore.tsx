@@ -164,6 +164,7 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
   const [announcement, setAnnouncement] = useState('');
   const section = useRef<HTMLElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
+  const owner = useRef<HTMLButtonElement>(null);
   const scrollRoot = useRef<HTMLElement | null>(null);
   // Mirrors of state read by async code, so a stale closure never starts a duplicate or outdated request.
   const listRef = useRef<List | null>(null);
@@ -277,6 +278,8 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
   const loadMore = useCallback(() => {
     const current = listRef.current;
     if (!current || current.next === null || moreBusy.current || firstBusy.current || moreFailed.current) return;
+    // Skipped past the list with the keyboard: appending pages would push the focused button out of view.
+    if (document.activeElement === owner.current) return;
     moreBusy.current = true;
     setMore('loading');
     const controller = new AbortController();
@@ -432,7 +435,13 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
             <p className={cn('rounded-xl border bg-card p-4 text-muted-foreground', refreshing && 'opacity-60')}>{t('explore.empty')}</p>
           )
         ) : (
-          <ul className={cn('flex flex-col gap-2 transition-opacity', refreshing && 'opacity-60')}>
+          <>
+          {/* The list keeps growing as focus reaches its end; this lets keyboard users past it without tabbing through every place. */}
+          <Button variant="outline" className="sr-only self-start focus:not-sr-only focus:min-h-11 focus:px-4" onClick={() => owner.current?.focus()}>
+            {t('explore.skipList')}
+          </Button>
+          {/* Coming back into the list (e.g. Shift+Tab from below) picks up loading where it paused. */}
+          <ul onFocus={() => nearEnd() && loadMore()} className={cn('flex flex-col gap-2 transition-opacity', refreshing && 'opacity-60')}>
             {list.objects.map(o => (
               <li key={o.id}>
                 <button
@@ -475,6 +484,7 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
               </li>
             ))}
           </ul>
+          </>
         )}
         <div ref={sentinel} aria-hidden="true" />
         {more === 'loading' ? (
@@ -493,7 +503,7 @@ export function Explore({ center, viewport, selectedId, onResults, onSelect, onO
           <p className="px-1 text-sm text-muted-foreground">{t('explore.end')}</p>
         ) : null}
       </section>
-      <Button variant="secondary" className="h-11 self-start" onClick={onOwner}>
+      <Button ref={owner} variant="secondary" className="h-11 self-start" onClick={onOwner}>
         <Store />
         {t('explore.owner')}
       </Button>

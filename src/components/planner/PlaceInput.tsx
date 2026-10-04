@@ -65,7 +65,7 @@ type Props = {
 export function PlaceInput({ label, placeholder, value, onChange, marker, near, onError, onActiveChange }: Props) {
   // On phones the list renders inline: a popover would flip above the field when the keyboard is open.
   const inline = useMediaQuery('(max-width: 1023px)');
-  const { t, locale } = useI18n();
+  const { t, tp, locale } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(value?.name ?? '');
   const [open, setOpen] = useState(false);
@@ -81,11 +81,18 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
   useEffect(() => onActiveChange?.(open), [open, onActiveChange]);
 
   // cmdk always reports an expanded list; the list here lives in a popover that may be closed.
+  // React won't re-add an attribute it thinks is unchanged, so the list id is kept and restored on reopening.
+  const listId = useRef<string | null>(null);
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input) return;
+    listId.current ??= input.getAttribute('aria-controls');
     input.setAttribute('aria-expanded', String(open));
-    if (!open) input.removeAttribute('aria-controls');
+    if (open && listId.current) input.setAttribute('aria-controls', listId.current);
+    else {
+      input.removeAttribute('aria-controls');
+      input.removeAttribute('aria-activedescendant');
+    }
   });
 
   const typed = query.trim();
@@ -121,6 +128,17 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
     };
   }, [typed, searching, near, locale]);
 
+  // cmdk highlights the first suggestion without pointing aria-activedescendant at it, so a screen reader would
+  // not hear it (Enter picks it, ArrowDown moves past it). Point at the highlighted one once the list settles.
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const item = listId.current ? document.getElementById(listId.current)?.querySelector('[cmdk-item][aria-selected="true"]') : null;
+      if (item?.id) inputRef.current?.setAttribute('aria-activedescendant', item.id);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, results, recent]);
+
   function choose(place: PlaceSuggestion) {
     rememberPlace(place);
     onChange(place);
@@ -143,6 +161,9 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
 
   const settled = results.query === typed;
   const list = searching ? results.places : [];
+  // Screen readers hear how many suggestions arrived (or that there are none) without leaving the field.
+  const announcement = searching && settled && !loading ? (list.length ? tp('search.count', list.length) : t(failed ? 'search.failed' : 'search.empty')) : '';
+  const status = <p role="status" className="sr-only">{announcement}</p>;
 
   const hint = unresolved ? (
     <p id={hintId} className="px-3 pb-1.5 text-sm font-medium text-barrier">
@@ -209,7 +230,7 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
   );
 
   const suggestions = (
-    <CommandList className={inline ? "max-h-[60svh]" : "max-h-[min(22rem,55svh)]"}>
+    <CommandList label={t('search.suggestions', { label })} className={inline ? "max-h-[60svh]" : "max-h-[min(22rem,55svh)]"}>
       {searching && settled && !loading && !list.length ? (
         <CommandEmpty>{failed ? t('search.failed') : t('search.empty')}</CommandEmpty>
       ) : null}
@@ -243,6 +264,7 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
       <Command label={label} shouldFilter={false} loop className="overflow-visible bg-transparent">
         {field}
         {hint}
+        {status}
         {open ? (
           // Keep focus in the input while tapping a suggestion.
           <div className="mx-1 mt-1 overflow-hidden rounded-xl border bg-popover shadow-sm" onMouseDown={e => e.preventDefault()}>
@@ -264,12 +286,14 @@ export function PlaceInput({ label, placeholder, value, onChange, marker, near, 
           onInteractOutside={e => {
             if (e.target instanceof Node && inputRef.current?.parentElement?.contains(e.target)) e.preventDefault();
           }}
+          aria-label={t('search.suggestions', { label })}
           className="w-[min(calc(100vw-2rem),26rem)] p-0"
         >
           {suggestions}
         </PopoverContent>
       </Popover>
       {hint}
+      {status}
     </Command>
   );
 }

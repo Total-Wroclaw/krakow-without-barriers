@@ -303,8 +303,10 @@ export default function Planner({ embed }: { embed?: CityPlace }) {
 
       <main
         id="planner"
+        // The skip link's target: focusable so every browser and screen reader really moves there.
+        tabIndex={-1}
         className={cn(
-          'order-2 flex min-h-0 flex-1 flex-col border-border bg-background lg:order-1 lg:w-[440px] lg:flex-none lg:border-r',
+          'order-2 flex outline-none min-h-0 flex-1 flex-col border-border bg-background lg:order-1 lg:w-[440px] lg:flex-none lg:border-r',
           'max-lg:absolute max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-20 max-lg:h-[var(--sheet,50svh)] max-lg:flex-none max-lg:rounded-t-[1.75rem] max-lg:border-t max-lg:shadow-[0_-8px_32px_rgb(15_23_42/0.16)]',
           !sheet.dragging && 'max-lg:transition-[height] max-lg:duration-300 max-lg:ease-out motion-reduce:transition-none',
         )}

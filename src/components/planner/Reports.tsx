@@ -100,7 +100,7 @@ const NOTICE_KEY = 'krok-photo-notice-v1';
 export function useReportCapture({ fallback, onSaved, onOpen }: {
   fallback: () => CaptureTarget;
   onSaved: (r: Report) => void;
-  onOpen: (r: Report, editing: boolean | 'place') => void;
+  onOpen: (r: Report, editing: boolean) => void;
 }) {
   const { t, locale } = useI18n();
   const reportTitle = useReportTitle();
@@ -230,15 +230,14 @@ export function ReportFab({ busy, onClick }: { busy: boolean; onClick: () => voi
   );
 }
 
-export function ReportPanel({ report, editing: openWith, onClose, onChange, onDelete }: {
+export function ReportPanel({ report, editing: startEditing, onClose, onChange, onDelete }: {
   report: Report | null;
-  /** true: open the description form; 'place': open with the location picker expanded. */
-  editing: boolean | 'place';
+  /** Open with the description form. */
+  editing: boolean;
   onClose: () => void;
   onChange: (r: Report) => void;
   onDelete: (id: string) => void;
 }) {
-  const startEditing = openWith === true;
   const { t, locale } = useI18n();
   const reportTitle = useReportTitle();
   const [editing, setEditing] = useState(startEditing);
@@ -413,7 +412,7 @@ export function ReportPanel({ report, editing: openWith, onClose, onChange, onDe
         {mine && (report.photos?.length ?? (report.photoPath ? 1 : 0)) < 4 ? (
           <AddPhoto reportId={report.id} onAdded={onChange} />
         ) : null}
-        {mine && report.location ? <FixLocation key={report.id} report={report} token={token} onSaved={onChange} startOpen={openWith === 'place'} /> : null}
+        {mine && report.location ? <FixLocation key={report.id} report={report} token={token} onSaved={onChange} /> : null}
         {report.cityStatus ? (
           <StatusRow tone="city" label={t('report.cityStatus', { status: t(`city.${report.cityStatus}`) })}>
             {report.cityNote ? (
@@ -441,9 +440,9 @@ export function ReportPanel({ report, editing: openWith, onClose, onChange, onDe
   );
 }
 
-function FixLocation({ report, token, onSaved, startOpen = false }: { report: Report; token: string | null; onSaved: (r: Report) => void; startOpen?: boolean }) {
+function FixLocation({ report, token, onSaved }: { report: Report; token: string | null; onSaved: (r: Report) => void }) {
   const { t, locale } = useI18n();
-  const [open, setOpen] = useState(startOpen);
+  const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<CityPlace>(report.location!);
   const [busy, setBusy] = useState(false);
   if (!open) {

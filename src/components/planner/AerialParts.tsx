@@ -56,9 +56,9 @@ export function ObservationBadge({ id, large = false, inline = false }: { id: st
 }
 
 /** Stairs marker: amber square with a step glyph. */
-export function StairsBadge({ large = false, inline = false }: { large?: boolean; inline?: boolean }) {
+export function StairsBadge({ large = false }: { large?: boolean }) {
   return (
-    <span className={cn('inline-grid shrink-0 place-items-center rounded-[5px] bg-barrier text-white', inline ? inlineBadge : large ? 'size-6 shadow-md ring-2 ring-white' : 'size-5 shadow-md ring-2 ring-white')}>
+    <span className={cn('inline-grid shrink-0 place-items-center rounded-[5px] bg-barrier text-white', large ? 'size-6 shadow-md ring-2 ring-white' : 'size-5 shadow-md ring-2 ring-white')}>
       <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M4 20h5v-5h5v-5h6" />
       </svg>

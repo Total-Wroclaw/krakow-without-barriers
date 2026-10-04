@@ -1,6 +1,6 @@
 # Zgodność z wymaganiami wyzwania „Kraków bez barier”
 
-Stan na 3 października 2026, wieczór. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` (sekcje 3–6). ✅ spełnione, 🟡 częściowo, ❌ brak.
+Stan na 4 października 2026. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` (sekcje 3–6). ✅ spełnione, 🟡 częściowo, ❌ brak.
 
 ## Prototyp (sekcja 3)
 
@@ -8,7 +8,7 @@ Stan na 3 października 2026, wieczór. Źródło: `docs/KRYTERIA Kraków Bez Ba
 | --- | --- | --- |
 | Konkretne bariery i udogodnienia: schody | ✅ | Trasy: każda klatka schodowa z kierunkiem względem drogi, stopniami, poręczą |
 | progi, krawężniki | 🟡 | Krawężniki z OSM (5 853 węzły, 367 `raised`) w trasach na wózku; progi wejść rzadko otagowane |
-| podjazdy, windy, schodołazy | ✅ | Odkrywaj: OSM, zestawienie UMK, deklaracje partnerów |
+| podjazdy, windy, schodołazy | ✅ | Odkrywaj (ok. 3 080 miejsc z OSM, zestawienie UMK, deklaracje partnerów) i odczyt z lotu ptaka z ortofotomapy GUGiK (przejścia, schody, parkingi, tory; dokładność w `VALIDATION.md`) |
 | szerokość wejścia | 🟡 | `door_width`, gdy jest w OSM lub u partnera; w OSM rzadkie |
 | nawierzchnia | ✅ | Trasy (bruk, żwir — kary i uwagi „Bruk na 71 m”) |
 | toaleta | ✅ | Kategoria Toalety (284, 160 z danymi) i cecha „Toaleta dostępna” |
@@ -24,11 +24,11 @@ Stan na 3 października 2026, wieczór. Źródło: `docs/KRYTERIA Kraków Bez Ba
 
 | Wymaganie | Stan | Uwagi |
 | --- | --- | --- |
-| Opis rozwiązania i problemu | ✅ | `docs/competition/PROJECT.md` |
-| Prototyp / demonstracja | ✅ | Aplikacja lokalnie; scenariusz w README |
+| Opis rozwiązania i problemu | ✅ | `docs/competition/PROJECT.md` (po polsku) |
+| Prototyp / demonstracja | ✅ | Działająca instalacja [kazdy-krok.antek.page](https://kazdy-krok.antek.page) (Dokploy); scenariusz w README |
 | Grupa docelowa i sposób użycia | ✅ | PROJECT.md, README |
 | Źródła danych i ocena aktualności/wiarygodności | ✅ | `docs/DATA-SOURCES.md` |
-| Model biznesowy i rozwój | ✅ | PROJECT.md (partnerzy, widżet, API) — hipotezy bez cennika |
+| Model biznesowy i rozwój | 🟡 | PROJECT.md: płatnicy, ceny i koszty jako **hipotezy** z rachunkiem progu rentowności i planem pilotażu; brak cennika, klientów i listów intencyjnych |
 | PDF do 10 slajdów | ❌ | Istniejący PDF pokazuje starszy interfejs — do odświeżenia |
 | Film do 3 min w otwartym repozytorium | ❌ | Istniejące nagranie jest nieaktualne i nieopublikowane; publikacja wymaga decyzji zespołu |
 
@@ -40,11 +40,11 @@ Stan na 3 października 2026, wieczór. Źródło: `docs/KRYTERIA Kraków Bez Ba
 | Architektura: pozyskanie danych oddzielone od prezentacji; jak dodać źródło, kategorię, obszar | ✅ | `docs/ARCHITECTURE.md`, skrypty `data:*` |
 | Konkretne zbiory miejskie, sposób pobierania, częstotliwość, awaria źródła | ✅ | UMK dok_id=2848 (propozycja: co tydzień, przy awarii zostaje poprzedni plik); portal otwartych danych sprawdzony i opisany |
 | Przy każdej informacji: źródło, data, status; zgłoszenia odróżnione | ✅ | Statusy: mapa, Urząd Miasta, deklaracja właściciela, zgłoszenie niezweryfikowane, dane demonstracyjne |
-| Poprawianie błędnych danych | 🟡 | Zgłoszenie zdjęciem przy barierze i miejscu, edycja/usunięcie przez autora, formularz właściciela; brak moderacji |
+| Poprawianie błędnych danych | 🟡 | Zgłoszenie zdjęciem przy barierze i miejscu; autor edytuje i usuwa zgłoszenie za pomocą tokenu (w bazie tylko skrót); panel `/city` z odpowiedziami i eksportem CSV; formularz właściciela. Brak kolejki moderacji i weryfikacji właściciela |
 | WCAG 2.2 AA: klawiatura, czytnik ekranu, kontrast, tekstowa alternatywa mapy | 🟡 | axe-core: 0 naruszeń w całym scenariuszu (telefon, desktop, widżet); lista jest równoważna mapie. Brak ręcznego testu VoiceOver na iPhonie |
-| Uruchomienie i utrzymanie poza UMK (hosting, aktualizacje, bezpieczeństwo, zgłoszenia, koszty) | ✅ | PROJECT.md, ARCHITECTURE.md |
-| Ochrona danych i bezpieczeństwo, bez informacji o niepełnosprawności | 🟡 | Opis: [`PRIVACY-SECURITY.md`](PRIVACY-SECURITY.md). Spełnione: bez kont, preferencje tylko w przeglądarce, profil „na wózku” to sposób poruszania się (opcjonalny), zdjęcia bez EXIF, e-mail partnera niepubliczny, panel urzędu za podpisaną sesją. Braki: zgłoszenia może zmienić lub usunąć każdy, kto zna ich `id` (są na publicznej liście), brak HSTS/nagłówków bezpieczeństwa i polityki prywatności |
-| Zależności, licencje, przeniesienie, kolejne miasto | ✅ | DATA-SOURCES.md, ARCHITECTURE.md |
+| Uruchomienie i utrzymanie poza UMK (hosting, aktualizacje, bezpieczeństwo, zgłoszenia, koszty) | 🟡 | PROJECT.md: harmonogram odświeżania, zachowanie przy awarii, koszty, kolejne miasto. Operator „do wskazania”; kopie zapasowe i monitoring planowane, nieskonfigurowane |
+| Ochrona danych i bezpieczeństwo, bez informacji o niepełnosprawności | 🟡 | [`PRIVACY-SECURITY.md`](PRIVACY-SECURITY.md) rozdziela „działa w prototypie” od „planowane”. Działa: bez kont, preferencje tylko w przeglądarce, „Usuń dane z tej przeglądarki”, zdjęcia bez EXIF, ukrywanie zdjęć z osobami, tokeny edycji (skrót SHA-256), e-mail partnera niepubliczny, panel urzędu za podpisaną sesją HttpOnly, nagłówki bezpieczeństwa w kodzie (HSTS na działającej instalacji niezaobserwowany), krótka sekcja „Prywatność” w aplikacji. Braki: administrator niewskazany, brak pełnej klauzuli art. 13, brak automatycznego zamazywania twarzy i tablic, retencja nieegzekwowana, wspólne hasło urzędu, brak umowy powierzenia z dostawcą AI |
+| Zależności, licencje, przeniesienie, kolejne miasto | 🟡 | DATA-SOURCES.md (rejestr źródeł, licencje, otwarte pytania), ARCHITECTURE.md, PROJECT.md. Nie potwierdzono licencji GTFS ZTP ani warunków ponownego użycia zestawienia UMK do celów komercyjnych |
 
 ## Testowanie i walidacja (sekcja 6)
 
@@ -54,10 +54,12 @@ Stan na 3 października 2026, wieczór. Źródło: `docs/KRYTERIA Kraków Bez Ba
 | Skąd informacje, kiedy pozyskane, jak oznaczone niepełne/niezweryfikowane; dane przykładowe oznaczone | ✅ | Partner demonstracyjny jawnie oznaczony „Przykład” |
 | Co najmniej jeden przypadek danych sprzecznych, niepełnych lub niedostępnego źródła | ✅ | Niepełne: „Brak danych: …” przy miejscach; sprzeczne: zgłoszenie użytkownika vs OSM daje ostrzeżenie (w realnych danych OSM+UMK sprzeczności obecnie 0 — do pokazu trzeba dodać zgłoszenie lub deklarację partnera); niedostępne: ortofotomapa/AI/rozkład dają komunikat, reszta działa |
 | Kontrola dostępności głównego scenariusza, ograniczenia i plan | 🟡 | Automatyczna ✅; ręczna z VoiceOver ❌ (plan w PROJECT.md) |
-| Plan przejścia od prototypu do usługi | ✅ | PROJECT.md |
+| Plan przejścia od prototypu do usługi | ✅ | PROJECT.md: pilotaż 10 tygodni z miarami, wdrożenie i utrzymanie |
 
 ## Do zrobienia przed zgłoszeniem
 
-1. Odświeżyć PDF (≤10 slajdów) i nagrać film (≤3 min) na nowym interfejsie; zdecydować o publikacji repozytorium/filmu.
-2. Ręczny test VoiceOver na iPhonie (HTTPS potrzebny dla aparatu i GPS).
-3. Potwierdzić z mentorami wagi oceny (kryteria 25/20/15/20/20 vs regulamin 30/30/20/10/10) i warunki ponownego użycia zestawienia UMK.
+1. ❌ Odświeżyć PDF (≤10 slajdów) i nagrać film (≤3 min) na nowym interfejsie (w trakcie przygotowania); zdecydować o publikacji repozytorium i filmu. Do czasu zakończenia stan pozostaje ❌.
+2. ❌ Ręczny test VoiceOver na iPhonie (HTTPS potrzebny dla aparatu i GPS; instalacja pod HTTPS już działa).
+3. ❌ Potwierdzić z mentorami wagi oceny (kryteria 25/20/15/20/20 vs regulamin 30/30/20/10/10) i warunki ponownego użycia zestawienia UMK oraz licencję GTFS ZTP.
+4. 🟡 Wskazać operatora/administratora danych i uzupełnić klauzulę informacyjną w aplikacji (opis: PRIVACY-SECURITY.md).
+5. 🟡 Po następnym wdrożeniu sprawdzić nagłówki (HSTS) na działającej instalacji.

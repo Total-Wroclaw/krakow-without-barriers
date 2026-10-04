@@ -91,10 +91,10 @@ Więcej: [architektura](docs/ARCHITECTURE.md), [źródła i licencje](docs/DATA-
 - Rozkład jest planowy (bez opóźnień na żywo). Obecny GTFS ZTP nie podaje przystosowania kursów ani przystanków (wszędzie „brak informacji”), więc dla wózka każdy przejazd ma tę uwagę. Nie podajemy stanu wind.
 - Czas jazdy samochodem/taksówką to szacunek z mapy dróg (bez korków, zakazów skrętu i opłat). Tylko 5,6% parkingów w OSM ma oznaczone miejsca dla osób z niepełnosprawnościami.
 - Pakiet partnera nie ma jeszcze płatności ani weryfikacji tożsamości; w prototypie każdy może go wybrać.
-- Zgłoszenia nie mają kont ani moderacji; panel miasta ma jedno wspólne hasło (bez kont i ról). To lokalny prototyp. Zdjęcia i wycinki ortofotomapy trafiają do OpenAI do opisu.
+- Zgłoszenia nie mają kont ani moderacji; panel miasta ma jedno wspólne hasło (bez kont i ról). To prototyp. Zdjęcia i wycinki ortofotomapy trafiają do OpenAI do opisu.
 - Kamera i GPS na iPhonie wymagają HTTPS (lub localhost). Sprawdzono Safari na symulatorze iPhone; nie testowano na fizycznym telefonie ani z VoiceOver.
 - Serwer trzyma graf w pamięci (~1,2 GB RSS po starcie); usługa docelowa potrzebuje PostGIS/zoptymalizowanego grafu.
-- Nic nie zostało opublikowane, wdrożone ani zgłoszone do konkursu.
+- Prototyp działa pod adresem [kazdy-krok.antek.page](https://kazdy-krok.antek.page), ale nie ma wskazanego operatora ani administratora danych i nie został jeszcze zgłoszony do konkursu. Ochrona danych: [docs/PRIVACY-SECURITY.md](docs/PRIVACY-SECURITY.md); model biznesowy, pilotaż i utrzymanie: [docs/competition/PROJECT.md](docs/competition/PROJECT.md).
 
 ## Konkurs
 

@@ -2,6 +2,29 @@
 
 Sprawdzono 3 października 2026. Żaden rekord OSM nie jest przedstawiany jako audyt terenowy zespołu.
 
+## Rejestr źródeł (4 października 2026)
+
+„Licencja” to stan zweryfikowany przez zespół albo wprost zaznaczone **do potwierdzenia**. Nie zakładamy, że publiczna strona oznacza dowolną licencję.
+
+| Źródło | Licencja / warunki | Jak pozyskane | Częstotliwość odświeżania | Zachowanie przy awarii | Otwarte pytania |
+| --- | --- | --- | --- | --- | --- |
+| OpenStreetMap, wyciąg Geofabrik (Małopolska) | ODbL-1.0, © OpenStreetMap contributors; atrybucja na mapie | `scripts/acquire-city.py`, `npm run data:places`, `data:roads`, `data:objects` (pyosmium) z jednego PBF; migawki w `data/` z SHA-256 | co tydzień (propozycja; dziś ręcznie, ostatnia migawka z 2.10.2026) | działa ostatnia migawka w repozytorium, z datą | obowiązki share-alike dla bazy pochodnej przy publicznej dystrybucji migawek |
+| ZTP Kraków GTFS (A/M/T) | brak jednoznacznej licencji w indeksie, publiczne rozkłady | `scripts/acquire-transit.py` → SQLite, przy budowie obrazu Docker | codziennie (propozycja: nocna przebudowa; dziś przy każdym buildzie) | zostaje poprzedni obraz z poprzednim rozkładem | licencja do komercyjnej dystrybucji; pola `wheelchair_accessible`/`wheelchair_boarding` są dziś puste (0) |
+| UMK: dostępność budynków UMK i MJO (`dok_id=2848`) | brak deklaracji licencji; krótkie fakty z linkiem i datą odczytu | `scripts/acquire-city-venues.ts`, parser deterministyczny | co tydzień (propozycja, cron niezainstalowany) | zapis atomowy; przy błędzie lub zmianie struktury poprzedni plik | zgoda UMK na ponowne wykorzystanie komercyjne |
+| Portal Otwarte Dane Kraków, MSIP | warunki portalu: swobodne ponowne wykorzystanie z informacją o źródle, wyjątki w opisie zasobu | sprawdzone ręcznie, **nie importowane** | nie dotyczy | nie dotyczy | brak zbioru z polami dostępności; do ponownej oceny przy nowych zbiorach |
+| GUGiK: ortofotomapa (WMS `mapy.geoportal.gov.pl/.../PZGIK/ORTO`) | dane PZGiK; w kodzie założone „ponowne wykorzystanie z atrybucją” (nie zweryfikowano treści aktualnych warunków) | serwer pobiera kafelki i wycinki, stałe rozmiary, współrzędne tylko w Krakowie; cache na dysku | na żądanie, bez wygasania; przeglądarka trzyma kafelki 30 dni | komunikat o braku zdjęcia; planer i lista działają | potwierdzić warunki dla zastosowania komercyjnego i objętość zapytań |
+| OpenFreeMap (podkład Positron) | darmowe kafelki bez klucza (dane OpenMapTiles, © OSM) | przeglądarka łączy się bezpośrednio (`tiles.openfreemap.org`) | na bieżąco u dostawcy | brak SLA; lista wariantów i kroki działają bez podkładu | polityka prywatności dostawcy (adres IP trafia do niego); przy dużym ruchu własny serwer kafelków |
+| Open-Meteo (pogoda bieżąca dla Krakowa) | dane CC BY 4.0 (komentarz w kodzie), darmowe API bez klucza | `src/lib/weather.ts`, jedno zapytanie dla całego miasta | cache 15 min (1 min po błędzie), limit czasu 4 s | odczyt z lotu ptaka bez pogody | darmowy plan jest przeznaczony do użytku niekomercyjnego; przy sprzedaży pakietów potrzebny plan płatny lub inne źródło (do potwierdzenia) |
+| OpenAI (`gpt-5.6-luna`) | warunki dostawcy; `store: false` to prośba, nie zerowa retencja | `src/lib/ai.ts`, na żądanie użytkownika: opis potrzeb, zdjęcie zgłoszenia, wycinki ortofotomapy | na żądanie; odczyty z lotu ptaka w cache plikowym (klucz: miejsce, język, preferencje, pogoda, dane mapy) | trasy, lista i szczegóły działają; komunikat o braku opisu AI | umowa powierzenia, retencja, transfer poza EOG; cena modelu (szacunki kosztów w PROJECT.md) |
+| Partnerzy (`POST /api/partners/objects`) | dane dostarczone przez właściciela, status „deklaracja właściciela” | formularz w aplikacji, SQLite; e-mail tylko w bazie | przez partnera | nie dotyczy | brak weryfikacji własności i tożsamości; zgoda na publikację danych w regulaminie |
+| Zgłoszenia użytkowników | treść użytkownika, publiczna, „niezweryfikowane”; zdjęcia bez EXIF | zdjęcie w aplikacji, opis AI, SQLite + pliki na wolumenie | na bieżąco | zgłoszenie zapisuje się także przy awarii AI (bez opisu AI, zdjęcie ukryte) | retencja i moderacja (zob. `PRIVACY-SECURITY.md`) |
+| Taryfa taksówek: uchwała XCII/2512/22 RM Krakowa | akt prawa miejscowego | ręcznie wpisane stawki (sekcja „Drogi i parkingi”) | przy zmianie uchwały (ostatnie sprawdzenie 3.10.2026) | stawki w kodzie | cena jest szacunkiem, nie ofertą przewoźnika |
+| Linki Uber / Bolt / FREENOW | linki zewnętrzne po kliknięciu | stałe wzorce URL | nie dotyczy | link otwiera stronę dostawcy | zmiany formatu linków |
+
+Źródeł spoza tej listy w `src/lib` nie znaleziono: usługi sieciowe wołane przez serwer to GUGiK WMS, Open-Meteo i OpenAI; przeglądarka łączy się z OpenFreeMap.
+
+## Szczegóły i historia kontroli
+
 | Źródło | Wykorzystanie | Aktualność i warunki |
 | --- | --- | --- |
 | [OSM steps](https://wiki.openstreetmap.org/wiki/Steps) | `highway=steps`, `step_count`, względny `incline`, warianty `handrail`, `surface` | Brak tagu jest niewiadomą. Ławki: `amenity=bench`; bliskość nie dowodzi dojścia. |

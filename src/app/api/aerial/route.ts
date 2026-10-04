@@ -59,9 +59,12 @@ export async function POST(request: Request) {
     reports = listReports();
   } catch {}
   const widthM = autoWidth(overlay);
+  // The place's own facts go into the cache key, so a corrected entrance or lift gives a new reading.
+  const object = input.objectId ? await getObject(input.objectId, input.locale).catch(() => null) : null;
+  const placeFacts = objectForPrompt(object);
   const key: AnalysisKey = {
     ...place, widthM, name: input.name, locale: input.locale, objectId: input.objectId ?? null,
-    preferences: preferencesKey(preferences), arrival: input.arrival, weather: weatherBucket(weather), reports: reportsDigest(reports, place), evidence: overlayEvidence(overlay),
+    preferences: preferencesKey(preferences), arrival: input.arrival, weather: weatherBucket(weather), reports: reportsDigest(reports, place), evidence: overlayEvidence(overlay, placeFacts),
   };
   const cached = await cachedAnalysis(key);
   if (cached) return ndjson([{ analysis: cached, final: true, cached: true }]);
@@ -75,11 +78,11 @@ export async function POST(request: Request) {
     const nearReports = reportsNear(place, reports);
     const basedOn = { mobility: preferences?.mobility ?? null, weather: weather?.condition ?? null, reports: nearReports.length };
     const prepared = (async () => {
-      const [jpeg, object] = await Promise.all([orthoCrop(place, widthM), input.objectId ? getObject(input.objectId, input.locale).catch(() => null) : null]);
+      const jpeg = await orthoCrop(place, widthM);
       const image = await withPinRings(jpeg, overlay.pins.map(pin => project(pin, bbox)).filter(pos => inFrame(pos, 0)));
       const ctx: AerialPrompt = {
         placeName: input.name, widthMetres: widthM, pins: pinsForPrompt(overlay, bbox), hasEntrances: overlay.pins.some(p => p.kind === 'entrance'), arrival: input.arrival,
-        lines: linesForPrompt(overlay, bbox), placeFacts: objectForPrompt(object), reports: nearReports, needs: preferencesForPrompt(preferences), weather: weatherForPrompt(weather),
+        lines: linesForPrompt(overlay, bbox), placeFacts, reports: nearReports, needs: preferencesForPrompt(preferences), weather: weatherForPrompt(weather),
       };
       return { image, ctx };
     })();

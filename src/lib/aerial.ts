@@ -188,7 +188,9 @@ function stopLines() {
   return linesByStop;
 }
 
-const overlays = new Map<string, AerialOverlay>();
+/** Built overlays with their build time: they hold partner and report-based pins, so they expire. */
+const overlays = new Map<string, { overlay: AerialOverlay; at: number }>();
+const OVERLAY_TTL = 10 * 60_000;
 const overlayJobs = new Map<string, Promise<AerialOverlay>>();
 
 /**
@@ -198,7 +200,7 @@ const overlayJobs = new Map<string, Promise<AerialOverlay>>();
 export function overlayAt(place: Point): Promise<AerialOverlay> {
   const key = `${place.lat},${place.lon}`;
   const hit = overlays.get(key);
-  if (hit) return Promise.resolve(hit);
+  if (hit && Date.now() - hit.at < OVERLAY_TTL) return Promise.resolve(hit.overlay);
   let job = overlayJobs.get(key);
   if (!job) {
     job = buildOverlayAt(place, key).finally(() => overlayJobs.delete(key));
@@ -245,7 +247,7 @@ async function buildOverlayAt(place: Point, key: string): Promise<AerialOverlay>
     transitObtainedAt: transitObtainedAt(),
   };
   if (overlays.size > 300) overlays.clear();
-  overlays.set(key, overlay);
+  overlays.set(key, { overlay, at: Date.now() });
   return overlay;
 }
 
@@ -523,8 +525,8 @@ const ANALYSIS_VERSION = 11;
 export type AnalysisKey = { lat: number; lon: number; widthM: number; name: string; locale: string; objectId: string | null; preferences: string; arrival: TransportMode; weather: string; reports: string; evidence?: string };
 
 /** Updated map records must invalidate even same-version accessibility explanations. */
-export function overlayEvidence(overlay: AerialOverlay) {
-  return createHash('sha256').update(JSON.stringify([overlay.pins, overlay.lines, overlay.markers, overlay.osmObtainedAt, overlay.transitObtainedAt])).digest('hex').slice(0, 24);
+export function overlayEvidence(overlay: AerialOverlay, placeFacts: string[] = []) {
+  return createHash('sha256').update(JSON.stringify([overlay.pins, overlay.lines, overlay.markers, overlay.osmObtainedAt, overlay.transitObtainedAt, placeFacts])).digest('hex').slice(0, 24);
 }
 
 /** File name for a reading: everything that changes the text is part of the hash. */

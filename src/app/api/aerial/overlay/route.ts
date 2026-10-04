@@ -10,5 +10,5 @@ export async function GET(request: Request) {
   if (block) return block;
   const parsed = aerialQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return Response.json({ error: 'Wybierz miejsce w Krakowie.' }, { status: 400 });
-  return Response.json(await overlayAt(roundPoint(parsed.data)), { headers: { 'Cache-Control': 'public, max-age=3600' } });
+  return Response.json(await overlayAt(roundPoint(parsed.data)), { headers: { 'Cache-Control': 'public, max-age=600' } });
 }

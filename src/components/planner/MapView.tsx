@@ -131,6 +131,14 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
   // Read when the camera moves, so dragging the sheet never re-renders or moves the map.
   const inset = useRef(bottomInset);
   inset.current = bottomInset;
+  const reportViewport = useRef<(user: boolean) => void>(() => {});
+  // Raising or lowering the phone sheet changes what is visible without moving the map: report the new area
+  // once the sheet settles (as the person's own change, so lists follow it without refitting the map).
+  useEffect(() => {
+    if (!map.current) return;
+    const timer = window.setTimeout(() => reportViewport.current(true), 350);
+    return () => window.clearTimeout(timer);
+  }, [bottomInset]);
   /** Shifts a camera target up into the part of the map that is not covered. */
   const lift = () => ({ offset: [0, -inset.current / 2] as [number, number] });
   /** What the camera last reacted to; see the camera rules in `render`. */
@@ -301,6 +309,7 @@ export default function MapView({ options, selectedId, detail = false, focus, fr
       const c = instance.unproject([w / 2, bottom / 2]);
       return { bbox: [nw.lng, se.lat, se.lng, nw.lat], center: { lat: c.lat, lon: c.lng }, zoom: instance.getZoom(), user };
     };
+    reportViewport.current = user => latest.current.onViewportChange?.(viewport(user));
     instance.once('load', () => latest.current.onViewportChange?.(viewport(false)));
     instance.on('moveend', e => {
       const c = instance.getCenter();

@@ -13,7 +13,7 @@ Stan na 4 października 2026. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` 
 | nawierzchnia | ✅ | Trasy (bruk, żwir — kary i uwagi „Bruk na 71 m”) |
 | toaleta | ✅ | Kategoria Toalety (284, 160 z danymi) i cecha „Toaleta przystosowana” |
 | miejsca odpoczynku | ✅ | Ławki na trasie, przerzedzone co ≥150 m |
-| Źródło, data aktualizacji, poziom wiarygodności | ✅ | Kropka statusu + panel: źródło, pobrano, edycja u źródła, potwierdzenie na miejscu |
+| Źródło, data aktualizacji, poziom wiarygodności | ✅ | Kropka statusu + panel: źródło, pobrano, edycja u źródła; „potwierdzone na miejscu” tylko przy `check_date:wheelchair`, ogólna data OSM jako „sprawdzone w OSM, bez potwierdzenia dostępności”. Daty migawek danych w oknie „O danych” i `/api/health` |
 | Dane z dostępnych źródeł, bez ręcznej bazy Miasta | ✅ | OSM (Geofabrik), ZTP GTFS, strona UMK, GUGiK, partnerzy, użytkownicy |
 | Bez dostępu do systemów UMK/MJO | ✅ | Tylko publiczne strony i pliki |
 | Potrzeby wybranej grupy | ✅ | Osoby o czasowo ograniczonej mobilności; profile: pieszo / wózek / wózek dziecięcy |
@@ -29,8 +29,8 @@ Stan na 4 października 2026. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` 
 | Grupa docelowa i sposób użycia | ✅ | PROJECT.md, README |
 | Źródła danych i ocena aktualności/wiarygodności | ✅ | `docs/DATA-SOURCES.md` |
 | Model biznesowy i rozwój | 🟡 | PROJECT.md: płatnicy, ceny i koszty jako **hipotezy** z rachunkiem progu rentowności i planem pilotażu; brak cennika, klientów i listów intencyjnych |
-| PDF do 10 slajdów | ❌ | Istniejący PDF pokazuje starszy interfejs — do odświeżenia |
-| Film do 3 min w otwartym repozytorium | ❌ | Istniejące nagranie jest nieaktualne i nieopublikowane; publikacja wymaga decyzji zespołu |
+| PDF do 10 slajdów | ✅ | `docs/competition/kazdy-krok.pdf`: 10 slajdów po polsku z aktualnymi zrzutami (generowany: `scripts/capture-competition.mjs` + `scripts/build-competition.py`) |
+| Film do 3 min w otwartym repozytorium | 🟡 | `docs/competition/demo.mp4`: 2:28, 1080p, polskie napisy (`demo.srt`), aktualny interfejs. Publikacja w otwartym repozytorium i przesłanie w HackTribe wymagają decyzji zespołu |
 
 ## Wymagania techniczne (sekcja 5)
 
@@ -38,12 +38,12 @@ Stan na 4 października 2026. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` 
 | --- | --- | --- |
 | Główny scenariusz: wyszukanie miejsca lub trasy + informacja o dostępności | ✅ | Zakładki Trasa i Odkrywaj |
 | Architektura: pozyskanie danych oddzielone od prezentacji; jak dodać źródło, kategorię, obszar | ✅ | `docs/ARCHITECTURE.md`, skrypty `data:*` |
-| Konkretne zbiory miejskie, sposób pobierania, częstotliwość, awaria źródła | ✅ | UMK dok_id=2848 (propozycja: co tydzień, przy awarii zostaje poprzedni plik); portal otwartych danych sprawdzony i opisany |
+| Konkretne zbiory miejskie, sposób pobierania, częstotliwość, awaria źródła | ✅ | UMK dok_id=2848 i pozostałe źródła: `npm run data:refresh` / workflow „Refresh data” (co tydzień, po testach jako pull request; przy awarii źródła zostaje poprzednia migawka); rozkład ZTP przy każdym wdrożeniu; `/api/health` pokazuje wiek każdej migawki i ważność rozkładu |
 | Przy każdej informacji: źródło, data, status; zgłoszenia odróżnione | ✅ | Statusy: mapa, Urząd Miasta, deklaracja właściciela, zgłoszenie niezweryfikowane, dane demonstracyjne |
 | Poprawianie błędnych danych | 🟡 | Zgłoszenie zdjęciem przy barierze i miejscu; autor edytuje i usuwa zgłoszenie za pomocą tokenu (w bazie tylko skrót); panel `/city` z odpowiedziami i eksportem CSV; formularz właściciela; właściciel poprawia i wycofuje swoją deklarację tokenem zapisanym w przeglądarce (to ta sama przeglądarka, nie dowód własności); miasto ukrywa i przywraca fałszywe deklaracje w `/city`. Brak kolejki moderacji i weryfikacji właściciela |
-| WCAG 2.2 AA: klawiatura, czytnik ekranu, kontrast, tekstowa alternatywa mapy | 🟡 | axe-core: 0 naruszeń w całym scenariuszu (telefon, desktop, widżet); lista jest równoważna mapie. Brak ręcznego testu VoiceOver na iPhonie |
+| WCAG 2.2 AA: klawiatura, czytnik ekranu, kontrast, tekstowa alternatywa mapy | 🟡 | axe-core: 0 naruszeń w całym scenariuszu (telefon, desktop, widżet); ręczny przegląd klawiaturą i drzewa dostępności z poprawkami (fokus w panelach na telefonie, adres zamiast przeciągania mapy w zgłoszeniu, „Pomiń listę miejsc”, fokus nie chowa się pod arkuszem) — `VALIDATION.md`; lista jest równoważna mapie. Brak testu VoiceOver/TalkBack na fizycznym telefonie |
 | Uruchomienie i utrzymanie poza UMK (hosting, aktualizacje, bezpieczeństwo, zgłoszenia, koszty) | 🟡 | PROJECT.md: harmonogram odświeżania, zachowanie przy awarii, koszty, kolejne miasto. Operator „do wskazania”. Działa: `/api/health` (wiek danych, ważność rozkładu) + `HEALTHCHECK`, skrypt i workflow odświeżania danych (ręcznie). Planowane: kopie zapasowe, zewnętrzny monitoring i alerty |
-| Ochrona danych i bezpieczeństwo, bez informacji o niepełnosprawności | 🟡 | [`PRIVACY-SECURITY.md`](PRIVACY-SECURITY.md) rozdziela „działa w prototypie” od „planowane”. Działa: bez kont, preferencje tylko w przeglądarce, „Usuń dane z tej przeglądarki”, zdjęcia bez EXIF, ukrywanie zdjęć z osobami, tokeny edycji (skrót SHA-256), e-mail partnera niepubliczny, panel urzędu za podpisaną sesją HttpOnly, nagłówki bezpieczeństwa w kodzie (HSTS na działającej instalacji niezaobserwowany), krótka sekcja „Prywatność” w aplikacji. Braki: administrator niewskazany, brak pełnej klauzuli art. 13, brak automatycznego zamazywania twarzy i tablic, retencja nieegzekwowana, wspólne hasło urzędu, brak umowy powierzenia z dostawcą AI |
+| Ochrona danych i bezpieczeństwo, bez informacji o niepełnosprawności | 🟡 | [`PRIVACY-SECURITY.md`](PRIVACY-SECURITY.md) rozdziela „działa w prototypie” od „planowane”. Działa: bez kont, preferencje tylko w przeglądarce, „Usuń dane z tej przeglądarki”, zdjęcia bez EXIF, ukrywanie zdjęć z osobami, tokeny edycji (skrót SHA-256), e-mail partnera niepubliczny, panel urzędu za podpisaną sesją HttpOnly, nagłówki bezpieczeństwa z HSTS (potwierdzone na działającej instalacji), sekcja „Prywatność” w aplikacji, informacja przed pierwszym zgłoszeniem zdjęciem (AI, co jest publiczne, ukrywanie zdjęć). Braki: administrator niewskazany, brak pełnej klauzuli art. 13, brak automatycznego zamazywania twarzy i tablic, retencja nieegzekwowana, wspólne hasło urzędu, brak umowy powierzenia z dostawcą AI |
 | Zależności, licencje, przeniesienie, kolejne miasto | 🟡 | DATA-SOURCES.md (rejestr źródeł, licencje, otwarte pytania), ARCHITECTURE.md, PROJECT.md. Nie potwierdzono licencji GTFS ZTP ani warunków ponownego użycia zestawienia UMK do celów komercyjnych |
 
 ## Testowanie i walidacja (sekcja 6)
@@ -53,13 +53,13 @@ Stan na 4 października 2026. Źródło: `docs/KRYTERIA Kraków Bez Barier.pdf` 
 | Demonstracja dla grupy: potrzeby, miejsce/trasa, bariery i udogodnienia | ✅ | Np. „na wózku, samochodem” Floriańska → Plac Centralny; „Odkrywaj → Muzea” |
 | Skąd informacje, kiedy pozyskane, jak oznaczone niepełne/niezweryfikowane; dane przykładowe oznaczone | ✅ | Partner demonstracyjny jawnie oznaczony „Przykład” |
 | Co najmniej jeden przypadek danych sprzecznych, niepełnych lub niedostępnego źródła | ✅ | Niepełne: „Brak danych: …” przy miejscach; sprzeczne: zgłoszenie użytkownika vs OSM daje ostrzeżenie (w realnych danych OSM+UMK sprzeczności obecnie 0 — do pokazu trzeba dodać zgłoszenie lub deklarację partnera); niedostępne: ortofotomapa/AI/rozkład dają komunikat, reszta działa |
-| Kontrola dostępności głównego scenariusza, ograniczenia i plan | 🟡 | Automatyczna ✅; ręczna z VoiceOver ❌ (plan w PROJECT.md) |
+| Kontrola dostępności głównego scenariusza, ograniczenia i plan | 🟡 | Automatyczna ✅; ręczny przegląd klawiaturą i drzewa dostępności ✅ (`VALIDATION.md`); VoiceOver/TalkBack na urządzeniu ❌ (plan w PROJECT.md) |
 | Plan przejścia od prototypu do usługi | ✅ | PROJECT.md: pilotaż 10 tygodni z miarami, wdrożenie i utrzymanie |
 
 ## Do zrobienia przed zgłoszeniem
 
-1. ❌ Odświeżyć PDF (≤10 slajdów) i nagrać film (≤3 min) na nowym interfejsie (w trakcie przygotowania); zdecydować o publikacji repozytorium i filmu. Do czasu zakończenia stan pozostaje ❌.
+1. 🟡 PDF (10 slajdów) i film (2:28) gotowe w `docs/competition/`; zdecydować o publikacji repozytorium i filmu oraz przesłać w HackTribe.
 2. ❌ Ręczny test VoiceOver na iPhonie (HTTPS potrzebny dla aparatu i GPS; instalacja pod HTTPS już działa).
 3. ❌ Potwierdzić z mentorami wagi oceny (kryteria 25/20/15/20/20 vs regulamin 30/30/20/10/10) i warunki ponownego użycia zestawienia UMK oraz licencję GTFS ZTP.
 4. 🟡 Wskazać operatora/administratora danych i uzupełnić klauzulę informacyjną w aplikacji (opis: PRIVACY-SECURITY.md).
-5. 🟡 Po następnym wdrożeniu sprawdzić nagłówki (HSTS) na działającej instalacji.
+5. ✅ HSTS i pozostałe nagłówki potwierdzone na działającej instalacji (4 października).
